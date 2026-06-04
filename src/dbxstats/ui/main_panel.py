@@ -48,6 +48,7 @@ class PanelWindow(QWidget):
         self._drag_pos: QPoint | None = None
         self._fps_layout_state: dict | None = None
         self._graph_visible = True
+        self._io_tick = 0
 
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
@@ -252,6 +253,8 @@ class PanelWindow(QWidget):
         show = self._cfg.show_stats
         keys = set(self._cfg.stats_keys)
         st = self._ctl.stats
+        self._io_tick += 1
+        push_io = self._io_tick % 2 == 0
 
         if d.get("lhm_ok"):
             self._status_dot.setStyleSheet(f"color: {theme.OK};")
@@ -309,7 +312,8 @@ class PanelWindow(QWidget):
 
         disk_pct = d.get("disk_pct", 0.0)
         self.disk.set_bar(disk_pct, theme.load_color(disk_pct))
-        self.disk.push_spark(d["disk_r"] + d["disk_w"])
+        if push_io:
+            self.disk.push_spark(d["disk_r"] + d["disk_w"])
         self.disk.set_hint(f"{disk_pct:.0f}%")
         self.disk.set("used", f"{d['disk_used']:.0f} / {d['disk_total']:.0f} GB")
         nt = d.get("nvme_temp")
@@ -317,7 +321,8 @@ class PanelWindow(QWidget):
         self.disk.set("read", _fmt_bytes(d["disk_r"]))
         self.disk.set("write", _fmt_bytes(d["disk_w"]))
 
-        self.net.push_spark(d["net_dl"] + d["net_ul"])
+        if push_io:
+            self.net.push_spark(d["net_dl"] + d["net_ul"])
         self.net.set("dl", _fmt_bytes(d["net_dl"]))
         self.net.set("ul", _fmt_bytes(d["net_ul"]))
         ping = d.get("ping_ms")
