@@ -37,6 +37,7 @@ class App:
         self._overlay: GameOverlay | None = None
         self._dialog: SettingsDialog | None = None
         self._panel_visible = True
+        self._notified_tray = False
 
         self.qt.setQuitOnLastWindowClosed(False)
         self.qt.setStyleSheet(style.build_qss(self.settings.accent))
@@ -82,8 +83,11 @@ class App:
     def _tick_fps(self) -> None:
         if self._panel_visible:
             self.panel.update_fps()
+            if self.settings.always_on_top:
+                win.keep_topmost(int(self.panel.winId()))
         if self._overlay is not None:
             self._overlay.refresh()
+            win.keep_topmost(int(self._overlay.winId()))
 
     def _tick_fullscreen(self) -> None:
         if not self.settings.hide_fullscreen:
@@ -155,6 +159,10 @@ class App:
         if self._panel_visible:
             self.panel.hide()
             self._panel_visible = False
+            if not self._notified_tray:
+                self._notified_tray = True
+                self.tray.notify("DBX Stats",
+                                 "Continua na bandeja. Clique no icone para reabrir.")
         else:
             self.panel.show()
             self._panel_visible = True

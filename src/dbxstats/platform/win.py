@@ -12,6 +12,10 @@ GWL_EXSTYLE = -20
 WS_EX_LAYERED = 0x00080000
 WS_EX_TRANSPARENT = 0x00000020
 WS_EX_TOOLWINDOW = 0x00000080
+HWND_TOPMOST = -1
+SWP_NOSIZE = 0x0001
+SWP_NOMOVE = 0x0002
+SWP_NOACTIVATE = 0x0010
 
 
 class RECT(ctypes.Structure):
@@ -35,6 +39,9 @@ def _setup_prototypes() -> None:
     user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
     user32.GetMonitorInfoW.restype = wintypes.BOOL
     user32.GetMonitorInfoW.argtypes = [wintypes.HMONITOR, ctypes.POINTER(MONITORINFO)]
+    user32.SetWindowPos.restype = wintypes.BOOL
+    user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int,
+                                    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_uint]
     if hasattr(user32, "GetWindowLongPtrW"):
         user32.GetWindowLongPtrW.restype = ctypes.c_longlong
         user32.GetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int]
@@ -58,6 +65,13 @@ def _set_long(hwnd: int, idx: int, value: int) -> int:
     if hasattr(user32, "SetWindowLongPtrW"):
         return int(user32.SetWindowLongPtrW(hwnd, idx, value))
     return int(user32.SetWindowLongW(hwnd, idx, value))
+
+
+def keep_topmost(hwnd: int) -> None:
+    if not hwnd:
+        return
+    user32.SetWindowPos(hwnd, ctypes.c_void_p(HWND_TOPMOST), 0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
 
 
 def is_admin() -> bool:

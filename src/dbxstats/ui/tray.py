@@ -49,5 +49,11 @@ class Tray:
     def update_icon(self, accent: str) -> None:
         self._icon.setIcon(make_icon(accent))
 
+    def notify(self, title: str, msg: str) -> None:
+        try:
+            self._icon.showMessage(title, msg)
+        except Exception:
+            pass
+
     def hide(self) -> None:
         self._icon.hide()

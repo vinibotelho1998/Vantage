@@ -96,6 +96,9 @@ class PanelWindow(QWidget):
         self._status_dot.setFont(make_font(8))
         self._status_dot.setStyleSheet(f"color: {theme.FAINT};")
         top.addWidget(self._status_dot)
+        top.addSpacing(4)
+        top.addWidget(self._header_button("—", self._ctl.toggle_panel))
+        top.addWidget(self._header_button("✕", self._ctl.quit))
         lay.addLayout(top)
 
         self._clock = QLabel("00:00:00")
@@ -107,6 +110,14 @@ class PanelWindow(QWidget):
         self._date.setFont(make_font(8.5))
         self._date.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         lay.addWidget(self._date)
+
+    def _header_button(self, text: str, callback) -> QLabel:
+        b = QLabel(text)
+        b.setFont(make_font(11, QFont.Weight.Bold))
+        b.setStyleSheet(f"color: {theme.MUTE};")
+        b.setCursor(Qt.CursorShape.PointingHandCursor)
+        b.mousePressEvent = lambda _e: callback()
+        return b
 
     def _build_fps(self, lay: QVBoxLayout) -> None:
         row = QHBoxLayout()
