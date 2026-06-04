@@ -79,7 +79,7 @@ class ProgressBar(QWidget):
 
 class Sparkline(QWidget):
     def __init__(self, color: str, parent: QWidget | None = None,
-                 maxlen: int = 80, fixed_max: float | None = None, height: int = 22) -> None:
+                 maxlen: int = 80, fixed_max: float | None = None, height: int = 18) -> None:
         super().__init__(parent)
         self._color = QColor(color)
         self._data: deque[float] = deque(maxlen=maxlen)

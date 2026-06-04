@@ -26,6 +26,7 @@ class FpsEngine:
         self._lock = threading.Lock()
         self._status = ""
         self._proc: subprocess.Popen | None = None
+        self._reset_requested = False
 
     @property
     def status(self) -> str:
@@ -41,6 +42,13 @@ class FpsEngine:
     def graph_buffer(self, pid: int) -> list:
         with self._lock:
             return list(self._graph.get(pid, []))
+
+    def reset(self) -> None:
+        self._reset_requested = True
+        with self._lock:
+            self._by_pid.clear()
+            self._sc.clear()
+            self._graph.clear()
 
     def start(self) -> None:
         threading.Thread(target=self._loop, name="fps", daemon=True).start()
@@ -142,6 +150,14 @@ class FpsEngine:
         need = max(col_app, col_pid, col_sc, col_t, col_ms, col_disp)
 
         while proc.poll() is None:
+            if self._reset_requested:
+                self._reset_requested = False
+                frames.clear()
+                last_wall.clear()
+                with self._lock:
+                    self._by_pid.clear()
+                    self._sc.clear()
+                    self._graph.clear()
             line = f.readline()
             if not line:
                 time.sleep(0.005)

@@ -169,6 +169,7 @@ class App:
 
     def clear_stats(self) -> None:
         self.stats.clear()
+        self.fps.reset()
 
     def quit(self) -> None:
         self.collector.stop()

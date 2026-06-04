@@ -173,7 +173,7 @@ class PanelWindow(QWidget):
             self.cpu.add_row(k, lbl)
         lay.addWidget(self.cpu)
 
-        self.ram = SectionCard("Memória", theme.RAM)
+        self.ram = SectionCard("Memória", theme.RAM, with_spark=True)
         for k, lbl in [("used", "Em uso"), ("avail", "Disponível"), ("freq", "Frequência")]:
             self.ram.add_row(k, lbl)
         lay.addWidget(self.ram)
@@ -184,13 +184,13 @@ class PanelWindow(QWidget):
             self.gpu.add_row(k, lbl)
         lay.addWidget(self.gpu)
 
-        self.disk = SectionCard("Disco", theme.DISK)
+        self.disk = SectionCard("Disco", theme.DISK, with_spark=True, fixed_max=None)
         for k, lbl in [("used", "Uso"), ("temp", "Temperatura"),
                        ("read", "Leitura"), ("write", "Escrita")]:
             self.disk.add_row(k, lbl)
         lay.addWidget(self.disk)
 
-        self.net = SectionCard("Rede", theme.NET, with_bar=False)
+        self.net = SectionCard("Rede", theme.NET, with_bar=False, with_spark=True, fixed_max=None)
         for k, lbl in [("dl", "Download"), ("ul", "Upload"), ("ping", "Ping"), ("loss", "Perda")]:
             self.net.add_row(k, lbl)
         lay.addWidget(self.net)
@@ -277,6 +277,7 @@ class PanelWindow(QWidget):
 
         ram_pct = d.get("ram_pct", 0.0)
         self.ram.set_bar(ram_pct, theme.load_color(ram_pct))
+        self.ram.push_spark(ram_pct)
         self.ram.set("used", f"{d['ram_used']:.1f} / {d['ram_total']:.0f} GB")
         self.ram.set("avail", f"{d['ram_avail']:.1f} GB livre")
         rf = d.get("ram_freq")
@@ -308,6 +309,7 @@ class PanelWindow(QWidget):
 
         disk_pct = d.get("disk_pct", 0.0)
         self.disk.set_bar(disk_pct, theme.load_color(disk_pct))
+        self.disk.push_spark(d["disk_r"] + d["disk_w"])
         self.disk.set_hint(f"{disk_pct:.0f}%")
         self.disk.set("used", f"{d['disk_used']:.0f} / {d['disk_total']:.0f} GB")
         nt = d.get("nvme_temp")
@@ -315,6 +317,7 @@ class PanelWindow(QWidget):
         self.disk.set("read", _fmt_bytes(d["disk_r"]))
         self.disk.set("write", _fmt_bytes(d["disk_w"]))
 
+        self.net.push_spark(d["net_dl"] + d["net_ul"])
         self.net.set("dl", _fmt_bytes(d["net_dl"]))
         self.net.set("ul", _fmt_bytes(d["net_ul"]))
         ping = d.get("ping_ms")
