@@ -27,6 +27,7 @@ Source: "..\dist\DBXStats\*"; DestDir: "{app}"; Flags: ignoreversion recursesubd
 Source: "..\prereqs\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "..\prereqs\windowsdesktop-runtime-8.0-x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "..\prereqs\windowsdesktop-runtime-6.0-x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "..\prereqs\PawnIO_setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -36,6 +37,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Filename: "{tmp}\vc_redist.x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "Instalando VC++ Redistributable..."; Flags: waituntilterminated; Check: not IsVCRedistInstalled
 Filename: "{tmp}\windowsdesktop-runtime-8.0-x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "Instalando .NET Desktop Runtime 8..."; Flags: waituntilterminated; Check: not IsWindowsDesktopRuntimeInstalled('8.')
 Filename: "{tmp}\windowsdesktop-runtime-6.0-x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "Instalando .NET Desktop Runtime 6..."; Flags: waituntilterminated; Check: not IsWindowsDesktopRuntimeInstalled('6.')
+Filename: "{tmp}\PawnIO_setup.exe"; Parameters: "-install -silent"; StatusMsg: "Instalando PawnIO (driver de sensores da CPU)..."; Flags: waituntilterminated
 Filename: "{app}\{#MyAppExeName}"; Description: "Abrir DBX Stats"; Flags: nowait postinstall skipifsilent
 
 [Code]

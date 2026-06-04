@@ -14,6 +14,22 @@ _CPU_TEMP_PRIORITY = (
     "CPU Package", "Package", "Core Max", "Core Average",
 )
 
+_GPU_DISCRETE_KW = ("rtx", "gtx", "rx ", " arc", "radeon pro", "quadro", "tesla", "geforce")
+_GPU_INTEGRATED_KW = ("uhd graphics", "iris", "radeon(tm) graphics", "radeon graphics",
+                      "hd graphics", "vega")
+
+
+def _gpu_score(g: dict) -> tuple:
+    name = g.get("name", "").lower()
+    vram = g.get("vram_total", 0) or 0
+    discrete = (g.get("type") == "GpuNvidia"
+                or any(k in name for k in _GPU_DISCRETE_KW)
+                or vram >= 3000)
+    integrated = (any(k in name for k in _GPU_INTEGRATED_KW)
+                  and not any(k in name for k in _GPU_DISCRETE_KW))
+    rank = 1 if (discrete and not integrated) else 0
+    return (rank, vram, g.get("usage", 0) or 0)
+
 
 class LhmReader:
     def __init__(self) -> None:
@@ -62,6 +78,7 @@ class LhmReader:
         if not self._ready:
             return {}
         result: dict = {}
+        gpus: list[dict] = []
         try:
             with self._lock:
                 if self._computer is None:
@@ -69,7 +86,8 @@ class LhmReader:
                 hw_list = list(self._computer.Hardware)
             for hw in hw_list:
                 hw.Update()
-                self._dispatch(hw, result)
+                self._dispatch(hw, result, gpus)
+            self._pick_gpu(result, gpus)
         except Exception as e:
             _log.debug("erro lendo LHM: %s", e)
         return result
@@ -84,12 +102,12 @@ class LhmReader:
                 self._computer = None
                 self._ready = False
 
-    def _dispatch(self, hw, result: dict) -> None:
+    def _dispatch(self, hw, result: dict, gpus: list) -> None:
         hw_type = str(hw.HardwareType)
         if hw_type == "Cpu":
             self._read_cpu(hw, result)
         elif hw_type in ("GpuNvidia", "GpuAmd", "GpuIntel"):
-            self._read_gpu(hw, hw_type, result)
+            self._read_gpu(hw, hw_type, gpus)
         elif hw_type == "Memory":
             self._read_memory(hw, result)
         elif hw_type == "Motherboard":
@@ -139,20 +157,8 @@ class LhmReader:
         if core_clocks:
             result["cpu_mhz_max"] = int(max(core_clocks))
 
-    def _read_gpu(self, hw, hw_type: str, result: dict) -> None:
-        hw_name = str(hw.Name)
-        for s in hw.Sensors:
-            if str(s.SensorType) == "Power" and s.Value is not None and float(s.Value) > 0 and not result.get("gpu_watts"):
-                result["gpu_watts"] = round(float(s.Value), 1)
-
-        is_discrete = hw_type in ("GpuNvidia", "GpuAmd")
-        take_primary = (not result.get("gpu_ok")
-                        or (is_discrete and result.get("_gpu_type") == "GpuIntel"))
-        if not take_primary:
-            return
-        result["gpu_name"] = hw_name
-        result["gpu_ok"] = True
-        result["_gpu_type"] = hw_type
+    def _read_gpu(self, hw, hw_type: str, gpus: list) -> None:
+        g: dict = {"name": str(hw.Name), "type": hw_type}
         for s in hw.Sensors:
             st = str(s.SensorType)
             name = str(s.Name)
@@ -161,21 +167,36 @@ class LhmReader:
                 continue
             f = float(val)
             if st == "Temperature" and name == "GPU Core" and f > 0:
-                result["gpu_temp"] = int(f)
+                g["temp"] = int(f)
+            elif st == "Power" and f > 0 and "watts" not in g:
+                g["watts"] = round(f, 1)
             elif st == "Clock" and name == "GPU Core":
-                result["gpu_freq"] = int(f)
+                g["freq"] = int(f)
             elif st == "Clock" and "GPU Memory" in name:
-                result["gpu_mem_freq"] = int(f)
+                g["mem_freq"] = int(f)
             elif st == "Load" and name == "GPU Core":
-                result["gpu_usage"] = int(f)
+                g["usage"] = int(f)
             elif st == "SmallData" and "GPU Memory Used" in name:
-                result["gpu_vram_used"] = int(f)
+                g["vram_used"] = int(f)
             elif st == "SmallData" and "GPU Memory Total" in name:
-                result["gpu_vram_total"] = int(f)
+                g["vram_total"] = int(f)
             elif st == "Fan" and "GPU Fan" in name:
-                result["gpu_fan_rpm"] = int(f)
+                g["fan_rpm"] = int(f)
             elif st == "Control" and "GPU Fan" in name:
-                result["gpu_fan_pct"] = int(f)
+                g["fan_pct"] = int(f)
+        gpus.append(g)
+
+    def _pick_gpu(self, result: dict, gpus: list) -> None:
+        if not gpus:
+            return
+        best = max(gpus, key=_gpu_score)
+        result["gpu_ok"] = True
+        result["gpu_name"] = best.get("name", "GPU")
+        result["_gpu_type"] = best.get("type")
+        for key in ("temp", "freq", "mem_freq", "usage",
+                    "vram_used", "vram_total", "fan_rpm", "fan_pct", "watts"):
+            if key in best:
+                result["gpu_" + key] = best[key]
 
     def _read_memory(self, hw, result: dict) -> None:
         if str(hw.Name) != "Total Memory":
