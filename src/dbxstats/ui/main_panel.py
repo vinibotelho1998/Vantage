@@ -98,6 +98,8 @@ class PanelWindow(QWidget):
         self._status_dot.setStyleSheet(f"color: {theme.FAINT};")
         top.addWidget(self._status_dot)
         top.addSpacing(4)
+        self._btn_cfg = self._header_button("⚙", self._open_menu)
+        top.addWidget(self._btn_cfg)
         top.addWidget(self._header_button("—", self._ctl.toggle_panel))
         top.addWidget(self._header_button("✕", self._ctl.quit))
         lay.addLayout(top)
@@ -431,7 +433,7 @@ class PanelWindow(QWidget):
     def mouseReleaseEvent(self, _e) -> None:
         self._drag_pos = None
 
-    def contextMenuEvent(self, e) -> None:
+    def _build_menu(self) -> QMenu:
         m = QMenu(self)
         m.addAction("Configurações", lambda: self._ctl.open_settings(0))
         m.addAction("FPS", lambda: self._ctl.open_settings(1))
@@ -452,7 +454,14 @@ class PanelWindow(QWidget):
         m.addSeparator()
         m.addAction("Zerar estatísticas", self._ctl.clear_stats)
         m.addAction("Fechar", self._ctl.quit)
-        m.exec(e.globalPos())
+        return m
+
+    def contextMenuEvent(self, e) -> None:
+        self._build_menu().exec(e.globalPos())
+
+    def _open_menu(self) -> None:
+        self._build_menu().exec(
+            self._btn_cfg.mapToGlobal(QPoint(0, self._btn_cfg.height() + 2)))
 
 
 def _fan_text(g: dict) -> str:

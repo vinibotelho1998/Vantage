@@ -81,13 +81,15 @@ class App:
             self.panel.update_system(self._last)
 
     def _tick_fps(self) -> None:
+        busy = QApplication.activePopupWidget() is not None or self._dialog is not None
         if self._panel_visible:
             self.panel.update_fps()
-            if self.settings.always_on_top:
+            if self.settings.always_on_top and not busy:
                 win.keep_topmost(int(self.panel.winId()))
         if self._overlay is not None:
             self._overlay.refresh()
-            win.keep_topmost(int(self._overlay.winId()))
+            if not busy:
+                win.keep_topmost(int(self._overlay.winId()))
 
     def _tick_fullscreen(self) -> None:
         if not self.settings.hide_fullscreen:
