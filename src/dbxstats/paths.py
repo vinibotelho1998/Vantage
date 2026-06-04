@@ -1,0 +1,76 @@
+"""Resolucao de caminhos para execucao do fonte e do PyInstaller."""
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+APP_NAME = "DBX Stats"
+
+
+def is_frozen() -> bool:
+    return bool(getattr(sys, "frozen", False))
+
+
+def base_dir() -> Path:
+    if is_frozen():
+        return Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+    return Path(__file__).resolve().parents[2]
+
+
+def data_dir() -> Path:
+    base = os.environ.get("APPDATA") or os.path.expanduser("~")
+    d = Path(base) / APP_NAME
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def logs_dir() -> Path:
+    d = data_dir() / "logs"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def log_file() -> Path:
+    return logs_dir() / "syspanel.log"
+
+
+def config_file() -> Path:
+    return data_dir() / "settings.json"
+
+
+def legacy_config_file() -> Path:
+    return base_dir() / "settings.json"
+
+
+def vendor_dir(name: str) -> Path:
+    root = base_dir()
+    for cand in (root / "vendor" / name, root / name):
+        if cand.exists():
+            return cand
+    return root / "vendor" / name
+
+
+def lhm_dir() -> Path:
+    return vendor_dir("lhm")
+
+
+def packaged_tools_dir() -> Path:
+    return base_dir() / "tools"
+
+
+def writable_tools_dir() -> Path:
+    d = data_dir() / "tools"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def presentmon_path() -> Path:
+    packaged = packaged_tools_dir() / "presentmon.exe"
+    if packaged.exists():
+        return packaged
+    return writable_tools_dir() / "presentmon.exe"
+
+
+def asset(*parts: str) -> Path:
+    return base_dir().joinpath("assets", *parts)

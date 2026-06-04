@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dbx-stats"
+version = "2.0.0"
+description = "DBX Stats — monitor de sistema premium para Windows (overlay CPU/GPU/RAM/FPS)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "PySide6>=6.11.1",
+    "pythonnet>=3.1.0",
+    "psutil>=7.0",
+    "pywin32>=311",
+    "wmi>=1.5.1",
+    "nvidia-ml-py>=12.0",
+    "pystray>=0.19",
+    "pillow>=11.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pyinstaller>=6.18"]
+
+[project.gui-scripts]
+dbx-stats = "dbxstats.__main__:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501", "B008"]

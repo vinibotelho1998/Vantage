@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+.ruff_cache/
+
+# Build / dist (PyInstaller, Inno Setup)
+/build/
+/dist/
+
+# Ambiente virtual
+.venv/
+venv/
+
+# Logs e artefatos de runtime
+*.log
+
+# Previews gerados
+preview_*.png
+
+# Config pessoal (gerada em %APPDATA%/DBX Stats)
+/settings.json
+
+# Dependencias de runtime baixaveis (binarios grandes)
+/prereqs/*.exe
+
+# Saidas de ferramentas de teste antigas
+/tools/*.csv
+/test_output.txt
+
+# IDE / SO
+.idea/
+.vscode/
+Thumbs.db
+desktop.ini

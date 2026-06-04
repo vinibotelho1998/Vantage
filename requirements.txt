@@ -1,0 +1,8 @@
+PySide6==6.11.1
+pythonnet==3.1.0
+psutil==7.2.2
+pywin32==312
+WMI==1.5.1
+nvidia-ml-py==13.610.43
+pystray==0.19.5
+pillow==12.2.0
