@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QGraphicsDropShadowEffect,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QMenu,
     QVBoxLayout,
@@ -53,36 +54,52 @@ class PanelWindow(QWidget):
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
-        self._build()
-        self.apply_settings(self._cfg)
+        self.rebuild()
         self.update_clock()
 
+    def rebuild(self) -> None:
+        """Reconstroi toda a interface (usado quando a escala/modo tablet muda em tempo real)."""
+        theme.SCALE = self._cfg.tablet_scale if self._cfg.tablet_mode else 1.0
+        old_layout = self.layout()
+        if old_layout is not None:
+            QWidget().setLayout(old_layout)
+        self._fps_layout_state = None
+        self._build()
+        self.apply_settings(self._cfg)
+
     def _build(self) -> None:
+        tablet = self._cfg.tablet_mode
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(_MARGIN, _MARGIN, _MARGIN, _MARGIN)
+        m = 0 if tablet else theme.scaled(_MARGIN)
+        outer.setContentsMargins(m, m, m, m)
 
         self._root = QFrame()
         self._root.setObjectName("Root")
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(34)
-        shadow.setColor(QColor(0, 0, 0, 170))
-        shadow.setOffset(0, 7)
-        self._root.setGraphicsEffect(shadow)
+        if tablet:
+            self._root.setStyleSheet(
+                f"QFrame#Root {{ background: {theme.CARD}; border-radius: 0px; border: none; }}")
+        else:
+            shadow = QGraphicsDropShadowEffect(self)
+            shadow.setBlurRadius(34)
+            shadow.setColor(QColor(0, 0, 0, 170))
+            shadow.setOffset(0, 7)
+            self._root.setGraphicsEffect(shadow)
         outer.addWidget(self._root)
 
         lay = QVBoxLayout(self._root)
-        lay.setContentsMargins(13, 11, 13, 10)
-        lay.setSpacing(6)
+        lay.setContentsMargins(theme.scaled(13), theme.scaled(11), theme.scaled(13), theme.scaled(10))
+        lay.setSpacing(theme.scaled(6))
 
         self._build_header(lay)
         self._build_fps(lay)
         lay.addWidget(divider())
         self._build_sections(lay)
+        lay.addStretch(1)
         self._build_footer(lay)
 
     def _build_header(self, lay: QVBoxLayout) -> None:
         top = QHBoxLayout()
-        top.setSpacing(8)
+        top.setSpacing(theme.scaled(8))
         brand = QLabel("DBX")
         brand.setFont(make_font(11, QFont.Weight.Black))
         brand.setStyleSheet(f"color: {theme.accent_color(self._cfg.accent)};")
@@ -97,7 +114,7 @@ class PanelWindow(QWidget):
         self._status_dot.setFont(make_font(8))
         self._status_dot.setStyleSheet(f"color: {theme.FAINT};")
         top.addWidget(self._status_dot)
-        top.addSpacing(4)
+        top.addSpacing(theme.scaled(4))
         self._btn_cfg = self._header_button("⚙", self._open_menu)
         top.addWidget(self._btn_cfg)
         top.addWidget(self._header_button("—", self._ctl.toggle_panel))
@@ -107,11 +124,13 @@ class PanelWindow(QWidget):
         self._clock = QLabel("00:00:00")
         self._clock.setFont(make_font(23, QFont.Weight.Bold))
         self._clock.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self._clock.setVisible(not self._cfg.tablet_mode)
         lay.addWidget(self._clock)
         self._date = QLabel("")
         self._date.setProperty("role", "mute")
         self._date.setFont(make_font(8.5))
         self._date.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self._date.setVisible(not self._cfg.tablet_mode)
         lay.addWidget(self._date)
 
     def _header_button(self, text: str, callback) -> QLabel:
@@ -124,7 +143,7 @@ class PanelWindow(QWidget):
 
     def _build_fps(self, lay: QVBoxLayout) -> None:
         row = QHBoxLayout()
-        row.setSpacing(2)
+        row.setSpacing(theme.scaled(2))
         self._fps_cols: dict[str, QWidget] = {}
         self._fps_vals: dict[str, QLabel] = {}
         for key, label in _FPS_COLS:
@@ -148,7 +167,7 @@ class PanelWindow(QWidget):
         lay.addLayout(row)
 
         sub = QHBoxLayout()
-        sub.setSpacing(4)
+        sub.setSpacing(theme.scaled(4))
         self._game = QLabel("Auto ▾")
         self._game.setProperty("role", "mute")
         self._game.setFont(make_font(7.5))
@@ -206,6 +225,19 @@ class PanelWindow(QWidget):
         lay.addWidget(self._uptime)
 
     # ── settings / posicionamento ──────────────────────────────────────────────
+    def _tablet_screen(self):
+        screens = QApplication.screens()
+        wanted = self._cfg.tablet_screen
+        if wanted:
+            for s in screens:
+                if s.name() == wanted:
+                    return s
+        primary = QApplication.primaryScreen()
+        for s in screens:
+            if s is not primary:
+                return s
+        return primary
+
     def apply_settings(self, cfg) -> None:
         self._cfg = cfg
         self.setWindowOpacity(cfg.opacity)
@@ -215,11 +247,21 @@ class PanelWindow(QWidget):
         if self.windowFlags() != flags:
             self.setWindowFlags(flags)
             self.show()
-        self._root.setFixedWidth(cfg.width)
-        self.adjustSize()
+        if cfg.tablet_mode:
+            screen = self._tablet_screen()
+            if screen is not None:
+                self._root.setFixedWidth(screen.geometry().width())
+        else:
+            self._root.setFixedWidth(cfg.width)
+            self.adjustSize()
         self.place()
 
     def place(self) -> None:
+        if self._cfg.tablet_mode:
+            screen = self._tablet_screen()
+            if screen is not None:
+                self.setGeometry(screen.geometry())
+            return
         self.adjustSize()
         screen = QApplication.primaryScreen()
         if screen is None:
@@ -421,6 +463,8 @@ class PanelWindow(QWidget):
         self._ctl.save_settings()
 
     def mousePressEvent(self, e) -> None:
+        if self._cfg.tablet_mode:
+            return
         if e.button() == Qt.MouseButton.LeftButton and not self._cfg.locked:
             self._drag_pos = e.globalPosition().toPoint() - self.frameGeometry().topLeft()
             e.accept()
@@ -451,6 +495,29 @@ class PanelWindow(QWidget):
         overlay.setChecked(self._ctl.overlay_active())
         overlay.triggered.connect(lambda _v: self._ctl.toggle_overlay())
         m.addAction(overlay)
+        tablet = QAction("Modo Tablet (tela cheia)", self, checkable=True)
+        tablet.setChecked(self._cfg.tablet_mode)
+        tablet.triggered.connect(lambda v: self._ctl.set_tablet_mode(v))
+        m.addAction(tablet)
+        screen_menu = m.addMenu("Tela do Tablet")
+        current = self._tablet_screen()
+        for s in QApplication.screens():
+            geo = s.geometry()
+            act = QAction(f"{s.name()}  ({geo.width()}x{geo.height()})", self, checkable=True)
+            act.setChecked(s is current)
+            act.triggered.connect(lambda _v, name=s.name(): self._ctl.set_tablet_screen(name))
+            screen_menu.addAction(act)
+        size_menu = m.addMenu("Tamanho (Modo Tablet)")
+        for scale, label in [(1.0, "1.0x"), (1.3, "1.3x"), (1.6, "1.6x (padrão)"),
+                              (2.0, "2.0x"), (2.5, "2.5x")]:
+            act = QAction(label, self, checkable=True)
+            act.setChecked(abs(self._cfg.tablet_scale - scale) < 0.01)
+            act.triggered.connect(lambda _v, sc=scale: self._ctl.set_tablet_scale(sc))
+            size_menu.addAction(act)
+        size_menu.addSeparator()
+        custom = QAction("Personalizado…", self)
+        custom.triggered.connect(self._pick_custom_scale)
+        size_menu.addAction(custom)
         m.addSeparator()
         m.addAction("Zerar estatísticas", self._ctl.clear_stats)
         m.addAction("Fechar", self._ctl.quit)
@@ -462,6 +529,13 @@ class PanelWindow(QWidget):
     def _open_menu(self) -> None:
         self._build_menu().exec(
             self._btn_cfg.mapToGlobal(QPoint(0, self._btn_cfg.height() + 2)))
+
+    def _pick_custom_scale(self) -> None:
+        value, ok = QInputDialog.getDouble(
+            self, "Tamanho (Modo Tablet)", "Escala (1.0 a 3.0):",
+            self._cfg.tablet_scale, 1.0, 3.0, 2)
+        if ok:
+            self._ctl.set_tablet_scale(value)
 
 
 def _fan_text(g: dict) -> str:

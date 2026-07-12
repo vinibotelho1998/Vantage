@@ -41,6 +41,9 @@ class Settings:
     ping_port: int = 53
     accent: str = "blue"
     overlay_corner: str = "top-left"
+    tablet_mode: bool = False
+    tablet_screen: str = ""
+    tablet_scale: float = 1.6
 
     @classmethod
     def _known(cls) -> set[str]:
@@ -74,6 +77,7 @@ class Settings:
             self.accent = "blue"
         if self.overlay_corner not in {"top-left", "top-right", "bottom-left", "bottom-right"}:
             self.overlay_corner = "top-left"
+        self.tablet_scale = _clamp(_as_float(self.tablet_scale, 1.6), 1.0, 3.0)
 
     @classmethod
     def load(cls) -> Settings:

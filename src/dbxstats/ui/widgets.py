@@ -12,7 +12,7 @@ from .. import theme
 
 def make_font(pt: float, weight: int = QFont.Normal, family: str = theme.FONT_UI) -> QFont:
     f = QFont(family)
-    f.setPointSizeF(pt)
+    f.setPointSizeF(pt * theme.SCALE)
     f.setWeight(weight)
     return f
 
@@ -20,7 +20,7 @@ def make_font(pt: float, weight: int = QFont.Normal, family: str = theme.FONT_UI
 def divider() -> QFrame:
     f = QFrame()
     f.setObjectName("Divider")
-    f.setFixedHeight(1)
+    f.setFixedHeight(max(1, theme.scaled(1)))
     return f
 
 
@@ -29,7 +29,7 @@ class ProgressBar(QWidget):
         super().__init__(parent)
         self._value = 0.0
         self._color = QColor(color)
-        self.setFixedHeight(6)
+        self.setFixedHeight(theme.scaled(6))
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._anim = QPropertyAnimation(self, b"value", self)
         self._anim.setDuration(400)
@@ -84,7 +84,7 @@ class Sparkline(QWidget):
         self._color = QColor(color)
         self._data: deque[float] = deque(maxlen=maxlen)
         self._fixed_max = fixed_max
-        self.setFixedHeight(height)
+        self.setFixedHeight(theme.scaled(height))
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
     def push(self, v) -> None:
@@ -142,16 +142,16 @@ class MetricRow(QWidget):
     def __init__(self, label: str, label_w: int = 86, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 1, 0, 1)
+        outer.setContentsMargins(0, theme.scaled(1), 0, theme.scaled(1))
         outer.setSpacing(0)
 
         top = QHBoxLayout()
         top.setContentsMargins(0, 0, 0, 0)
-        top.setSpacing(6)
+        top.setSpacing(theme.scaled(6))
         self._label = QLabel(label)
         self._label.setProperty("role", "mute")
         self._label.setFont(make_font(8.5))
-        self._label.setFixedWidth(label_w)
+        self._label.setFixedWidth(theme.scaled(label_w))
         self._value = QLabel("—")
         self._value.setFont(make_font(9.5, QFont.Weight.DemiBold))
         self._value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -186,13 +186,13 @@ class SectionCard(QFrame):
         self.setObjectName("Section")
         self._color = color
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(12, 7, 12, 8)
-        lay.setSpacing(5)
+        lay.setContentsMargins(theme.scaled(12), theme.scaled(7), theme.scaled(12), theme.scaled(8))
+        lay.setSpacing(theme.scaled(5))
 
         hdr = QHBoxLayout()
-        hdr.setSpacing(7)
+        hdr.setSpacing(theme.scaled(7))
         tick = QFrame()
-        tick.setFixedSize(3, 12)
+        tick.setFixedSize(theme.scaled(3), theme.scaled(12))
         tick.setStyleSheet(f"background: {color}; border-radius: 1px;")
         title_lbl = QLabel(title.upper())
         title_lbl.setProperty("role", "title")
@@ -218,7 +218,7 @@ class SectionCard(QFrame):
 
         self._rows: dict[str, MetricRow] = {}
         self._rows_lay = QVBoxLayout()
-        self._rows_lay.setContentsMargins(0, 2, 0, 0)
+        self._rows_lay.setContentsMargins(0, theme.scaled(2), 0, 0)
         self._rows_lay.setSpacing(0)
         lay.addLayout(self._rows_lay)
 

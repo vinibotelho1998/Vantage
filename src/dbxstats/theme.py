@@ -30,6 +30,12 @@ FONT_MONO = "Cascadia Mono"
 RADIUS = 14
 RADIUS_SM = 8
 
+SCALE = 1.0
+
+
+def scaled(px: float) -> int:
+    return round(px * SCALE)
+
 
 @dataclass(frozen=True)
 class Accent:

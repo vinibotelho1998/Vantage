@@ -144,6 +144,21 @@ class App:
         self.settings.locked = value
         self.settings.save()
 
+    def set_tablet_mode(self, value: bool) -> None:
+        self.settings.tablet_mode = value
+        self.panel.rebuild()
+        self.settings.save()
+
+    def set_tablet_screen(self, name: str) -> None:
+        self.settings.tablet_screen = name
+        self.panel.apply_settings(self.settings)
+        self.settings.save()
+
+    def set_tablet_scale(self, scale: float) -> None:
+        self.settings.tablet_scale = scale
+        self.panel.rebuild()
+        self.settings.save()
+
     def overlay_active(self) -> bool:
         return self._overlay is not None
 

@@ -12,7 +12,7 @@ class FpsGraph(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._buf: list[float] = []
-        self.setFixedHeight(54)
+        self.setFixedHeight(theme.scaled(54))
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
     def set_buffer(self, buf) -> None:
