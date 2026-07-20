@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QFrame,
     QGraphicsDropShadowEffect,
+    QGridLayout,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -18,16 +19,14 @@ from PySide6.QtWidgets import (
 )
 
 from .. import theme
+from ..config import SECTION_LABELS, SECTION_METRICS
 from ..platform import win
 from . import fpspick
 from .fps_graph import FpsGraph
 from .widgets import SectionCard, divider, make_font
 
-_DIAS = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira",
-         "Sexta-feira", "Sábado", "Domingo"]
-_MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho",
-          "agosto", "setembro", "outubro", "novembro", "dezembro"]
-_FPS_COLS = [("inst", "INST"), ("avg", "AVG"), ("1low", "1% LOW"), ("01low", "0.1% LOW")]
+_DIAS_ABBR = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+_FPS_SECONDARY = [("avg", "MÉDIO"), ("1low", "1% LOW"), ("01low", "0.1% LOW")]
 _MARGIN = 16
 
 
@@ -50,6 +49,7 @@ class PanelWindow(QWidget):
         self._fps_layout_state: dict | None = None
         self._graph_visible = True
         self._io_tick = 0
+        self._fps_pid: int | None = None
 
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
@@ -59,7 +59,7 @@ class PanelWindow(QWidget):
 
     def rebuild(self) -> None:
         """Reconstroi toda a interface (usado quando a escala/modo tablet muda em tempo real)."""
-        theme.SCALE = self._cfg.tablet_scale if self._cfg.tablet_mode else 1.0
+        theme.SCALE = self._cfg.tablet_scale if self._fill_screen() else 1.0
         old_layout = self.layout()
         if old_layout is not None:
             QWidget().setLayout(old_layout)
@@ -68,7 +68,7 @@ class PanelWindow(QWidget):
         self.apply_settings(self._cfg)
 
     def _build(self) -> None:
-        tablet = self._cfg.tablet_mode
+        tablet = self._fill_screen()
         outer = QVBoxLayout(self)
         m = 0 if tablet else theme.scaled(_MARGIN)
         outer.setContentsMargins(m, m, m, m)
@@ -90,12 +90,17 @@ class PanelWindow(QWidget):
         lay.setContentsMargins(theme.scaled(13), theme.scaled(11), theme.scaled(13), theme.scaled(10))
         lay.setSpacing(theme.scaled(6))
 
-        self._build_header(lay)
-        self._build_fps(lay)
-        lay.addWidget(divider())
-        self._build_sections(lay)
-        lay.addStretch(1)
-        self._build_footer(lay)
+        if self._cfg.mode == "fullscreen":
+            self._build_header(lay)
+            self._build_fullscreen(lay)
+            self._build_footer(lay)
+        else:
+            self._build_header(lay)
+            self._build_fps(lay)
+            lay.addWidget(divider())
+            self._build_sections(lay)
+            lay.addStretch(1)
+            self._build_footer(lay)
 
     def _build_header(self, lay: QVBoxLayout) -> None:
         top = QHBoxLayout()
@@ -121,18 +126,6 @@ class PanelWindow(QWidget):
         top.addWidget(self._header_button("✕", self._ctl.quit))
         lay.addLayout(top)
 
-        self._clock = QLabel("00:00:00")
-        self._clock.setFont(make_font(23, QFont.Weight.Bold))
-        self._clock.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        self._clock.setVisible(not self._cfg.tablet_mode)
-        lay.addWidget(self._clock)
-        self._date = QLabel("")
-        self._date.setProperty("role", "mute")
-        self._date.setFont(make_font(8.5))
-        self._date.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        self._date.setVisible(not self._cfg.tablet_mode)
-        lay.addWidget(self._date)
-
     def _header_button(self, text: str, callback) -> QLabel:
         b = QLabel(text)
         b.setFont(make_font(11, QFont.Weight.Bold))
@@ -142,29 +135,51 @@ class PanelWindow(QWidget):
         return b
 
     def _build_fps(self, lay: QVBoxLayout) -> None:
-        row = QHBoxLayout()
-        row.setSpacing(theme.scaled(2))
-        self._fps_cols: dict[str, QWidget] = {}
-        self._fps_vals: dict[str, QLabel] = {}
-        for key, label in _FPS_COLS:
-            col = QWidget()
-            cl = QVBoxLayout(col)
-            cl.setContentsMargins(0, 0, 0, 0)
-            cl.setSpacing(0)
+        box = QHBoxLayout()
+        box.setSpacing(theme.scaled(10))
+        box.setContentsMargins(0, theme.scaled(2), 0, theme.scaled(2))
+
+        hero = QVBoxLayout()
+        hero.setContentsMargins(0, 0, 0, 0)
+        hero.setSpacing(0)
+        self._fps_cap = QLabel("FPS ATUAL")
+        self._fps_cap.setProperty("role", "faint")
+        self._fps_cap.setFont(make_font(7.5, QFont.Weight.Bold))
+        self._fps_hero = QLabel("—")
+        self._fps_hero.setFont(make_font(52, QFont.Weight.Black, theme.FONT_DISPLAY))
+        self._fps_hero.setStyleSheet(f"color: {theme.MUTE};")
+        hero.addWidget(self._fps_cap)
+        hero.addWidget(self._fps_hero)
+        box.addLayout(hero)
+        box.addStretch(1)
+
+        sec = QVBoxLayout()
+        sec.setContentsMargins(0, theme.scaled(8), 0, 0)
+        sec.setSpacing(theme.scaled(3))
+        self._fps_sec: dict[str, tuple] = {}
+        for key, label in _FPS_SECONDARY:
+            r = QHBoxLayout()
+            r.setContentsMargins(0, 0, 0, 0)
+            r.setSpacing(theme.scaled(8))
             cap = QLabel(label)
             cap.setProperty("role", "faint")
-            cap.setFont(make_font(6.5, QFont.Weight.Bold))
-            cap.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+            cap.setFont(make_font(7, QFont.Weight.Bold))
             val = QLabel("—")
-            val.setFont(make_font(16, QFont.Weight.Bold))
-            val.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+            val.setFont(make_font(13, QFont.Weight.Bold, theme.FONT_DISPLAY))
+            val.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             val.setStyleSheet(f"color: {theme.MUTE};")
-            cl.addWidget(cap)
-            cl.addWidget(val)
-            self._fps_cols[key] = col
-            self._fps_vals[key] = val
-            row.addWidget(col, 1)
-        lay.addLayout(row)
+            r.addWidget(cap)
+            r.addStretch(1)
+            r.addWidget(val)
+            holder = QWidget()
+            holder.setLayout(r)
+            sec.addWidget(holder)
+            self._fps_sec[key] = (holder, val)
+        sec_box = QWidget()
+        sec_box.setLayout(sec)
+        sec_box.setFixedWidth(theme.scaled(108))
+        box.addWidget(sec_box)
+        lay.addLayout(box)
 
         sub = QHBoxLayout()
         sub.setSpacing(theme.scaled(4))
@@ -174,6 +189,10 @@ class PanelWindow(QWidget):
         self._game.setCursor(Qt.CursorShape.PointingHandCursor)
         self._game.mousePressEvent = lambda _e: self._open_game_picker()
         sub.addWidget(self._game)
+        sub.addSpacing(theme.scaled(8))
+        self._stutter = QLabel("")
+        self._stutter.setFont(make_font(7.5, QFont.Weight.Bold))
+        sub.addWidget(self._stutter)
         sub.addStretch(1)
         ftcap = QLabel("Frametime")
         ftcap.setProperty("role", "faint")
@@ -188,55 +207,75 @@ class PanelWindow(QWidget):
         self._graph = FpsGraph()
         lay.addWidget(self._graph)
 
+    _SECTION_COLORS = {"cpu": "CPU", "ram": "RAM", "gpu": "GPU", "disk": "DISK", "net": "NET"}
+    _SECTION_PARAMS = {"cpu": {}, "ram": {}, "gpu": {},
+                       "disk": {"fixed_max": None},
+                       "net": {"with_bar": False, "fixed_max": None}}
+
+    def _make_section(self, sec: str) -> SectionCard:
+        rows = SECTION_METRICS[sec]
+        color = getattr(theme, self._SECTION_COLORS[sec])
+        card = SectionCard(SECTION_LABELS[sec], color, with_spark=True,
+                           **self._SECTION_PARAMS[sec])
+        setattr(self, sec, card)
+        shown = (self._cfg.visible_metrics or {}).get(sec, [k for k, _ in rows])
+        for key, label in rows:
+            if key in shown:
+                card.add_row(key, label)
+        card.setVisible(bool(shown))
+        return card
+
     def _build_sections(self, lay: QVBoxLayout) -> None:
-        self.cpu = SectionCard("CPU", theme.CPU, with_spark=True)
-        for k, lbl in [("pct", "Uso"), ("freq", "Frequência"), ("temp", "Temperatura"),
-                       ("watts", "Potência"), ("fan", "Cooler")]:
-            self.cpu.add_row(k, lbl)
-        lay.addWidget(self.cpu)
+        for sec in SECTION_METRICS:
+            lay.addWidget(self._make_section(sec))
 
-        self.ram = SectionCard("Memória", theme.RAM, with_spark=True)
-        for k, lbl in [("used", "Em uso"), ("avail", "Disponível"), ("freq", "Frequência")]:
-            self.ram.add_row(k, lbl)
-        lay.addWidget(self.ram)
-
-        self.gpu = SectionCard("GPU", theme.GPU, with_spark=True)
-        for k, lbl in [("pct", "Uso"), ("temp", "Temperatura"), ("fan", "Cooler"),
-                       ("watts", "Potência"), ("freq", "Frequência"), ("vram", "VRAM")]:
-            self.gpu.add_row(k, lbl)
-        lay.addWidget(self.gpu)
-
-        self.disk = SectionCard("Disco", theme.DISK, with_spark=True, fixed_max=None)
-        for k, lbl in [("used", "Uso"), ("temp", "Temperatura"),
-                       ("read", "Leitura"), ("write", "Escrita")]:
-            self.disk.add_row(k, lbl)
-        lay.addWidget(self.disk)
-
-        self.net = SectionCard("Rede", theme.NET, with_bar=False, with_spark=True, fixed_max=None)
-        for k, lbl in [("dl", "Download"), ("ul", "Upload"), ("ping", "Ping"), ("loss", "Perda")]:
-            self.net.add_row(k, lbl)
-        lay.addWidget(self.net)
+    def _build_fullscreen(self, lay: QVBoxLayout) -> None:
+        grid = QGridLayout()
+        grid.setSpacing(theme.scaled(12))
+        fps_card = QFrame()
+        fps_card.setObjectName("Section")
+        fps_card.setStyleSheet(
+            f"QFrame#Section {{ background: {theme.CARD}; border: 1px solid {theme.LINE};"
+            f" border-radius: {theme.scaled(theme.RADIUS)}px; }}")
+        fl = QVBoxLayout(fps_card)
+        fl.setContentsMargins(theme.scaled(16), theme.scaled(12), theme.scaled(16), theme.scaled(12))
+        self._build_fps(fl)
+        fl.addStretch(1)
+        grid.addWidget(fps_card, 0, 0)
+        for sec, (r, c) in {"cpu": (0, 1), "gpu": (0, 2), "ram": (1, 0),
+                            "disk": (1, 1), "net": (1, 2)}.items():
+            grid.addWidget(self._make_section(sec), r, c)
+        for col in range(3):
+            grid.setColumnStretch(col, 1)
+        for row in range(2):
+            grid.setRowStretch(row, 1)
+        lay.addLayout(grid)
 
     def _build_footer(self, lay: QVBoxLayout) -> None:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(theme.scaled(6))
+        self._clock = QLabel("00:00:00")
+        self._clock.setProperty("role", "faint")
+        self._clock.setFont(make_font(7))
+        self._date = QLabel("")
+        self._date.setProperty("role", "faint")
+        self._date.setFont(make_font(7))
+        row.addWidget(self._clock)
+        row.addWidget(self._date)
+        row.addStretch(1)
         self._uptime = QLabel("Uptime 00:00:00")
         self._uptime.setProperty("role", "faint")
-        self._uptime.setFont(make_font(7.5))
-        self._uptime.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        lay.addWidget(self._uptime)
+        self._uptime.setFont(make_font(7))
+        row.addWidget(self._uptime)
+        lay.addLayout(row)
 
     # ── settings / posicionamento ──────────────────────────────────────────────
-    def _tablet_screen(self):
-        screens = QApplication.screens()
-        wanted = self._cfg.tablet_screen
-        if wanted:
-            for s in screens:
-                if s.name() == wanted:
-                    return s
-        primary = QApplication.primaryScreen()
-        for s in screens:
-            if s is not primary:
-                return s
-        return primary
+    def _fill_screen(self) -> bool:
+        return self._cfg.mode in ("tablet", "fullscreen")
+
+    def _target_screen(self):
+        return self.screen() or QApplication.primaryScreen()
 
     def apply_settings(self, cfg) -> None:
         self._cfg = cfg
@@ -247,8 +286,8 @@ class PanelWindow(QWidget):
         if self.windowFlags() != flags:
             self.setWindowFlags(flags)
             self.show()
-        if cfg.tablet_mode:
-            screen = self._tablet_screen()
+        if self._fill_screen():
+            screen = self._target_screen()
             if screen is not None:
                 self._root.setFixedWidth(screen.geometry().width())
         else:
@@ -257,12 +296,15 @@ class PanelWindow(QWidget):
         self.place()
 
     def place(self) -> None:
-        if self._cfg.tablet_mode:
-            screen = self._tablet_screen()
+        if self._fill_screen():
+            screen = self._target_screen()
             if screen is not None:
                 self.setGeometry(screen.geometry())
             return
         self.adjustSize()
+        if self._cfg.pos_x >= 0 and self._cfg.pos_y >= 0:
+            self._move_manual(self._cfg.pos_x, self._cfg.pos_y)
+            return
         screen = QApplication.primaryScreen()
         if screen is None:
             return
@@ -285,11 +327,18 @@ class PanelWindow(QWidget):
         x, y = coords.get(pos, coords["bottom-right"])
         self.move(int(x) - gap, int(y))
 
+    def _move_manual(self, x: int, y: int) -> None:
+        vg = QApplication.primaryScreen().virtualGeometry()
+        w, h = self.width(), self.height()
+        x = max(vg.left(), min(x, vg.right() - w + 1))
+        y = max(vg.top(), min(y, vg.bottom() - h + 1))
+        self.move(x, y)
+
     # ── updates ─────────────────────────────────────────────────────────────--
     def update_clock(self) -> None:
         now = datetime.now()
         self._clock.setText(now.strftime("%H:%M:%S"))
-        self._date.setText(f"{_DIAS[now.weekday()]}, {now.day} de {_MESES[now.month - 1]}")
+        self._date.setText(f"{_DIAS_ABBR[now.weekday()]} {now.day:02d}/{now.month:02d}")
 
     def update_system(self, d: dict) -> None:
         if not d:
@@ -395,8 +444,14 @@ class PanelWindow(QWidget):
 
     def update_fps(self) -> None:
         by_pid = self._ctl.fps.snapshot()
-        fg = win.foreground_pid()
-        chosen = fpspick.pick(by_pid, fg, self._cfg.fps_pin)
+        pin = self._cfg.fps_pin
+        if pin:
+            chosen = fpspick.pick(by_pid, 0, pin)
+        elif self._cfg.fps_fullscreen_only:
+            fs, hwnd = win.is_foreground_fullscreen()
+            chosen = by_pid.get(win.window_pid(hwnd)) if fs else None
+        else:
+            chosen = fpspick.pick(by_pid, win.foreground_pid(), "")
         metrics = set(self._cfg.fps_metrics)
         self._sync_fps_layout(metrics)
 
@@ -405,37 +460,54 @@ class PanelWindow(QWidget):
             avg = chosen[3] if self._cfg.fps_source == "display" else chosen[0]
             low = chosen[5]
             low01 = chosen[6]
-            values = {"inst": inst, "avg": avg, "1low": low, "01low": low01}
-            for key, val in values.items():
-                self._fps_vals[key].setText(str(val))
-                self._fps_vals[key].setStyleSheet(f"color: {theme.fps_color(val)};")
+            self._fps_hero.setText(str(inst))
+            self._fps_hero.setStyleSheet(f"color: {theme.fps_color(inst)};")
+            values = {"avg": avg, "1low": low, "01low": low01}
+            for key, (_holder, val) in self._fps_sec.items():
+                v = values[key]
+                val.setText(str(v))
+                val.setStyleSheet(f"color: {theme.fps_color(v)};")
             game = chosen[1] or "Auto"
             self._game.setText(f"{game} ▾")
             self._ft.setText(f"{1000 / inst:.1f} ms" if inst > 0 else "—")
+            stut = chosen[7] if len(chosen) > 7 else 0.0
+            self._stutter.setText(f"● {stut:.1f}% stutter")
+            self._stutter.setStyleSheet(f"color: {theme.stutter_color(stut)};")
             self._ctl.stats.update("fps", inst)
             pid = next((p for p, v in by_pid.items() if v is chosen), None)
+            self._fps_pid = pid
             if self._graph_visible and pid is not None:
                 self._graph.set_buffer(self._ctl.fps.graph_buffer(pid))
         else:
-            for val in self._fps_vals.values():
+            self._fps_hero.setText("—")
+            self._fps_hero.setStyleSheet(f"color: {theme.MUTE};")
+            for _holder, val in self._fps_sec.values():
                 val.setText("—")
                 val.setStyleSheet(f"color: {theme.MUTE};")
             pin = self._cfg.fps_pin
             self._game.setText(f"{pin} ▾" if pin else "Auto ▾")
             self._ft.setText("")
+            self._stutter.setText("")
+            self._fps_pid = None
             if self._graph_visible:
                 self._graph.set_buffer([])
 
+    def current_fps_pid(self) -> int | None:
+        return self._fps_pid
+
     def _sync_fps_layout(self, metrics: set) -> None:
-        want = {k: (k in metrics) for k, _ in _FPS_COLS}
+        want_hero = "inst" in metrics
+        want = {k: (k in metrics) for k, _ in _FPS_SECONDARY}
         graph = "graph" in metrics
         ft = "frametime" in metrics
-        state = (tuple(want.items()), graph, ft)
+        state = (want_hero, tuple(want.items()), graph, ft)
         if state == self._fps_layout_state:
             return
         self._fps_layout_state = state
-        for key, _ in _FPS_COLS:
-            self._fps_cols[key].setVisible(want[key])
+        self._fps_cap.setVisible(want_hero)
+        self._fps_hero.setVisible(want_hero)
+        for key, _ in _FPS_SECONDARY:
+            self._fps_sec[key][0].setVisible(want[key])
         self._graph.setVisible(graph)
         self._graph_visible = graph
         self._ft.setVisible(ft)
@@ -463,7 +535,7 @@ class PanelWindow(QWidget):
         self._ctl.save_settings()
 
     def mousePressEvent(self, e) -> None:
-        if self._cfg.tablet_mode:
+        if self._fill_screen():
             return
         if e.button() == Qt.MouseButton.LeftButton and not self._cfg.locked:
             self._drag_pos = e.globalPosition().toPoint() - self.frameGeometry().topLeft()
@@ -475,13 +547,23 @@ class PanelWindow(QWidget):
             e.accept()
 
     def mouseReleaseEvent(self, _e) -> None:
-        self._drag_pos = None
+        if self._drag_pos is not None:
+            self._drag_pos = None
+            p = self.frameGeometry().topLeft()
+            self._cfg.pos_x, self._cfg.pos_y = p.x(), p.y()
+            self._ctl.save_settings()
 
     def _build_menu(self) -> QMenu:
         m = QMenu(self)
         m.addAction("Configurações", lambda: self._ctl.open_settings(0))
-        m.addAction("FPS", lambda: self._ctl.open_settings(1))
-        m.addAction("Estatísticas", lambda: self._ctl.open_settings(2))
+        m.addSeparator()
+        mode_menu = m.addMenu("Modo")
+        for key, label in [("reduced", "Reduzido"), ("fullscreen", "Fullscreen"),
+                           ("tablet", "Tablet"), ("overlay", "Overlay (jogo)")]:
+            act = QAction(label, self, checkable=True)
+            act.setChecked(self._cfg.mode == key)
+            act.triggered.connect(lambda _v, k=key: self._ctl.set_mode(k))
+            mode_menu.addAction(act)
         m.addSeparator()
         top = QAction("Sempre no topo", self, checkable=True)
         top.setChecked(self._cfg.always_on_top)
@@ -491,23 +573,7 @@ class PanelWindow(QWidget):
         lock.setChecked(self._cfg.locked)
         lock.triggered.connect(lambda v: self._ctl.set_locked(v))
         m.addAction(lock)
-        overlay = QAction("Modo Jogo (overlay)", self, checkable=True)
-        overlay.setChecked(self._ctl.overlay_active())
-        overlay.triggered.connect(lambda _v: self._ctl.toggle_overlay())
-        m.addAction(overlay)
-        tablet = QAction("Modo Tablet (tela cheia)", self, checkable=True)
-        tablet.setChecked(self._cfg.tablet_mode)
-        tablet.triggered.connect(lambda v: self._ctl.set_tablet_mode(v))
-        m.addAction(tablet)
-        screen_menu = m.addMenu("Tela do Tablet")
-        current = self._tablet_screen()
-        for s in QApplication.screens():
-            geo = s.geometry()
-            act = QAction(f"{s.name()}  ({geo.width()}x{geo.height()})", self, checkable=True)
-            act.setChecked(s is current)
-            act.triggered.connect(lambda _v, name=s.name(): self._ctl.set_tablet_screen(name))
-            screen_menu.addAction(act)
-        size_menu = m.addMenu("Tamanho (Modo Tablet)")
+        size_menu = m.addMenu("Tamanho (Tablet/Fullscreen)")
         for scale, label in [(1.0, "1.0x"), (1.3, "1.3x"), (1.6, "1.6x (padrão)"),
                               (2.0, "2.0x"), (2.5, "2.5x")]:
             act = QAction(label, self, checkable=True)
@@ -519,7 +585,8 @@ class PanelWindow(QWidget):
         custom.triggered.connect(self._pick_custom_scale)
         size_menu.addAction(custom)
         m.addSeparator()
-        m.addAction("Zerar estatísticas", self._ctl.clear_stats)
+        m.addAction("Benchmark (30s)", lambda: self._ctl.start_benchmark(30))
+        m.addAction("Zerar estatísticas  (Ctrl+Alt+R)", self._ctl.clear_stats)
         m.addAction("Fechar", self._ctl.quit)
         return m
 

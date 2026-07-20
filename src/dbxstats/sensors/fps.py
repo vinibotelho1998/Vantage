@@ -13,8 +13,9 @@ from .. import log, paths
 _log = log.get("fps")
 
 PM_FALLBACK_URL = ("https://github.com/GameTechDev/PresentMon/releases/"
-                   "download/v1.10.0/PresentMon-1.10.0-x64.exe")
+                   "download/v2.5.1/PresentMon-2.5.1-x64.exe")
 PIPE_NAME = r"\\.\pipe\syspanel_fps"
+SESSION = "DBXStats"
 
 
 class FpsEngine:
@@ -27,6 +28,20 @@ class FpsEngine:
         self._status = ""
         self._proc: subprocess.Popen | None = None
         self._reset_requested = False
+        self._bench_active = False
+        self._bench_pid: int | None = None
+        self._bench: list[float] = []
+
+    def benchmark_start(self, pid: int) -> None:
+        with self._lock:
+            self._bench = []
+            self._bench_pid = pid
+            self._bench_active = True
+
+    def benchmark_stop(self) -> list[float]:
+        with self._lock:
+            self._bench_active = False
+            return list(self._bench)
 
     @property
     def status(self) -> str:
@@ -57,8 +72,12 @@ class FpsEngine:
         if self._proc is not None:
             try:
                 self._proc.terminate()
+                self._proc.wait(timeout=3)
             except Exception:
                 pass
+        for verb in ("stop", "delete"):
+            subprocess.call(["logman", verb, SESSION, "-ets"],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def _ensure_presentmon(self) -> str | None:
         exe = paths.presentmon_path()
@@ -94,6 +113,9 @@ class FpsEngine:
 
         subprocess.call(["taskkill", "/F", "/IM", "presentmon.exe"],
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for verb in ("stop", "delete"):
+            subprocess.call(["logman", verb, SESSION, "-ets"],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         time.sleep(0.4)
 
         try:
@@ -105,7 +127,8 @@ class FpsEngine:
 
             self._status = "Aguardando PM..."
             proc = subprocess.Popen(
-                [pm_exe, "-output_file", PIPE_NAME, "-no_top", "-stop_existing_session"],
+                [pm_exe, "--v1_metrics", "--output_file", PIPE_NAME, "--no_console_stats",
+                 "--stop_existing_session", "--session_name", SESSION],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 creationflags=subprocess.CREATE_NO_WINDOW)
             self._proc = proc
@@ -210,11 +233,17 @@ class FpsEngine:
             n = len(ordered)
             fps_low = round(1000 / ordered[max(0, n // 100 - 1)])
             fps_01low = round(1000 / ordered[max(0, n // 1000 - 1)])
+            median = ordered[n // 2]
+            stutters = sum(1 for m in dq_long if m > median * 1.5)
+            stutter_pct = round(100 * stutters / n, 1)
         else:
             fps_low = fps_01low = fps_inst
+            stutter_pct = 0.0
 
-        sc_entry = (fps, app, now(), fps_disp, fps_inst, fps_low, fps_01low)
+        sc_entry = (fps, app, now(), fps_disp, fps_inst, fps_low, fps_01low, stutter_pct)
         with self._lock:
+            if self._bench_active and pid == self._bench_pid:
+                self._bench.append(ms_btw)
             self._sc[key] = sc_entry
             best = max((v for (p, _s), v in self._sc.items() if p == pid),
                        key=lambda x: x[0])
@@ -276,7 +305,7 @@ def _resolve_pm_url() -> str:
         with urllib.request.urlopen(req, timeout=10) as r:
             releases = json.loads(r.read())
         for rel in releases:
-            if not rel.get("tag_name", "").startswith("v1."):
+            if not rel.get("tag_name", "").startswith("v2."):
                 continue
             for asset in rel.get("assets", []):
                 name = asset.get("name", "")

@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QApplication
 from . import log
 from .config import Settings
 from .platform import autostart, win
+from .platform.hotkeys import MOD_ALT, MOD_CONTROL, HotkeyManager
 from .sensors.collector import Collector
 from .sensors.fps import FpsEngine
 from .sensors.gpu import GpuReader
@@ -14,6 +15,7 @@ from .sensors.lhm import LhmReader
 from .sensors.net import PingMonitor
 from .stats import StatsTracker
 from .ui import style
+from .ui.benchmark import BenchmarkDialog, summarize
 from .ui.main_panel import PanelWindow
 from .ui.overlay import GameOverlay
 from .ui.settings import SettingsDialog
@@ -38,6 +40,10 @@ class App:
         self._dialog: SettingsDialog | None = None
         self._panel_visible = True
         self._notified_tray = False
+        self._bench_timer: QTimer | None = None
+        self._bench_game = ""
+        self._alerted: dict[str, float] = {}
+        self._hotkeys: HotkeyManager | None = None
 
         self.qt.setQuitOnLastWindowClosed(False)
         self.qt.setStyleSheet(style.build_qss(self.settings.accent))
@@ -50,9 +56,17 @@ class App:
         self.ping.start()
         self.fps.start()
         self.collector.start()
-        self.panel.show()
         self._init_timers()
+        self._apply_mode()
+        self._hotkeys = HotkeyManager()
+        self.qt.installNativeEventFilter(self._hotkeys)
+        if not self._hotkeys.register(MOD_CONTROL | MOD_ALT, 0x52, self._hotkey_reset):
+            _log.warning("nao foi possivel registrar Ctrl+Alt+R (em uso por outro app?)")
         autostart.set_enabled(self.settings.autostart)
+
+    def _hotkey_reset(self) -> None:
+        self.clear_stats()
+        self.tray.notify("DBX Stats", "Estatísticas zeradas (Ctrl+Alt+R)")
 
     def run(self) -> int:
         self.boot()
@@ -79,6 +93,22 @@ class App:
         self._last = self.collector.snapshot()
         if self._panel_visible:
             self.panel.update_system(self._last)
+        self._check_alerts(self._last)
+
+    def _check_alerts(self, d: dict) -> None:
+        checks = [
+            ("cpu", self.settings.alert_cpu_temp, d.get("cpu_temp"), "CPU"),
+            ("gpu", self.settings.alert_gpu_temp, (d.get("gpu") or {}).get("temp"), "GPU"),
+        ]
+        for key, limit, val, label in checks:
+            if not limit or val is None:
+                continue
+            if val >= limit and not self._alerted.get(key):
+                self._alerted[key] = True
+                self.tray.notify("DBX Stats — Alerta",
+                                 f"{label} atingiu {val:.0f}°C (limite {limit}°C)")
+            elif val <= limit - 3:
+                self._alerted[key] = False
 
     def _tick_fps(self) -> None:
         busy = QApplication.activePopupWidget() is not None or self._dialog is not None
@@ -129,7 +159,7 @@ class App:
         self.ping.configure(self.settings.ping_host, self.settings.ping_port)
         self._t_sys.setInterval(int(self.settings.update_interval * 1000))
         self.tray.update_icon(self.settings.accent)
-        self.panel.apply_settings(self.settings)
+        self._apply_mode()
         if self._overlay is not None:
             self._overlay.place()
         autostart.set_enabled(self.settings.autostart)
@@ -144,33 +174,34 @@ class App:
         self.settings.locked = value
         self.settings.save()
 
-    def set_tablet_mode(self, value: bool) -> None:
-        self.settings.tablet_mode = value
-        self.panel.rebuild()
-        self.settings.save()
+    def _apply_mode(self) -> None:
+        mode = self.settings.mode
+        self.settings.tablet_mode = mode == "tablet"
+        if mode == "overlay":
+            if self._overlay is None:
+                self._overlay = GameOverlay(self)
+                self._overlay.show()
+            if self._panel_visible:
+                self.panel.hide()
+                self._panel_visible = False
+        else:
+            if self._overlay is not None:
+                self._overlay.close()
+                self._overlay = None
+            self.panel.rebuild()
+            if not self._panel_visible:
+                self._panel_visible = True
+            self.panel.show()
 
-    def set_tablet_screen(self, name: str) -> None:
-        self.settings.tablet_screen = name
-        self.panel.apply_settings(self.settings)
+    def set_mode(self, mode: str) -> None:
+        self.settings.mode = mode
+        self._apply_mode()
         self.settings.save()
 
     def set_tablet_scale(self, scale: float) -> None:
         self.settings.tablet_scale = scale
         self.panel.rebuild()
         self.settings.save()
-
-    def overlay_active(self) -> bool:
-        return self._overlay is not None
-
-    def toggle_overlay(self) -> None:
-        if self._overlay is None:
-            self._overlay = GameOverlay(self)
-            self._overlay.show()
-            _log.info("overlay ativado")
-        else:
-            self._overlay.close()
-            self._overlay = None
-            _log.info("overlay desativado")
 
     def toggle_panel(self) -> None:
         if self._panel_visible:
@@ -184,11 +215,36 @@ class App:
             self.panel.show()
             self._panel_visible = True
 
+    def start_benchmark(self, seconds: int = 30) -> None:
+        if self._bench_timer is not None:
+            return
+        pid = self.panel.current_fps_pid()
+        if pid is None:
+            self.tray.notify("DBX Stats", "Nenhum jogo detectado para o benchmark.")
+            return
+        self._bench_game = self.fps.snapshot().get(pid, (0, "jogo"))[1]
+        self.fps.benchmark_start(pid)
+        self.tray.notify("DBX Stats", f"Benchmark iniciado — {seconds}s de {self._bench_game}")
+        self._bench_timer = QTimer(self.qt)
+        self._bench_timer.setSingleShot(True)
+        self._bench_timer.timeout.connect(self._finish_benchmark)
+        self._bench_timer.start(seconds * 1000)
+
+    def _finish_benchmark(self) -> None:
+        self._bench_timer = None
+        summary = summarize(self.fps.benchmark_stop())
+        if summary is None:
+            self.tray.notify("DBX Stats", "Benchmark sem dados suficientes.")
+            return
+        BenchmarkDialog(summary, self._bench_game or "jogo").exec()
+
     def clear_stats(self) -> None:
         self.stats.clear()
         self.fps.reset()
 
     def quit(self) -> None:
+        if self._hotkeys is not None:
+            self._hotkeys.unregister_all()
         self.collector.stop()
         self.ping.stop()
         self.fps.stop()

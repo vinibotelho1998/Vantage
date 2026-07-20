@@ -27,6 +27,7 @@ IDLE = "#636E7B"
 
 FONT_UI = "Segoe UI"
 FONT_MONO = "Cascadia Mono"
+FONT_DISPLAY = "Bahnschrift"
 RADIUS = 14
 RADIUS_SM = 8
 
@@ -84,6 +85,16 @@ def fps_color(v: float | None) -> str:
     if v >= 60:
         return OK
     if v >= 30:
+        return WARN
+    return BAD
+
+
+def stutter_color(pct: float | None) -> str:
+    if pct is None:
+        return MUTE
+    if pct < 1:
+        return OK
+    if pct < 3:
         return WARN
     return BAD
 

@@ -21,7 +21,7 @@ def test_fmt():
     s = StatsTracker()
     s.update("k", 10)
     s.update("k", 20)
-    assert s.fmt("k", 0, "%") == "↓10  ø15  ↑20%"
+    assert s.fmt("k", 0, "%") == "mín 10 · méd 15 · máx 20%"
 
 
 def test_fmt_unknown_key_is_empty():

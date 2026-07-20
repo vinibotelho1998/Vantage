@@ -16,11 +16,29 @@ _ACCENTS = {"blue", "green", "purple", "orange", "red", "cyan"}
 _ALL_FPS_METRICS = ["inst", "avg", "1low", "01low", "frametime", "graph"]
 _ALL_STATS_KEYS = ["cpu_pct", "cpu_temp", "cpu_watts", "gpu_pct", "gpu_temp",
                    "gpu_watts", "ram_pct", "fps", "ping_ms", "nvme_temp"]
+_MODES = {"reduced", "tablet", "fullscreen", "overlay"}
+
+SECTION_METRICS = {
+    "cpu": [("pct", "Uso"), ("freq", "Frequência"), ("temp", "Temperatura"),
+            ("watts", "Potência"), ("fan", "Cooler")],
+    "ram": [("used", "Em uso"), ("avail", "Disponível"), ("freq", "Frequência")],
+    "gpu": [("pct", "Uso"), ("temp", "Temperatura"), ("fan", "Cooler"),
+            ("watts", "Potência"), ("freq", "Frequência"), ("vram", "VRAM")],
+    "disk": [("used", "Uso"), ("temp", "Temperatura"), ("read", "Leitura"), ("write", "Escrita")],
+    "net": [("dl", "Download"), ("ul", "Upload"), ("ping", "Ping"), ("loss", "Perda")],
+}
+SECTION_LABELS = {"cpu": "CPU", "ram": "Memória", "gpu": "GPU", "disk": "Disco", "net": "Rede"}
+
+
+def _default_visible() -> dict:
+    return {sec: [k for k, _ in rows] for sec, rows in SECTION_METRICS.items()}
 
 
 @dataclass
 class Settings:
     position: str = "bottom-right"
+    pos_x: int = -1
+    pos_y: int = -1
     opacity: float = 0.95
     always_on_top: bool = True
     update_interval: float = 1.0
@@ -30,6 +48,7 @@ class Settings:
     fps_window: float = 0.5
     fps_source: str = "present"
     fps_pin: str = ""
+    fps_fullscreen_only: bool = True
     fps_metrics: list[str] = field(default_factory=lambda: list(_ALL_FPS_METRICS))
     show_stats: bool = False
     locked: bool = False
@@ -39,11 +58,14 @@ class Settings:
                                  "fps", "ping_ms"])
     ping_host: str = "8.8.8.8"
     ping_port: int = 53
+    alert_cpu_temp: int = 0
+    alert_gpu_temp: int = 0
     accent: str = "blue"
     overlay_corner: str = "top-left"
+    mode: str = "reduced"
     tablet_mode: bool = False
-    tablet_screen: str = ""
     tablet_scale: float = 1.6
+    visible_metrics: dict = field(default_factory=_default_visible)
 
     @classmethod
     def _known(cls) -> set[str]:
@@ -71,6 +93,8 @@ class Settings:
         self.fps_metrics = [m for m in self.fps_metrics if m in _ALL_FPS_METRICS] or list(_ALL_FPS_METRICS)
         self.stats_keys = [k for k in self.stats_keys if k in _ALL_STATS_KEYS]
         self.ping_port = int(_clamp(_as_float(self.ping_port, 53), 1, 65535))
+        self.alert_cpu_temp = int(_clamp(_as_float(self.alert_cpu_temp, 0), 0, 120))
+        self.alert_gpu_temp = int(_clamp(_as_float(self.alert_gpu_temp, 0), 0, 120))
         if not isinstance(self.ping_host, str) or not self.ping_host.strip():
             self.ping_host = "8.8.8.8"
         if self.accent not in _ACCENTS:
@@ -78,6 +102,19 @@ class Settings:
         if self.overlay_corner not in {"top-left", "top-right", "bottom-left", "bottom-right"}:
             self.overlay_corner = "top-left"
         self.tablet_scale = _clamp(_as_float(self.tablet_scale, 1.6), 1.0, 3.0)
+        if self.mode not in _MODES:
+            self.mode = "reduced"
+        if self.tablet_mode and self.mode == "reduced":
+            self.mode = "tablet"
+        self.tablet_mode = self.mode == "tablet"
+        vm = self.visible_metrics if isinstance(self.visible_metrics, dict) else {}
+        clean = {}
+        for sec, rows in SECTION_METRICS.items():
+            valid = [k for k, _ in rows]
+            sel = vm.get(sec)
+            sel = valid if not isinstance(sel, list) else sel
+            clean[sec] = [k for k in valid if k in sel]
+        self.visible_metrics = clean
 
     @classmethod
     def load(cls) -> Settings:

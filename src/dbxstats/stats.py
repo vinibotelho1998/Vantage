@@ -41,7 +41,7 @@ class StatsTracker:
             return ""
         mn, av, mx = r
         f = f".{decimals}f"
-        return f"↓{mn:{f}}  ø{av:{f}}  ↑{mx:{f}}{unit}"
+        return f"mín {mn:{f}} · méd {av:{f}} · máx {mx:{f}}{unit}"
 
     def clear(self) -> None:
         with self._lock:

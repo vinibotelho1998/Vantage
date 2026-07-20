@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
 from .. import theme
+
+_MODES = [("reduced", "Reduzido"), ("fullscreen", "Fullscreen"),
+          ("tablet", "Tablet"), ("overlay", "Overlay (jogo)")]
 
 
 def make_icon(accent: str) -> QIcon:
@@ -33,7 +36,13 @@ class Tray:
         self._icon.setToolTip("DBX Stats")
         menu = QMenu()
         menu.addAction("Mostrar / ocultar painel", controller.toggle_panel)
-        menu.addAction("Modo Jogo (overlay)", controller.toggle_overlay)
+        mode_menu = menu.addMenu("Modo")
+        for key, label in _MODES:
+            act = QAction(label, mode_menu, checkable=True)
+            act.setChecked(controller.settings.mode == key)
+            act.triggered.connect(lambda _v, k=key: controller.set_mode(k))
+            mode_menu.addAction(act)
+        menu.addAction("Benchmark (30s)", lambda: controller.start_benchmark(30))
         menu.addAction("Configurações", lambda: controller.open_settings(0))
         menu.addSeparator()
         menu.addAction("Fechar", controller.quit)

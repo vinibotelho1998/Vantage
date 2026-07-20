@@ -10,7 +10,7 @@ from .. import log, paths
 _log = log.get("lhm")
 
 _CPU_TEMP_PRIORITY = (
-    "Core (Tctl/Tdie)", "Tctl/Tdie", "Tdie",
+    "CCD", "Core (Tctl/Tdie)", "Tctl/Tdie", "Tdie",
     "CPU Package", "Package", "Core Max", "Core Average",
 )
 
@@ -145,9 +145,9 @@ class LhmReader:
 
         temp = None
         for key in _CPU_TEMP_PRIORITY:
-            match = next((v for nm, v in temps_by_name.items() if key in nm and v > 0), None)
-            if match is not None:
-                temp = match
+            matches = [v for nm, v in temps_by_name.items() if key in nm and v > 0]
+            if matches:
+                temp = max(matches)
                 break
         if temp is None and core_temps:
             valid = [t for t in core_temps if t > 0]
