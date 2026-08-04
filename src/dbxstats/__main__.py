@@ -5,10 +5,10 @@ import subprocess
 import sys
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtWidgets import QApplication
 
-from . import log, paths
+from . import __version__, log, paths
 from .platform import win
 
 
@@ -24,8 +24,8 @@ def _require_admin_warning() -> None:
     import ctypes
     ctypes.windll.user32.MessageBoxW(
         0,
-        "O DBX Stats precisa ser executado como administrador para ler os "
-        "sensores de CPU, GPU e placa-mae.\n\n"
+        "O DBX Stats precisa ser executado como administrador para ler os sensores "
+        "de CPU, GPU e placa-mae e para capturar FPS dos jogos.\n\n"
         "Feche e abra de novo com o botao direito > Executar como administrador.",
         "DBX Stats - permissao necessaria",
         0x10)
@@ -42,6 +42,12 @@ def main() -> int:
     QGuiApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     qt = QApplication(sys.argv)
+    qt.setApplicationName("DBX Stats")
+    qt.setApplicationVersion(__version__)
+    qt.setOrganizationName("DBX")
+    icon = paths.asset("icon.ico")
+    if icon.exists():
+        qt.setWindowIcon(QIcon(str(icon)))
 
     from .app import App
     return App(qt).run()

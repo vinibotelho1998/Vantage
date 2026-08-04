@@ -136,6 +136,14 @@ if ($py) {
             } else {
                 Falha "requirements.txt nao encontrado"
             }
+
+            Info "Instalando o pacote DBX Stats..."
+            & $venvPy -m pip install -e $root --quiet --no-deps
+            if ($LASTEXITCODE -eq 0) {
+                Ok "Pacote dbxstats instalado"
+            } else {
+                Falha "Falha ao instalar o pacote dbxstats (exit $LASTEXITCODE)"
+            }
         } else {
             Falha "Falha ao criar o .venv"
         }
@@ -146,8 +154,25 @@ if ($py) {
     Falha "Sem Python - etapa pulada"
 }
 
-# --------------------------------------------------------------- 5. Atalho
-Passo 5 "Criando atalho na area de trabalho"
+# -------------------------------------------------------------- 5. Verificacao
+Passo 5 "Verificando o ambiente"
+
+if (Test-Path $venvPy) {
+    $checkScript = Join-Path $root "scripts\check_env.py"
+    if (Test-Path $checkScript) {
+        & $venvPy $checkScript
+        if ($LASTEXITCODE -eq 0) {
+            Ok "Ambiente verificado - stack completa"
+        } else {
+            Falha "Verificacao do ambiente encontrou problemas (veja acima)"
+        }
+    }
+} else {
+    Falha "Nao foi possivel verificar o ambiente (.venv ausente)"
+}
+
+# --------------------------------------------------------------- 6. Atalho
+Passo 6 "Criando atalho na area de trabalho"
 
 try {
     $runBat = Join-Path $root "run.bat"

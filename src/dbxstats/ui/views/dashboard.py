@@ -1,0 +1,311 @@
+"""Painel principal: visao geral de tudo em uma tela, pensada para segundo monitor."""
+from __future__ import annotations
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout
+
+from ... import theme
+from ...core import units
+from ..charts import BarMeter, FrameTimeChart, Gauge, Plot, Sparkline, TimeSeriesChart
+from ..components import Badge, Card, KpiStrip, MetricList, label
+from .base import View
+
+_KPIS = [
+    ("cpu", "CPU", "%"), ("cpu_temp", "CPU temp", "°C"),
+    ("gpu", "GPU", "%"), ("gpu_temp", "GPU temp", "°C"),
+    ("ram", "Memória", "%"), ("vram", "VRAM", "%"),
+    ("fps", "FPS", ""), ("power", "Consumo", "W"),
+]
+
+
+class DashboardView(View):
+    key = "dashboard"
+    title = "Painel"
+    glyph = "▦"
+
+    def __init__(self, app) -> None:
+        super().__init__(app)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(theme.scaled(theme.GAP))
+
+        self.kpi = KpiStrip(_KPIS, columns=8)
+        root.addWidget(self.kpi)
+
+        middle = QHBoxLayout()
+        middle.setSpacing(theme.scaled(theme.GAP))
+        self._cards: dict[str, Card] = {
+            "timeline": self._build_timeline(),
+            "fps": self._build_fps_card(),
+        }
+        middle.addWidget(self._cards["timeline"], 5)
+        middle.addWidget(self._cards["fps"], 3)
+        root.addLayout(middle, 5)
+
+        grid = QGridLayout()
+        grid.setSpacing(theme.scaled(theme.GAP))
+        for i, key in enumerate(("cpu", "gpu", "ram", "disk", "net")):
+            card = getattr(self, f"_build_{key}")()
+            self._cards[key] = card
+            grid.addWidget(card, 0, i)
+            grid.setColumnStretch(i, 1)
+        root.addLayout(grid, 4)
+
+    # ── construcao ───────────────────────────────────────────────────────────
+    def _build_timeline(self) -> Card:
+        card = Card("Linha do tempo", theme.accent_color(self.cfg.accent))
+        self.chart = TimeSeriesChart([
+            Plot("cpu", "CPU", theme.CPU),
+            Plot("gpu", "GPU", theme.GPU),
+            Plot("ram", "RAM", theme.RAM),
+            Plot("vram", "VRAM", theme.DISK),
+        ], y_max=100.0, height=200)
+        self.chart.set_span(self.cfg.history_window)
+        card.add(self.chart, 1)
+
+        legend = QHBoxLayout()
+        legend.setSpacing(theme.scaled(6))
+        self._toggles: dict[str, Badge] = {}
+        for key, name, color in (("cpu", "CPU", theme.CPU), ("gpu", "GPU", theme.GPU),
+                                 ("ram", "RAM", theme.RAM), ("vram", "VRAM", theme.DISK)):
+            chip = Badge(name, color)
+            chip.setCursor(Qt.CursorShape.PointingHandCursor)
+            chip.mousePressEvent = lambda _e, k=key: self._toggle(k)
+            self._toggles[key] = chip
+            legend.addWidget(chip)
+        legend.addStretch(1)
+        self._span_label = label("", 7.5, QFont.Weight.Normal, theme.FAINT)
+        legend.addWidget(self._span_label)
+        card.add_layout(legend)
+        return card
+
+    def _toggle(self, key: str) -> None:
+        self.chart.toggle_plot(key)
+        plot = self.chart.plot(key)
+        chip = self._toggles[key]
+        chip.set_color(plot.color if plot.visible else theme.FAINT)
+
+    def _build_fps_card(self) -> Card:
+        card = Card("Jogo em foco", theme.FPS)
+        self.game_badge = Badge("nenhum", theme.FAINT)
+        card.add_header_widget(self.game_badge)
+
+        hero = QHBoxLayout()
+        hero.setSpacing(theme.scaled(12))
+        col = QVBoxLayout()
+        col.setSpacing(0)
+        self.fps_value = label("—", 56, QFont.Weight.Bold, theme.MUTE, theme.FONT_DISPLAY)
+        cap = label("FPS", 8, QFont.Weight.Bold, theme.FAINT)
+        col.addWidget(self.fps_value)
+        col.addWidget(cap)
+        hero.addLayout(col)
+        hero.addStretch(1)
+
+        self.lows = MetricList([("avg", "Média"), ("low1", "1% Low"),
+                                ("low01", "0.1% Low"), ("ft", "Frametime")])
+        self.lows.setFixedWidth(theme.scaled(148))
+        hero.addWidget(self.lows)
+        card.add_layout(hero)
+
+        chips = QHBoxLayout()
+        chips.setSpacing(theme.scaled(6))
+        self.bottleneck = Badge("—", theme.FAINT)
+        self.smooth_badge = Badge("—", theme.FAINT)
+        self.sync_badge = Badge("—", theme.FAINT)
+        for b in (self.bottleneck, self.smooth_badge, self.sync_badge):
+            chips.addWidget(b)
+        chips.addStretch(1)
+        card.add_layout(chips)
+
+        self.ft_chart = FrameTimeChart(height=118)
+        card.add(self.ft_chart, 1)
+        return card
+
+    def _build_cpu(self) -> Card:
+        card = Card("CPU", theme.CPU)
+        row = QHBoxLayout()
+        row.setSpacing(theme.scaled(10))
+        self.cpu_gauge = Gauge(theme.CPU, 96)
+        row.addWidget(self.cpu_gauge)
+        self.cpu_rows = MetricList([("temp", "Temp"), ("freq", "Clock"),
+                                    ("watts", "Potência"), ("fan", "Cooler")])
+        row.addWidget(self.cpu_rows, 1)
+        card.add_layout(row)
+        self.cpu_spark = Sparkline(theme.CPU, 30, fixed_max=100)
+        card.add(self.cpu_spark)
+        return card
+
+    def _build_gpu(self) -> Card:
+        card = Card("GPU", theme.GPU)
+        row = QHBoxLayout()
+        row.setSpacing(theme.scaled(10))
+        self.gpu_gauge = Gauge(theme.GPU, 96)
+        row.addWidget(self.gpu_gauge)
+        self.gpu_rows = MetricList([("temp", "Temp"), ("freq", "Clock"),
+                                    ("watts", "Potência"), ("vram", "VRAM")])
+        row.addWidget(self.gpu_rows, 1)
+        card.add_layout(row)
+        self.gpu_spark = Sparkline(theme.GPU, 30, fixed_max=100)
+        card.add(self.gpu_spark)
+        return card
+
+    def _build_ram(self) -> Card:
+        card = Card("Memória", theme.RAM)
+        row = QHBoxLayout()
+        row.setSpacing(theme.scaled(10))
+        self.ram_gauge = Gauge(theme.RAM, 96)
+        row.addWidget(self.ram_gauge)
+        self.ram_rows = MetricList([("used", "Em uso"), ("avail", "Livre"),
+                                    ("freq", "Frequência"), ("swap", "Swap")])
+        row.addWidget(self.ram_rows, 1)
+        card.add_layout(row)
+        self.ram_spark = Sparkline(theme.RAM, 30, fixed_max=100)
+        card.add(self.ram_spark)
+        return card
+
+    def _build_disk(self) -> Card:
+        card = Card("Armazenamento", theme.DISK)
+        self.disk_rows = MetricList([("used", "Sistema"), ("temp", "Temp"),
+                                     ("read", "Leitura"), ("write", "Escrita")])
+        card.add(self.disk_rows)
+        self.disk_bar = BarMeter(theme.DISK)
+        card.add(self.disk_bar)
+        self.disk_spark = Sparkline(theme.DISK, 34)
+        card.add(self.disk_spark, 1)
+        return card
+
+    def _build_net(self) -> Card:
+        card = Card("Rede", theme.NET)
+        self.net_rows = MetricList([("dl", "Download"), ("ul", "Upload"),
+                                    ("ping", "Ping"), ("jitter", "Jitter")])
+        card.add(self.net_rows)
+        self.net_spark = Sparkline(theme.NET, 46)
+        card.add(self.net_spark, 1)
+        return card
+
+    # ── atualizacao ──────────────────────────────────────────────────────────
+    def on_settings_changed(self) -> None:
+        wanted = set(self.cfg.dash_cards)
+        for key, card in self._cards.items():
+            card.setVisible(key in wanted)
+        self.ft_chart.setVisible("frametime" in wanted)
+        self.chart.configure(legend=False, **self.chart_config())
+        self.chart.set_span(self.cfg.history_window)
+        self.ft_chart.configure(self.cfg.smooth_lines)
+        for spark in (self.cpu_spark, self.gpu_spark, self.ram_spark,
+                      self.disk_spark, self.net_spark):
+            spark.configure(self.cfg.smooth_lines)
+
+    def on_system(self, d: dict) -> None:
+        if not d:
+            return
+        h = self.history
+        gpu = d.get("gpu") or {}
+
+        for key, values in (("cpu", h.values("cpu_pct")), ("gpu", h.values("gpu_pct")),
+                            ("ram", h.values("ram_pct")), ("vram", h.values("vram_pct"))):
+            self.chart.set_values(key, values)
+        self.chart.refresh()
+        self._span_label.setText(f"últimos {self.cfg.history_window}s")
+
+        cpu = d.get("cpu_pct", 0.0)
+        ct = d.get("cpu_temp")
+        self.kpi.set("cpu", f"{cpu:.0f}", theme.load_color(cpu),
+                     f"{d.get('cpu_mhz', 0) / 1000:.2f} GHz" if d.get("cpu_mhz") else "")
+        self.kpi.set("cpu_temp", units.integer(ct), theme.temp_color(ct),
+                     self.app.stats.fmt("cpu_temp", 0, "°"))
+        gu = gpu.get("usage")
+        gt = gpu.get("temp")
+        self.kpi.set("gpu", units.integer(gu), theme.load_color(gu),
+                     f"{gpu.get('freq', 0)} MHz" if gpu.get("freq") else "")
+        self.kpi.set("gpu_temp", units.integer(gt), theme.temp_color(gt),
+                     self.app.stats.fmt("gpu_temp", 0, "°"))
+        rp = d.get("ram_pct")
+        self.kpi.set("ram", units.integer(rp), theme.load_color(rp),
+                     f"{d.get('ram_used', 0):.1f} / {d.get('ram_total', 0):.0f} GB")
+        vp = gpu.get("vram_pct")
+        self.kpi.set("vram", units.integer(vp), theme.load_color(vp),
+                     units.mib_pair(gpu.get("vram_used"), gpu.get("vram_total")))
+        total_w = (d.get("cpu_watts") or 0) + (gpu.get("watts") or 0)
+        self.kpi.set("power", f"{total_w:.0f}" if total_w else units.DASH, theme.TXT,
+                     f"CPU {units.watts(d.get('cpu_watts'), 0)} · GPU "
+                     f"{units.watts(gpu.get('watts'), 0)}")
+
+        self.cpu_gauge.set_value(cpu, units.temp(ct), theme.load_color(cpu))
+        self.cpu_rows.set("temp", units.temp(ct), theme.temp_color(ct))
+        self.cpu_rows.set("freq", units.clock(d.get("cpu_mhz")))
+        self.cpu_rows.set("watts", units.watts(d.get("cpu_watts")))
+        self.cpu_rows.set("fan", units.rpm(d.get("cpu_fan")))
+        self.cpu_spark.set_values(h.values("cpu_pct"))
+
+        self.gpu_gauge.set_value(gu, units.temp(gt), theme.load_color(gu))
+        self.gpu_rows.set("temp", units.temp(gt), theme.temp_color(gt))
+        self.gpu_rows.set("freq", units.mhz(gpu.get("freq")))
+        gw = gpu.get("watts")
+        self.gpu_rows.set("watts", ("~" if gpu.get("watts_estimated") else "")
+                          + units.watts(gw, 0))
+        self.gpu_rows.set("vram", units.mib_pair(gpu.get("vram_used"), gpu.get("vram_total")),
+                          theme.load_color(gpu.get("vram_pct")))
+        self.gpu_spark.set_values(h.values("gpu_pct"))
+
+        self.ram_gauge.set_value(rp, units.gib(d.get("ram_used")), theme.load_color(rp))
+        self.ram_rows.set("used", f"{d.get('ram_used', 0):.1f} / {d.get('ram_total', 0):.0f} GB")
+        self.ram_rows.set("avail", units.gib(d.get("ram_avail")))
+        self.ram_rows.set("freq", units.mhz(d.get("ram_freq")))
+        self.ram_rows.set("swap", f"{d.get('swap_used', 0):.1f} GB",
+                          theme.load_color(d.get("swap_pct")))
+        self.ram_spark.set_values(h.values("ram_pct"))
+
+        self.disk_rows.set("used", f"{d.get('disk_used', 0):.0f} / "
+                                   f"{d.get('disk_total', 0):.0f} GB")
+        nt = d.get("nvme_temp")
+        self.disk_rows.set("temp", units.temp(nt), theme.temp_color(nt))
+        self.disk_rows.set("read", units.rate(d.get("disk_r")))
+        self.disk_rows.set("write", units.rate(d.get("disk_w")))
+        self.disk_bar.set_value(d.get("disk_pct"), theme.load_color(d.get("disk_pct")))
+        self.disk_spark.set_values([a + b for a, b in
+                                    zip(h.values("disk_r"), h.values("disk_w"), strict=False)])
+
+        self.net_rows.set("dl", units.rate(d.get("net_dl")))
+        self.net_rows.set("ul", units.rate(d.get("net_ul")))
+        ping = d.get("ping_ms")
+        self.net_rows.set("ping", units.ms(ping, 0), theme.ping_color(ping))
+        self.net_rows.set("jitter", units.ms(d.get("ping_jitter"), 1))
+        self.net_spark.set_values([a + b for a, b in
+                                   zip(h.values("net_dl"), h.values("net_ul"), strict=False)])
+
+    def on_fps(self) -> None:
+        stream = self.app.active_stream()
+        if stream is None:
+            self.fps_value.setText("—")
+            self.fps_value.setStyleSheet(f"color: {theme.MUTE};")
+            self.game_badge.update_badge("nenhum jogo", theme.FAINT)
+            for key in ("avg", "low1", "low01", "ft"):
+                self.lows.set(key, units.DASH, theme.MUTE)
+            self.bottleneck.update_badge(self.app.fps_hint(), theme.FAINT)
+            self.smooth_badge.update_badge("—", theme.FAINT)
+            self.sync_badge.update_badge("—", theme.FAINT)
+            self.ft_chart.set_data([])
+            return
+
+        m = stream.metrics
+        now = m.fps_now or m.fps_avg
+        self.fps_value.setText(units.integer(now))
+        self.fps_value.setStyleSheet(f"color: {theme.fps_color(now)};")
+        self.game_badge.update_badge(stream.app or "?", theme.FPS)
+        self.lows.set("avg", units.integer(m.fps_avg), theme.fps_color(m.fps_avg))
+        self.lows.set("low1", units.integer(m.low_1), theme.fps_color(m.low_1))
+        self.lows.set("low01", units.integer(m.low_01), theme.fps_color(m.low_01))
+        self.lows.set("ft", units.ms(m.ft_avg, 2), theme.frametime_color(m.ft_avg))
+        self.bottleneck.update_badge(
+            f"gargalo: {m.bottleneck}",
+            theme.CPU if m.bottleneck == "CPU" else
+            (theme.GPU if m.bottleneck == "GPU" else theme.MUTE))
+        self.smooth_badge.update_badge(
+            f"fluidez {m.smoothness:.0f}" if m.smoothness is not None else "fluidez —",
+            theme.score_color(m.smoothness))
+        self.sync_badge.update_badge(
+            "VSync ligado" if stream.vsync else "VSync desligado",
+            theme.WARN if stream.vsync else theme.OK)
+        self.ft_chart.set_data(self.app.fps.frametimes(stream.pid, 30.0))

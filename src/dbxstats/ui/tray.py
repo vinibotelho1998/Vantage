@@ -1,4 +1,4 @@
-"""Icone na bandeja do sistema com menu de acoes."""
+"""Icone na bandeja do sistema com menu de acoes rapidas."""
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
@@ -7,8 +7,8 @@ from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
 from .. import theme
 
-_MODES = [("reduced", "Reduzido"), ("fullscreen", "Fullscreen"),
-          ("tablet", "Tablet"), ("overlay", "Overlay (jogo)")]
+_VIEWS = [("dashboard", "Painel"), ("gaming", "Jogos"), ("cpu", "CPU"),
+          ("gpu", "GPU"), ("sensors", "Sensores"), ("benchmark", "Benchmark")]
 
 
 def make_icon(accent: str) -> QIcon:
@@ -18,10 +18,10 @@ def make_icon(accent: str) -> QIcon:
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
     p.setPen(Qt.PenStyle.NoPen)
     p.setBrush(QColor(theme.BG))
-    p.drawRoundedRect(3, 3, 58, 58, 14, 14)
+    p.drawRoundedRect(3, 3, 58, 58, 15, 15)
     base = 50
-    bars = [(13, 22, theme.CPU), (25, 34, theme.RAM),
-            (37, 16, theme.GPU), (49, 28, theme.accent_color(accent))]
+    bars = [(13, 20, theme.CPU), (25, 33, theme.GPU),
+            (37, 15, theme.RAM), (49, 27, theme.accent_color(accent))]
     for x, h, col in bars:
         p.setBrush(QColor(col))
         p.drawRoundedRect(x, base - h, 8, h, 3, 3)
@@ -34,33 +34,44 @@ class Tray:
         self._ctl = controller
         self._icon = QSystemTrayIcon(make_icon(controller.settings.accent))
         self._icon.setToolTip("DBX Stats")
-        menu = QMenu()
-        menu.addAction("Mostrar / ocultar painel", controller.toggle_panel)
-        mode_menu = menu.addMenu("Modo")
-        for key, label in _MODES:
-            act = QAction(label, mode_menu, checkable=True)
-            act.setChecked(controller.settings.mode == key)
-            act.triggered.connect(lambda _v, k=key: controller.set_mode(k))
-            mode_menu.addAction(act)
-        menu.addAction("Benchmark (30s)", lambda: controller.start_benchmark(30))
-        menu.addAction("Configurações", lambda: controller.open_settings(0))
-        menu.addSeparator()
-        menu.addAction("Fechar", controller.quit)
-        self._icon.setContextMenu(menu)
+        self._icon.setContextMenu(self._build_menu())
         self._icon.activated.connect(self._on_activated)
         self._icon.show()
+
+    def _build_menu(self) -> QMenu:
+        menu = QMenu()
+        menu.addAction("Mostrar / ocultar janela", self._ctl.toggle_window)
+        views = menu.addMenu("Abrir tela")
+        for key, text in _VIEWS:
+            views.addAction(text, lambda k=key: self._ctl.show_view(k))
+        menu.addSeparator()
+        self._overlay_action = QAction("Overlay no jogo", menu, checkable=True)
+        self._overlay_action.setChecked(self._ctl.settings.overlay_enabled)
+        self._overlay_action.triggered.connect(lambda _v: self._ctl.toggle_overlay())
+        menu.addAction(self._overlay_action)
+        menu.addAction("Benchmark rápido (60 s)", lambda: self._ctl.benchmark_start(60))
+        menu.addAction("Zerar estatísticas", self._ctl.clear_stats)
+        menu.addAction("Reiniciar captura de FPS", self._ctl.restart_capture)
+        menu.addSeparator()
+        menu.addAction("Configurações", lambda: self._ctl.open_settings())
+        menu.addAction("Fechar", self._ctl.quit)
+        return menu
 
     def _on_activated(self, reason) -> None:
         if reason in (QSystemTrayIcon.ActivationReason.Trigger,
                       QSystemTrayIcon.ActivationReason.DoubleClick):
-            self._ctl.toggle_panel()
+            self._ctl.toggle_window()
 
-    def update_icon(self, accent: str) -> None:
-        self._icon.setIcon(make_icon(accent))
+    def sync(self) -> None:
+        self._icon.setIcon(make_icon(self._ctl.settings.accent))
+        self._overlay_action.setChecked(self._ctl.settings.overlay_enabled)
 
-    def notify(self, title: str, msg: str) -> None:
+    def set_tooltip(self, text: str) -> None:
+        self._icon.setToolTip(text)
+
+    def notify(self, title: str, message: str) -> None:
         try:
-            self._icon.showMessage(title, msg)
+            self._icon.showMessage(title, message, make_icon(self._ctl.settings.accent))
         except Exception:
             pass
 

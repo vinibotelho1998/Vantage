@@ -17,8 +17,9 @@ venv/
 # Logs e artefatos de runtime
 *.log
 
-# Previews gerados
+# Previews gerados (docs/images e versionado; docs/preview nao)
 preview_*.png
+/docs/preview/
 
 # Config pessoal (gerada em %APPDATA%/DBX Stats)
 /settings.json

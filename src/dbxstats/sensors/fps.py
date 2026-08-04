@@ -1,4 +1,16 @@
-"""Motor de FPS/frametime via PresentMon, lido por named pipe."""
+"""Motor de captura de frames via PresentMon 2.x.
+
+Arquitetura em tres camadas, cada uma isolada da outra:
+
+  1. supervisor  — sobe o PresentMon, mantem a sessao viva e reinicia sozinho.
+  2. leitor      — le o named pipe em blocos e so faz parsing (nenhuma conta).
+  3. agregador   — recalcula percentis/estatisticas 4x por segundo, fora do caminho
+                   critico. A UI le apenas o cache pronto.
+
+Essa separacao e o que evita o motor "travar": o parser nunca fica lento por causa
+de estatistica, e qualquer morte do PresentMon (sessao ETW derrubada, driver
+reiniciado, jogo fechando o swapchain) e detectada e recuperada automaticamente.
+"""
 from __future__ import annotations
 
 import io
@@ -6,293 +18,543 @@ import os
 import subprocess
 import threading
 import time
-from collections import defaultdict, deque
+from collections import deque
 
 from .. import log, paths
+from ..core import frames as fr
+from ..core.frames import FrameMetrics, FrameStream
 
 _log = log.get("fps")
 
 PM_FALLBACK_URL = ("https://github.com/GameTechDev/PresentMon/releases/"
                    "download/v2.5.1/PresentMon-2.5.1-x64.exe")
-PIPE_NAME = r"\\.\pipe\syspanel_fps"
+
 SESSION = "DBXStats"
+# Processos que sempre apresentam quadros mas nunca sao "o jogo".
+EXCLUDED = (
+    "dwm.exe", "explorer.exe", "ShellExperienceHost.exe", "SearchHost.exe",
+    "StartMenuExperienceHost.exe", "TextInputHost.exe", "WidgetService.exe",
+    "ApplicationFrameHost.exe", "SystemSettings.exe", "LockApp.exe",
+    "PhoneExperienceHost.exe", "Widgets.exe", "dbx-stats.exe", "DBXStats.exe",
+)
+
+MAX_SAMPLES = 32000        # ~4 min a 120 fps por swapchain
+AGGREGATE_HZ = 4.0
+STALE_STREAM_S = 5.0       # sem frames por tanto tempo -> some da lista
+RETAIN_S = 20.0            # ...mas o historico so e descartado depois disso
+WATCHDOG_S = 20.0          # jogo em foco sem nenhum frame -> reinicia o PresentMon
+RESTART_BACKOFF = (1.0, 2.0, 4.0, 8.0, 15.0)
+
+NAN = float("nan")
+
+# ── mapeamento de colunas (aceita CSV v1 e v2) ────────────────────────────────
+_COLUMNS_V2 = {
+    "t": ("cpustarttime", "timeinseconds"),
+    "ft": ("frametime", "msbetweenpresents"),
+    "cpu_busy": ("cpubusy",),
+    "gpu_busy": ("gpubusy",),
+    "gpu_time": ("gputime",),
+    "disp_lat": ("displaylatency", "msuntildisplayed"),
+    "displayed": ("displayedtime", "msbetweendisplaychange"),
+    "c2p": ("clicktophotonlatency",),
+}
+_COLUMNS_META = {
+    "app": ("application",),
+    "pid": ("processid",),
+    "swap": ("swapchainaddress",),
+    "mode": ("presentmode",),
+    "sync": ("syncinterval",),
+    "runtime": ("presentruntime", "runtime"),
+}
+
+
+class _Layout:
+    """Indices das colunas do CSV, resolvidos a partir do cabecalho."""
+
+    def __init__(self, header: str) -> None:
+        cols = [c.strip().lower() for c in header.split(",")]
+        index = {name: i for i, name in enumerate(cols)}
+        self.idx: dict[str, int] = {}
+        for key, names in {**_COLUMNS_META, **_COLUMNS_V2}.items():
+            for name in names:
+                if name in index:
+                    self.idx[key] = index[name]
+                    break
+        self.needed = max(self.idx.values()) if self.idx else 0
+        self.ok = all(k in self.idx for k in ("app", "pid", "swap", "t", "ft"))
+
+    def get(self, key: str) -> int:
+        return self.idx.get(key, -1)
+
+
+def _f(parts: list[str], i: int) -> float:
+    """Converte uma celula do CSV; 'NA'/vazio viram NaN."""
+    if i < 0:
+        return NAN
+    try:
+        return float(parts[i])
+    except (ValueError, IndexError):
+        return NAN
 
 
 class FpsEngine:
-    def __init__(self, window: float = 0.5) -> None:
-        self._window = window
-        self._by_pid: dict[int, tuple] = {}
-        self._sc: dict[tuple, tuple] = {}
-        self._graph: dict[int, deque] = {}
-        self._lock = threading.Lock()
-        self._status = ""
+    """Captura frames e publica metricas prontas por processo."""
+
+    def __init__(self, analysis_window: float = 60.0, now_window: float = 1.0) -> None:
+        self._analysis_window = analysis_window
+        self._now_window = now_window
+
+        self._raw: dict[tuple[int, str], deque] = {}
+        self._meta: dict[tuple[int, str], dict] = {}
+        self._raw_lock = threading.Lock()
+
+        self._streams: dict[int, FrameStream] = {}
+        self._windows: dict[int, list[tuple]] = {}
+        self._pub_lock = threading.Lock()
+
+        self._stop = threading.Event()
         self._proc: subprocess.Popen | None = None
-        self._reset_requested = False
-        self._bench_active = False
-        self._bench_pid: int | None = None
-        self._bench: list[float] = []
+        self._proc_lock = threading.Lock()
+        self._threads: list[threading.Thread] = []
 
-    def benchmark_start(self, pid: int) -> None:
-        with self._lock:
-            self._bench = []
-            self._bench_pid = pid
-            self._bench_active = True
+        self._status = "parado"
+        self._restarts = 0
+        self._last_frame_at = 0.0
+        self._expected_pid: int | None = None
+        self._expected_since = 0.0
+        self._force_restart = threading.Event()
+        self._use_v1 = False
+        self._consecutive_failures = 0
 
-    def benchmark_stop(self) -> list[float]:
-        with self._lock:
-            self._bench_active = False
-            return list(self._bench)
+        self._capture_pid: int | None = None
+        self._capture: list[tuple] = []
+        self._capture_active = False
+
+    # ── ciclo de vida ────────────────────────────────────────────────────────
+    def start(self) -> None:
+        if self._threads:
+            return
+        self._stop.clear()
+        for target, name in ((self._supervise, "fps-supervisor"),
+                             (self._aggregate_loop, "fps-aggregator")):
+            t = threading.Thread(target=target, name=name, daemon=True)
+            t.start()
+            self._threads.append(t)
+
+    def stop(self) -> None:
+        self._stop.set()
+        self._kill_process()
+        self._cleanup_session()
+        self._threads.clear()
 
     @property
     def status(self) -> str:
         return self._status
 
-    def set_window(self, window: float) -> None:
-        self._window = window
+    @property
+    def restarts(self) -> int:
+        return self._restarts
 
-    def snapshot(self) -> dict[int, tuple]:
-        with self._lock:
-            return dict(self._by_pid)
+    @property
+    def running(self) -> bool:
+        with self._proc_lock:
+            return self._proc is not None and self._proc.poll() is None
 
-    def graph_buffer(self, pid: int) -> list:
-        with self._lock:
-            return list(self._graph.get(pid, []))
+    # ── configuracao ─────────────────────────────────────────────────────────
+    def set_windows(self, analysis: float | None = None, now: float | None = None) -> None:
+        if analysis:
+            self._analysis_window = max(5.0, float(analysis))
+        if now:
+            self._now_window = max(0.2, float(now))
+
+    def expect(self, pid: int | None) -> None:
+        """Informa qual processo deveria estar produzindo frames (alimenta o watchdog)."""
+        if pid != self._expected_pid:
+            self._expected_pid = pid
+            self._expected_since = time.monotonic()
+
+    def restart(self) -> None:
+        """Reinicio manual da captura (menu / configuracoes)."""
+        self._force_restart.set()
+        self._kill_process()
+
+    # ── leitura publica ──────────────────────────────────────────────────────
+    def snapshot(self) -> dict[int, FrameStream]:
+        with self._pub_lock:
+            return dict(self._streams)
+
+    def stream(self, pid: int | None) -> FrameStream | None:
+        if pid is None:
+            return None
+        with self._pub_lock:
+            return self._streams.get(pid)
+
+    def samples(self, pid: int | None) -> list[tuple]:
+        if pid is None:
+            return []
+        with self._pub_lock:
+            return self._windows.get(pid, [])
+
+    def frametimes(self, pid: int | None, seconds: float | None = None) -> list[float]:
+        data = self.samples(pid)
+        if seconds:
+            data = fr.window(data, seconds)
+        return [s[fr.FT] for s in data if s[fr.FT] == s[fr.FT]]
+
+    def apps(self) -> list[tuple[int, str, float]]:
+        """(pid, nome, fps) de tudo que esta apresentando agora."""
+        out = []
+        for pid, st in self.snapshot().items():
+            out.append((pid, st.app, st.metrics.fps_avg or 0.0))
+        return sorted(out, key=lambda x: -x[2])
 
     def reset(self) -> None:
-        self._reset_requested = True
-        with self._lock:
-            self._by_pid.clear()
-            self._sc.clear()
-            self._graph.clear()
+        with self._raw_lock:
+            self._raw.clear()
+            self._meta.clear()
+        with self._pub_lock:
+            self._streams.clear()
+            self._windows.clear()
 
-    def start(self) -> None:
-        threading.Thread(target=self._loop, name="fps", daemon=True).start()
+    # ── captura de benchmark ─────────────────────────────────────────────────
+    def capture_start(self, pid: int) -> None:
+        with self._raw_lock:
+            self._capture = []
+            self._capture_pid = pid
+            self._capture_active = True
 
-    def stop(self) -> None:
-        if self._proc is not None:
+    def capture_stop(self) -> list[tuple]:
+        with self._raw_lock:
+            self._capture_active = False
+            return list(self._capture)
+
+    def capture_peek(self) -> int:
+        with self._raw_lock:
+            return len(self._capture)
+
+    @property
+    def capturing(self) -> bool:
+        return self._capture_active
+
+    # ── supervisor ───────────────────────────────────────────────────────────
+    def _supervise(self) -> None:
+        exe = self._ensure_presentmon()
+        if not exe:
+            self._status = "PresentMon indisponivel"
+            return
+        attempt = 0
+        while not self._stop.is_set():
+            started = time.monotonic()
             try:
-                self._proc.terminate()
-                self._proc.wait(timeout=3)
+                self._run_session(exe)
+            except Exception as e:
+                _log.exception("sessao do PresentMon falhou: %s", e)
+                self._status = f"erro: {e}"
+            if self._stop.is_set():
+                break
+            lived = time.monotonic() - started
+            attempt = 0 if lived > 30 else min(attempt + 1, len(RESTART_BACKOFF) - 1)
+            self._restarts += 1
+            delay = RESTART_BACKOFF[attempt]
+            self._status = f"reiniciando captura em {delay:.0f}s"
+            _log.info("PresentMon caiu apos %.1fs; reiniciando em %.0fs", lived, delay)
+            self._stop.wait(delay)
+
+    def _run_session(self, exe: str) -> None:
+        pipe_name = rf"\\.\pipe\dbxstats_fps_{os.getpid()}_{self._restarts}"
+        self._force_restart.clear()
+        self.reset()
+        self._cleanup_session()
+        handle = _create_pipe(pipe_name)
+        if handle is None:
+            self._status = "falha criando pipe"
+            self._stop.wait(3.0)
+            return
+        proc = None
+        try:
+            self._status = "iniciando PresentMon"
+            proc = subprocess.Popen(
+                self._command(exe, pipe_name),
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
+            with self._proc_lock:
+                self._proc = proc
+
+            if not _wait_connect(handle, proc, timeout=12.0):
+                self._status = "PresentMon nao conectou"
+                self._note_failure()
+                return
+            self._consecutive_failures = 0
+            self._status = "capturando"
+            self._read_pipe(handle, proc)
+            handle = None  # consumido pelo FileIO
+        finally:
+            if handle is not None:
+                _close_handle(handle)
+            if proc is not None:
+                _terminate(proc)
+            with self._proc_lock:
+                self._proc = None
+            self._cleanup_session()
+
+    def _command(self, exe: str, pipe_name: str) -> list[str]:
+        # input tracking fica ligado de proposito: e o que da a latencia clique -> tela
+        cmd = [exe, "--output_file", pipe_name, "--no_console_stats",
+               "--stop_existing_session", "--session_name", SESSION]
+        cmd.append("--v1_metrics" if self._use_v1 else "--v2_metrics")
+        for name in EXCLUDED:
+            cmd += ["--exclude", name]
+        return cmd
+
+    def _note_failure(self) -> None:
+        self._consecutive_failures += 1
+        if self._consecutive_failures >= 2 and not self._use_v1:
+            self._use_v1 = True
+            _log.warning("PresentMon nao aceitou --v2_metrics; usando --v1_metrics")
+
+    # ── leitor ───────────────────────────────────────────────────────────────
+    def _read_pipe(self, handle: int, proc: subprocess.Popen) -> None:
+        import msvcrt
+        fd = msvcrt.open_osfhandle(handle, os.O_RDONLY)
+        raw = io.FileIO(fd, closefd=True)
+        pending = b""
+        layout: _Layout | None = None
+        try:
+            while not self._stop.is_set() and not self._force_restart.is_set():
+                chunk = raw.read(1 << 16)
+                if not chunk:
+                    break
+                pending += chunk
+                lines = pending.split(b"\n")
+                pending = lines.pop()
+                if layout is None:
+                    while lines:
+                        head = lines.pop(0).decode("utf-8-sig", "ignore").strip()
+                        if not head:
+                            continue
+                        layout = _Layout(head)
+                        if not layout.ok:
+                            _log.warning("cabecalho inesperado do PresentMon: %s", head[:200])
+                            return
+                        _log.info("PresentMon conectado (%d colunas mapeadas)", len(layout.idx))
+                        break
+                    if layout is None:
+                        continue
+                if lines:
+                    self._ingest(layout, lines)
+        except OSError as e:
+            _log.info("leitura do pipe encerrada: %s", e)
+        finally:
+            self._force_restart.clear()
+            try:
+                raw.close()
+            except OSError:
+                pass
+            if proc.poll() is None:
+                _terminate(proc)
+
+    def _ingest(self, layout: _Layout, lines: list[bytes]) -> None:
+        idx = layout.idx
+        i_app, i_pid, i_swap = idx["app"], idx["pid"], idx["swap"]
+        i_mode, i_sync, i_rt = layout.get("mode"), layout.get("sync"), layout.get("runtime")
+        i_t, i_ft = idx["t"], idx["ft"]
+        i_cb, i_gb = layout.get("cpu_busy"), layout.get("gpu_busy")
+        i_gt, i_dl = layout.get("gpu_time"), layout.get("disp_lat")
+        i_dp, i_c2p = layout.get("displayed"), layout.get("c2p")
+        need = layout.needed
+
+        batch: list[tuple[tuple[int, str], tuple, str, str, int]] = []
+        for line in lines:
+            if not line:
+                continue
+            parts = line.decode("latin-1").rstrip("\r").split(",")
+            if len(parts) <= need:
+                continue
+            try:
+                pid = int(parts[i_pid])
+                ft = float(parts[i_ft])
+                t = float(parts[i_t])
+            except ValueError:
+                continue
+            if ft <= 0.0 or ft > 10_000.0:
+                continue
+            sample = (t, ft, _f(parts, i_cb), _f(parts, i_gb), _f(parts, i_gt),
+                      _f(parts, i_dl), _f(parts, i_dp), _f(parts, i_c2p))
+            app = os.path.basename(parts[i_app]).strip()
+            sync = -1
+            if i_sync >= 0:
+                try:
+                    sync = int(parts[i_sync])
+                except ValueError:
+                    sync = -1
+            mode = parts[i_mode].strip() if i_mode >= 0 else ""
+            runtime = parts[i_rt].strip() if i_rt >= 0 else ""
+            batch.append(((pid, parts[i_swap]), sample, app, f"{mode}|{runtime}", sync))
+
+        if not batch:
+            return
+        now = time.monotonic()
+        with self._raw_lock:
+            for key, sample, app, modes, sync in batch:
+                buf = self._raw.get(key)
+                if buf is None:
+                    buf = deque(maxlen=MAX_SAMPLES)
+                    self._raw[key] = buf
+                buf.append(sample)
+                mode, _, runtime = modes.partition("|")
+                self._meta[key] = {"app": app, "mode": mode, "runtime": runtime,
+                                   "sync": sync, "seen": now}
+                if self._capture_active and key[0] == self._capture_pid:
+                    self._capture.append(sample)
+        self._last_frame_at = now
+
+    # ── agregador ────────────────────────────────────────────────────────────
+    def _aggregate_loop(self) -> None:
+        period = 1.0 / AGGREGATE_HZ
+        while not self._stop.wait(period):
+            try:
+                self._recompute()
+                self._watchdog()
+            except Exception:
+                _log.exception("erro agregando metricas de frame")
+
+    def _recompute(self) -> None:
+        now = time.monotonic()
+        with self._raw_lock:
+            # PresentMon entrega o CSV em rajadas: uma pausa curta nao pode apagar
+            # o historico, so tira o processo da lista de ativos.
+            for k in [k for k, m in self._meta.items() if now - m["seen"] > RETAIN_S]:
+                self._raw.pop(k, None)
+                self._meta.pop(k, None)
+            snapshot = [(k, list(v), dict(self._meta[k]))
+                        for k, v in self._raw.items()
+                        if k in self._meta and now - self._meta[k]["seen"] <= STALE_STREAM_S]
+
+        best: dict[int, tuple[int, list[tuple], dict]] = {}
+        for (pid, _swap), samples, meta in snapshot:
+            windowed = fr.window(samples, self._analysis_window)
+            current = best.get(pid)
+            if current is None or len(windowed) > current[0]:
+                best[pid] = (len(windowed), windowed, meta)
+
+        streams: dict[int, FrameStream] = {}
+        windows: dict[int, list[tuple]] = {}
+        for pid, (_count, windowed, meta) in best.items():
+            metrics: FrameMetrics = fr.compute(windowed, self._now_window)
+            streams[pid] = FrameStream(
+                pid=pid, app=meta["app"], present_mode=meta["mode"],
+                sync_interval=meta["sync"], last_seen=meta["seen"], metrics=metrics)
+            windows[pid] = windowed
+
+        with self._pub_lock:
+            self._streams = streams
+            self._windows = windows
+
+    def _watchdog(self) -> None:
+        """Reinicia a captura se o jogo esperado nao produz frame nenhum."""
+        pid = self._expected_pid
+        if pid is None or not self.running:
+            return
+        with self._pub_lock:
+            alive = pid in self._streams
+        if alive:
+            self._expected_since = time.monotonic()
+            return
+        if time.monotonic() - self._expected_since > WATCHDOG_S:
+            _log.warning("watchdog: %ds sem frames do pid %s; reiniciando PresentMon",
+                         int(WATCHDOG_S), pid)
+            self._status = "watchdog: reiniciando"
+            self._expected_since = time.monotonic()
+            self.restart()
+
+    # ── processo auxiliar ────────────────────────────────────────────────────
+    def _kill_process(self) -> None:
+        with self._proc_lock:
+            proc = self._proc
+        if proc is not None:
+            _terminate(proc)
+
+    def _cleanup_session(self) -> None:
+        for verb in ("stop", "delete"):
+            try:
+                subprocess.call(["logman", verb, SESSION, "-ets"],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                creationflags=subprocess.CREATE_NO_WINDOW)
             except Exception:
                 pass
-        for verb in ("stop", "delete"):
-            subprocess.call(["logman", verb, SESSION, "-ets"],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def _ensure_presentmon(self) -> str | None:
         exe = paths.presentmon_path()
         if exe.exists():
             return str(exe)
-        self._status = "Baixando PresentMon..."
+        self._status = "baixando PresentMon"
         try:
             import urllib.request
-            url = _resolve_pm_url()
             tmp = str(exe) + ".tmp"
-            urllib.request.urlretrieve(url, tmp)
+            urllib.request.urlretrieve(_resolve_pm_url(), tmp)
             os.replace(tmp, exe)
-            self._status = ""
             _log.info("PresentMon baixado em %s", exe)
             return str(exe)
         except Exception as e:
-            self._status = "Falha ao baixar PresentMon"
             _log.warning("falha baixando PresentMon: %s", e)
             return None
 
-    def _loop(self) -> None:
-        import ctypes
-        import msvcrt
 
-        pm_exe = self._ensure_presentmon()
-        if not pm_exe:
-            return
+# ── helpers win32 ─────────────────────────────────────────────────────────────
+def _create_pipe(name: str) -> int | None:
+    import ctypes
+    k32 = ctypes.windll.kernel32
+    k32.CreateNamedPipeW.restype = ctypes.c_void_p
+    invalid = (1 << (8 * ctypes.sizeof(ctypes.c_void_p))) - 1
+    size = 4 << 20
+    handle = k32.CreateNamedPipeW(name, 0x00000001 | 0x00080000,  # INBOUND | FIRST_INSTANCE
+                                  0x00000000, 1, size, size, 0, None)
+    if not handle or handle == invalid:
+        _log.warning("CreateNamedPipeW falhou (%d)", k32.GetLastError())
+        return None
+    return int(handle)
 
-        k32 = ctypes.windll.kernel32
-        k32.CreateNamedPipeW.restype = ctypes.c_size_t
-        k32.ConnectNamedPipe.restype = ctypes.c_bool
-        invalid = (1 << (8 * ctypes.sizeof(ctypes.c_size_t))) - 1
 
-        subprocess.call(["taskkill", "/F", "/IM", "presentmon.exe"],
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for verb in ("stop", "delete"):
-            subprocess.call(["logman", verb, SESSION, "-ets"],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(0.4)
+def _wait_connect(handle: int, proc: subprocess.Popen, timeout: float) -> bool:
+    import ctypes
+    k32 = ctypes.windll.kernel32
+    k32.ConnectNamedPipe.restype = ctypes.c_bool
+    done = threading.Event()
 
+    def _connect() -> None:
         try:
-            h_pipe = k32.CreateNamedPipeW(
-                PIPE_NAME, 0x00000001, 0x00000000, 1, 65536, 65536, 0, None)
-            if h_pipe == invalid:
-                self._status = f"Pipe falhou ({k32.GetLastError()})"
-                return
-
-            self._status = "Aguardando PM..."
-            proc = subprocess.Popen(
-                [pm_exe, "--v1_metrics", "--output_file", PIPE_NAME, "--no_console_stats",
-                 "--stop_existing_session", "--session_name", SESSION],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                creationflags=subprocess.CREATE_NO_WINDOW)
-            self._proc = proc
-
-            connected = threading.Event()
-            threading.Thread(
-                target=lambda: (k32.ConnectNamedPipe(h_pipe, None), connected.set()),
-                daemon=True).start()
-            if not connected.wait(timeout=10):
-                self._status = "Timeout: PM nao conectou"
-                k32.CloseHandle(h_pipe)
-                proc.terminate()
-                return
-
-            self._status = "Lendo FPS..."
-            fd = msvcrt.open_osfhandle(h_pipe, os.O_RDONLY)
-            f = io.TextIOWrapper(io.FileIO(fd, closefd=True), encoding="utf-8-sig")
-            self._consume(proc, f)
-            proc.wait()
-        except Exception as e:
-            self._status = f"Erro: {e}"
-            _log.exception("erro no loop de FPS")
+            k32.ConnectNamedPipe(ctypes.c_void_p(handle), None)
         finally:
-            self._proc = None
-            with self._lock:
-                self._by_pid.clear()
-                self._sc.clear()
-                self._graph.clear()
+            done.set()
 
-    def _consume(self, proc, f) -> None:
-        cols = _read_header(proc, f)
-        if cols is None:
-            return
-        col_app, col_pid, col_sc, col_t, col_ms, col_disp = cols
-        self._status = f"cols t={col_t} ms={col_ms} sc={col_sc}"
-
-        frames = defaultdict(lambda: {"dq": deque(maxlen=600),
-                                      "dq_disp": deque(maxlen=600),
-                                      "dq_long": deque(maxlen=3000)})
-        last_wall: dict[tuple, float] = {}
-        now = time.monotonic
-        need = max(col_app, col_pid, col_sc, col_t, col_ms, col_disp)
-
-        while proc.poll() is None:
-            if self._reset_requested:
-                self._reset_requested = False
-                frames.clear()
-                last_wall.clear()
-                with self._lock:
-                    self._by_pid.clear()
-                    self._sc.clear()
-                    self._graph.clear()
-            line = f.readline()
-            if not line:
-                time.sleep(0.005)
-                continue
-            line = line.strip()
-            if not line:
-                continue
-            parts = line.split(",")
-            if len(parts) <= need:
-                continue
-            try:
-                app = os.path.basename(parts[col_app].strip())
-                pid = int(parts[col_pid].strip())
-                swap = parts[col_sc].strip()
-                t_pm = float(parts[col_t].strip())
-                ms_btw = float(parts[col_ms].strip())
-                disp_raw = parts[col_disp].strip()
-                ms_disp = float(disp_raw) if disp_raw else 0.0
-                if ms_btw <= 0 or ms_btw > 5000:
-                    continue
-            except (ValueError, IndexError):
-                continue
-
-            self._ingest(frames, last_wall, now, pid, swap, app, t_pm, ms_btw, ms_disp)
-
-    def _ingest(self, frames, last_wall, now, pid, swap, app, t_pm, ms_btw, ms_disp) -> None:
-        key = (pid, swap)
-        entry = frames[key]
-        entry["dq"].append((t_pm, ms_btw))
-        entry["dq_long"].append(ms_btw)
-        if 0 < ms_disp < 5000:
-            entry["dq_disp"].append((t_pm, ms_disp))
-        last_wall[key] = now()
-
-        cutoff = t_pm - self._window
-        dq = entry["dq"]
-        while dq and dq[0][0] < cutoff:
-            dq.popleft()
-        fps = _calc_fps(dq, ms_btw)
-        fps_inst = round(1000 / ms_btw)
-
-        dq_d = entry["dq_disp"]
-        while dq_d and dq_d[0][0] < cutoff:
-            dq_d.popleft()
-        fps_disp = _calc_fps(dq_d, ms_disp) if ms_disp > 0 else fps
-
-        dq_long = entry["dq_long"]
-        if len(dq_long) >= 10:
-            ordered = sorted(dq_long, reverse=True)
-            n = len(ordered)
-            fps_low = round(1000 / ordered[max(0, n // 100 - 1)])
-            fps_01low = round(1000 / ordered[max(0, n // 1000 - 1)])
-            median = ordered[n // 2]
-            stutters = sum(1 for m in dq_long if m > median * 1.5)
-            stutter_pct = round(100 * stutters / n, 1)
-        else:
-            fps_low = fps_01low = fps_inst
-            stutter_pct = 0.0
-
-        sc_entry = (fps, app, now(), fps_disp, fps_inst, fps_low, fps_01low, stutter_pct)
-        with self._lock:
-            if self._bench_active and pid == self._bench_pid:
-                self._bench.append(ms_btw)
-            self._sc[key] = sc_entry
-            best = max((v for (p, _s), v in self._sc.items() if p == pid),
-                       key=lambda x: x[0])
-            self._by_pid[pid] = best
-            if sc_entry[0] >= best[0]:
-                if pid not in self._graph:
-                    self._graph[pid] = deque(maxlen=7200)
-                self._graph[pid].append(ms_btw)
-
-        self._evict_stale(frames, last_wall, now())
-
-    def _evict_stale(self, frames, last_wall, t_now) -> None:
-        stale = [k for k, w in last_wall.items() if t_now - w > 3.0]
-        for k in stale:
-            p = k[0]
-            del last_wall[k]
-            frames.pop(k, None)
-            with self._lock:
-                self._sc.pop(k, None)
-                remaining = [v for (pp, _), v in self._sc.items() if pp == p]
-                if remaining:
-                    self._by_pid[p] = max(remaining, key=lambda x: x[0])
-                else:
-                    self._by_pid.pop(p, None)
-                    self._graph.pop(p, None)
-
-
-def _calc_fps(dq, fallback_ms: float) -> int:
-    if len(dq) < 2:
-        return round(1000 / fallback_ms) if fallback_ms > 0 else 0
-    avg_ms = sum(m for _, m in dq) / len(dq)
-    return round(1000 / avg_ms) if avg_ms > 0 else 0
-
-
-def _col(hdr: list[str], name: str, default: int) -> int:
-    return next((i for i, h in enumerate(hdr) if name in h), default)
-
-
-def _read_header(proc, f) -> tuple[int, int, int, int, int, int] | None:
-    while True:
-        header = f.readline()
-        if header.strip():
-            hdr = [h.strip().lower() for h in header.split(",")]
-            return (_col(hdr, "application", 0), _col(hdr, "processid", 1),
-                    _col(hdr, "swapchain", 2), _col(hdr, "timeinseconds", 9),
-                    _col(hdr, "msbetweenpresents", 10), _col(hdr, "msbetweendisplaychange", 12))
+    threading.Thread(target=_connect, name="fps-connect", daemon=True).start()
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if done.wait(0.2):
+            return True
         if proc.poll() is not None:
-            return None
-        time.sleep(0.05)
+            return False
+    return False
+
+
+def _close_handle(handle: int) -> None:
+    import ctypes
+    try:
+        ctypes.windll.kernel32.CloseHandle(ctypes.c_void_p(handle))
+    except Exception:
+        pass
+
+
+def _terminate(proc: subprocess.Popen) -> None:
+    try:
+        if proc.poll() is None:
+            proc.terminate()
+            proc.wait(timeout=3)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
 
 
 def _resolve_pm_url() -> str:
@@ -301,7 +563,7 @@ def _resolve_pm_url() -> str:
     try:
         req = urllib.request.Request(
             "https://api.github.com/repos/GameTechDev/PresentMon/releases",
-            headers={"User-Agent": "DBXStats/2.0"})
+            headers={"User-Agent": "DBXStats/3.0"})
         with urllib.request.urlopen(req, timeout=10) as r:
             releases = json.loads(r.read())
         for rel in releases:

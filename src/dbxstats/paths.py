@@ -32,7 +32,7 @@ def logs_dir() -> Path:
 
 
 def log_file() -> Path:
-    return logs_dir() / "syspanel.log"
+    return logs_dir() / "dbxstats.log"
 
 
 def config_file() -> Path:

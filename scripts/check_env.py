@@ -24,7 +24,7 @@ def check_imports() -> list[str]:
     failures: list[str] = []
     mods = {
         "psutil": "psutil", "wmi": "wmi", "pynvml": "pynvml",
-        "pystray": "pystray", "PIL": "pillow", "clr": "pythonnet",
+        "PIL": "pillow", "clr": "pythonnet",
         "PySide6": "PySide6", "win32api": "pywin32",
     }
     for mod, dist in mods.items():
