@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import time
 from datetime import datetime
+from functools import partial
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
@@ -18,6 +19,8 @@ from .core import export
 from .core import frames as fr
 from .core.series import Accumulator, History
 from .platform import autostart, win
+from .platform import displays as dsp
+from .platform.gamepad import GamepadMouse
 from .platform.hotkeys import MOD_ALT, MOD_CONTROL, HotkeyManager
 from .sensors.collector import Collector
 from .sensors.fps import FpsEngine
@@ -79,6 +82,7 @@ class App:
         self.procs = ProcessMonitor()
         self.collector = Collector(self.lhm, self.gpu, self.ping,
                                    self.settings.update_interval)
+        self.gamepad = GamepadMouse(self.settings, qt)
 
         self._data: dict = {}
         self._stream = None
@@ -125,6 +129,8 @@ class App:
         self._apply_overlay()
         self._init_timers()
         self._init_hotkeys()
+        if self.settings.gamepad_enabled:
+            self.gamepad.start()
         autostart.set_enabled(self.settings.autostart)
 
     def _init_timers(self) -> None:
@@ -155,12 +161,35 @@ class App:
             if not self._hotkeys.register(mods, vk, callback):
                 _log.warning("nao foi possivel registrar %s (em uso por outro app?)", name)
 
+        # Ctrl+Alt+1 ate 9 aplicam os perfis de tela na ordem em que aparecem.
+        # Sao globais de proposito: no perfil de TV os monitores da mesa apagam, e
+        # o atalho e' o unico caminho de volta sem enxergar a tela.
+        for slot in range(9):
+            vk = 0x31 + slot
+            if not self._hotkeys.register(mods, vk, partial(self._hotkey_profile, slot)):
+                _log.warning("nao foi possivel registrar Ctrl+Alt+%d", slot + 1)
+
+    def _hotkey_profile(self, slot: int) -> None:
+        try:
+            profile = self.settings.display_profiles[slot]
+        except IndexError:
+            return
+        ok, err = dsp.apply_profile(profile["entries"])
+        if ok:
+            _log.info("perfil de tela '%s' aplicado", profile["name"])
+        else:
+            _log.warning("perfil de tela '%s' falhou: %s", profile["name"], err)
+        view = self.window.views.get("displays")
+        if view is not None:
+            view.reload()
+
     def quit(self) -> None:
         self.window.store_geometry()
         self.settings.save()
         _save_bench_history(self.bench_history)
         if self._hotkeys is not None:
             self._hotkeys.unregister_all()
+        self.gamepad.stop()
         self.collector.stop()
         self.procs.stop()
         self.ping.stop()

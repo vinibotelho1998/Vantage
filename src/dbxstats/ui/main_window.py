@@ -21,6 +21,8 @@ from .views.base import View
 from .views.benchmark import BenchmarkView
 from .views.cpu import CpuView
 from .views.dashboard import DashboardView
+from .views.displays import DisplaysView
+from .views.gamepad import GamepadView
 from .views.gaming import GamingView
 from .views.gpu import GpuView
 from .views.memory import MemoryView
@@ -29,7 +31,8 @@ from .views.processes import ProcessesView
 from .views.sensors import SensorsView
 
 VIEW_CLASSES = (DashboardView, GamingView, CpuView, GpuView, MemoryView,
-                NetworkView, SensorsView, ProcessesView, BenchmarkView)
+                NetworkView, SensorsView, ProcessesView, BenchmarkView, DisplaysView,
+                GamepadView)
 
 _EDGE = 6
 
@@ -58,6 +61,9 @@ class TitleBar(QWidget):
         self.chips = LoadDots()
         self.chips.setFixedWidth(theme.scaled(330))
         lay.addWidget(self.chips)
+        # Em janela estreita esses 330 px fixos empurram titulo e relogio um por
+        # cima do outro. Some antes disso acontecer, ver resizeEvent.
+        self._chips_min = theme.scaled(980)
 
         self.clock = label("", 9, QFont.Weight.DemiBold, theme.MUTE, theme.FONT_DISPLAY)
         lay.addWidget(self.clock)
@@ -76,6 +82,12 @@ class TitleBar(QWidget):
         for b in (self.btn_overlay, self.btn_settings, self.btn_min,
                   self.btn_max, self.btn_close):
             lay.addWidget(b)
+
+    def resizeEvent(self, event) -> None:
+        self.chips.setVisible(self.width() >= self._chips_min)
+        self.clock.setVisible(self.width() >= theme.scaled(620))
+        self.subtitle.setVisible(self.height() >= theme.scaled(40))
+        super().resizeEvent(event)
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
@@ -292,7 +304,7 @@ class MainWindow(QWidget):
             if screen is not None:
                 area = screen.availableGeometry()
                 self.move(area.center() - self.rect().center())
-        if cfg.win_maximized:
+        if cfg.win_maximized or cfg.start_maximized:
             self.toggle_maximized(True)
 
     def store_geometry(self) -> None:

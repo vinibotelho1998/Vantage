@@ -8,7 +8,8 @@ from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 from .. import theme
 
 _VIEWS = [("dashboard", "Painel"), ("gaming", "Jogos"), ("cpu", "CPU"),
-          ("gpu", "GPU"), ("sensors", "Sensores"), ("benchmark", "Benchmark")]
+          ("gpu", "GPU"), ("sensors", "Sensores"), ("benchmark", "Benchmark"),
+          ("displays", "Telas"), ("gamepad", "Controle")]
 
 
 def make_icon(accent: str) -> QIcon:
@@ -77,3 +78,4 @@ class Tray:
 
     def hide(self) -> None:
         self._icon.hide()
+

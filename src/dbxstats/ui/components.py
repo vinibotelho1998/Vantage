@@ -253,21 +253,59 @@ class MetricList(QWidget):
         return self._rows.get(key)
 
 
+_TILE_MIN = 132
+
+
 class KpiStrip(QWidget):
-    """Faixa horizontal de StatTile com quebra automatica."""
+    """Faixa de StatTile que reflui conforme a largura disponivel.
+
+    O numero de colunas era fixo, entao ao estreitar a janela os tiles eram
+    espremidos abaixo da largura minima e o texto vazava por cima do vizinho. Aqui
+    as colunas sao recalculadas a cada redimensionamento: cabe menos por linha,
+    quebra em mais linhas, e nada se sobrepoe.
+    """
 
     def __init__(self, specs: list[tuple[str, str, str]], columns: int = 6,
                  parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        grid = QGridLayout(self)
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setSpacing(theme.scaled(theme.GAP))
+        self._grid = QGridLayout(self)
+        self._grid.setContentsMargins(0, 0, 0, 0)
+        self._grid.setSpacing(theme.scaled(theme.GAP))
+        # Sem isso o grid propaga para o widget uma largura minima igual a soma
+        # dos tiles, o widget nunca encolhe, o resizeEvent nunca ve largura
+        # pequena e a quebra jamais acontece. E' o que fazia a faixa transbordar.
+        self._grid.setSizeConstraint(QGridLayout.SizeConstraint.SetNoConstraint)
+        self.setMinimumWidth(theme.scaled(_TILE_MIN))
+        self._max_columns = max(1, columns)
+        self._columns = 0
         self.tiles: dict[str, StatTile] = {}
-        for i, (key, caption, unit) in enumerate(specs):
+        self._order: list[StatTile] = []
+        for key, caption, unit in specs:
             tile = StatTile(caption, unit)
+            tile.setMinimumWidth(theme.scaled(_TILE_MIN))
             self.tiles[key] = tile
-            grid.addWidget(tile, i // columns, i % columns)
-            grid.setColumnStretch(i % columns, 1)
+            self._order.append(tile)
+        self._relayout(self._max_columns)
+
+    def _relayout(self, columns: int) -> None:
+        if columns == self._columns:
+            return
+        self._columns = columns
+        while self._grid.count():
+            self._grid.takeAt(0)
+        for i in range(self._grid.columnCount()):
+            self._grid.setColumnStretch(i, 0)
+        for i, tile in enumerate(self._order):
+            self._grid.addWidget(tile, i // columns, i % columns)
+        for i in range(min(columns, len(self._order))):
+            self._grid.setColumnStretch(i, 1)
+
+    def resizeEvent(self, event) -> None:
+        gap = theme.scaled(theme.GAP)
+        largura = max(1, self.width())
+        cabem = max(1, (largura + gap) // (theme.scaled(_TILE_MIN) + gap))
+        self._relayout(min(self._max_columns, int(cabem), len(self._order) or 1))
+        super().resizeEvent(event)
 
     def set(self, key: str, value: str, color: str | None = None,
             sub: str | None = None) -> None:

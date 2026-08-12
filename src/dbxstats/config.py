@@ -15,7 +15,9 @@ FPS_NOW_WINDOWS = (0.5, 1.0, 2.0)
 ACCENTS = ("cyan", "blue", "green", "purple", "orange", "red", "pink")
 CORNERS = ("top-left", "top-right", "bottom-left", "bottom-right")
 VIEWS = ("dashboard", "gaming", "cpu", "gpu", "memory", "network", "sensors",
-         "processes", "benchmark")
+         "processes", "benchmark", "displays", "gamepad")
+
+GAMEPAD_BUTTONS = ("a", "b", "x", "y", "lb", "rb", "back", "start")
 
 OVERLAY_METRICS = [
     ("fps", "FPS"), ("low1", "1% Low"), ("low01", "0.1% Low"), ("frametime", "Frametime"),
@@ -40,6 +42,8 @@ class Settings:
     win_w: int = 1360
     win_h: int = 860
     win_maximized: bool = False
+    start_maximized: bool = True
+    """Abre maximizado. Em janela pequena os cards se apertam e ficam ilegiveis."""
     ui_scale: float = 1.0
     accent: str = "cyan"
     start_view: str = "dashboard"
@@ -90,6 +94,22 @@ class Settings:
     bench_seconds: int = 60
     bench_autosave: bool = True
 
+    # telas
+    display_profiles: list[dict] = field(default_factory=list)
+    """Cada perfil e' {"name", "hotkey", "entries": [...]}. Ver platform/displays.py."""
+    display_confirm_seconds: int = 15
+    """Segundos para desfazer sozinho se a tela nova nao der imagem. 0 desliga."""
+
+    # controle como mouse
+    gamepad_enabled: bool = False
+    gamepad_speed: float = 1.0
+    gamepad_deadzone: int = 8000
+    gamepad_scroll_speed: float = 1.0
+    gamepad_toggle_combo: bool = True
+    """Back mais Start liga e desliga o modo mouse sem sair do sofa."""
+    gamepad_only_with_tv: bool = False
+    """So assume o mouse quando um perfil de tela marcado como sofa estiver ativo."""
+
     # ── validacao ────────────────────────────────────────────────────────────
     @classmethod
     def _known(cls) -> set[str]:
@@ -138,6 +158,15 @@ class Settings:
         self.dash_cards = [c for c in _as_list(self.dash_cards)
                            if c in _DASH_KEYS] or [k for k, _ in DASH_CARDS]
 
+        self.display_confirm_seconds = int(_clamp(_num(self.display_confirm_seconds, 15), 0, 60))
+        self.display_profiles = [p for p in
+                                 (_clean_profile(p) for p in _as_list(self.display_profiles))
+                                 if p]
+
+        self.gamepad_speed = round(_clamp(_num(self.gamepad_speed, 1.0), 0.2, 4.0), 2)
+        self.gamepad_scroll_speed = round(_clamp(_num(self.gamepad_scroll_speed, 1.0), 0.2, 4.0), 2)
+        self.gamepad_deadzone = int(_clamp(_num(self.gamepad_deadzone, 8000), 0, 30000))
+
     # ── persistencia ─────────────────────────────────────────────────────────
     @classmethod
     def load(cls) -> Settings:
@@ -185,3 +214,49 @@ def _nearest(v: float, options) -> float:
 
 def _as_list(v) -> list:
     return list(v) if isinstance(v, (list, tuple)) else []
+
+
+def _clean_profile(raw) -> dict | None:
+    """Valida um perfil de telas vindo do disco.
+
+    Perfil sem nenhuma tela ligada e' descartado: aplicar isso deixaria a maquina
+    sem imagem nenhuma e sem como voltar.
+    """
+    if not isinstance(raw, dict):
+        return None
+    name = str(raw.get("name", "")).strip()
+    if not name:
+        return None
+    entries = []
+    for item in _as_list(raw.get("entries")):
+        if not isinstance(item, dict) or not item.get("device"):
+            continue
+        mode = item.get("mode")
+        if isinstance(mode, (list, tuple)) and len(mode) == 3:
+            try:
+                mode = [int(mode[0]), int(mode[1]), int(mode[2])]
+            except (TypeError, ValueError):
+                mode = None
+        else:
+            mode = None
+        pos = item.get("position")
+        if isinstance(pos, (list, tuple)) and len(pos) == 2:
+            try:
+                pos = [int(pos[0]), int(pos[1])]
+            except (TypeError, ValueError):
+                pos = [0, 0]
+        else:
+            pos = [0, 0]
+        entries.append({
+            "device": str(item.get("device")),
+            "monitor_id": str(item.get("monitor_id", "")),
+            "name": str(item.get("name", "")),
+            "active": bool(item.get("active")),
+            "primary": bool(item.get("primary")),
+            "position": pos,
+            "mode": mode,
+        })
+    if not any(e["active"] for e in entries):
+        return None
+    return {"name": name[:40], "hotkey": str(raw.get("hotkey", "")), "entries": entries}
+
