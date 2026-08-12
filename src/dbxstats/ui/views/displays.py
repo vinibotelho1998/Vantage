@@ -13,12 +13,14 @@ E' por isso que 4K 144 aparece aqui mesmo quando some das Configuracoes.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer, Signal
+from PySide6.QtCore import QPoint, QRect, Qt, QTimer, Signal
+from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLineEdit, QVBoxLayout, QWidget
 
 from ... import theme
 from ...platform import ccd
 from ...platform import displays as D
+from ...platform import win as winapi
 from ..components import Badge, Card, KpiStrip, PillButton, divider, label
 from .base import View, scroll_page
 
@@ -37,6 +39,154 @@ def _combo(items: list[tuple[str, object]], current=None) -> QComboBox:
         if idx >= 0:
             box.setCurrentIndex(idx)
     return box
+
+
+_SNAP = 40
+"""Distancia, em pixels do desktop virtual, para colar uma tela na outra."""
+
+
+class ArrangeCanvas(QWidget):
+    """Mapa arrastavel das telas ligadas.
+
+    O Windows nao aceita buraco nem sobreposicao no desktop virtual, entao soltar
+    a tela em qualquer lugar produziria uma configuracao recusada. Por isso o
+    arraste cola nas bordas das vizinhas assim que chega perto.
+    """
+
+    moved = Signal()
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setMinimumHeight(theme.scaled(180))
+        self.setMouseTracking(True)
+        self.rects: dict[str, QRect] = {}
+        self.names: dict[str, str] = {}
+        self.primary: str = ""
+        self._drag: str | None = None
+        self._grab = QPoint()
+
+    def load(self, displays: list[D.Display]) -> None:
+        self.rects.clear()
+        self.names.clear()
+        for disp in displays:
+            if not disp.active or not disp.mode:
+                continue
+            self.rects[disp.monitor_id] = QRect(disp.position[0], disp.position[1],
+                                                disp.mode.width, disp.mode.height)
+            self.names[disp.monitor_id] = disp.name
+            if disp.primary:
+                self.primary = disp.monitor_id
+        self.update()
+
+    # ── conversao de coordenadas ─────────────────────────────────────────────
+    def _bounds(self) -> QRect:
+        if not self.rects:
+            return QRect(0, 0, 1, 1)
+        todos = list(self.rects.values())
+        left = min(r.left() for r in todos)
+        top = min(r.top() for r in todos)
+        right = max(r.right() for r in todos)
+        bottom = max(r.bottom() for r in todos)
+        return QRect(left, top, right - left, bottom - top)
+
+    def _scale(self) -> float:
+        b = self._bounds()
+        margem = theme.scaled(16)
+        return min((self.width() - margem * 2) / max(1, b.width()),
+                   (self.height() - margem * 2) / max(1, b.height()))
+
+    def _to_screen(self, r: QRect) -> QRect:
+        b, s = self._bounds(), self._scale()
+        ox = (self.width() - b.width() * s) / 2
+        oy = (self.height() - b.height() * s) / 2
+        return QRect(int(ox + (r.left() - b.left()) * s), int(oy + (r.top() - b.top()) * s),
+                     max(2, int(r.width() * s)), max(2, int(r.height() * s)))
+
+    # ── arraste ──────────────────────────────────────────────────────────────
+    def mousePressEvent(self, event) -> None:
+        for key, rect in reversed(list(self.rects.items())):
+            if self._to_screen(rect).contains(event.position().toPoint()):
+                self._drag = key
+                self._grab = event.position().toPoint()
+                return
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._drag is None:
+            return
+        s = self._scale() or 1
+        delta = event.position().toPoint() - self._grab
+        self._grab = event.position().toPoint()
+        rect = self.rects[self._drag]
+        rect.translate(int(delta.x() / s), int(delta.y() / s))
+        self._snap(self._drag)
+        self.update()
+
+    def mouseReleaseEvent(self, event) -> None:
+        if self._drag is not None:
+            self._drag = None
+            self._normalize()
+            self.moved.emit()
+            self.update()
+
+    def _snap(self, key: str) -> None:
+        alvo = self.rects[key]
+        for outro, rect in self.rects.items():
+            if outro == key:
+                continue
+            for meu, dele in ((alvo.left(), rect.right() + 1), (alvo.right() + 1, rect.left()),
+                              (alvo.left(), rect.left()), (alvo.right(), rect.right())):
+                if abs(meu - dele) <= _SNAP:
+                    alvo.translate(dele - meu, 0)
+                    break
+            for meu, dele in ((alvo.top(), rect.bottom() + 1), (alvo.bottom() + 1, rect.top()),
+                              (alvo.top(), rect.top()), (alvo.bottom(), rect.bottom())):
+                if abs(meu - dele) <= _SNAP:
+                    alvo.translate(0, dele - meu)
+                    break
+
+    def _normalize(self) -> None:
+        """A primaria manda em (0,0), entao todo o conjunto anda junto ate' la'."""
+        ancora = self.rects.get(self.primary)
+        if ancora is None:
+            return
+        dx, dy = ancora.left(), ancora.top()
+        if (dx, dy) == (0, 0):
+            return
+        for rect in self.rects.values():
+            rect.translate(-dx, -dy)
+
+    def positions(self) -> dict[str, tuple[int, int]]:
+        return {k: (r.left(), r.top()) for k, r in self.rects.items()}
+
+    # ── pintura ──────────────────────────────────────────────────────────────
+    def paintEvent(self, event) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        for key, rect in self.rects.items():
+            box = self._to_screen(rect)
+            principal = key == self.primary
+            cor = QColor(theme.RAM if principal else theme.FPS)
+            p.setBrush(QBrush(QColor(theme.SURFACE)))
+            p.setPen(QPen(cor, 2))
+            p.drawRoundedRect(box, 6, 6)
+            # Cada linha ganha faixa propria a partir do centro. Centralizar as
+            # duas na mesma caixa imprimia uma por cima da outra.
+            meio = box.center().y()
+            linha = theme.scaled(15)
+            p.setPen(QPen(QColor(theme.TXT), 1))
+            p.setFont(QFont(theme.FONT_UI, 8, QFont.Weight.DemiBold))
+            p.drawText(QRect(box.x(), meio - linha, box.width(), linha),
+                       Qt.AlignmentFlag.AlignCenter, self.names.get(key, ""))
+            p.setPen(QPen(QColor(theme.FAINT), 1))
+            p.setFont(QFont(theme.FONT_UI, 7))
+            p.drawText(QRect(box.x(), meio + 1, box.width(), linha),
+                       Qt.AlignmentFlag.AlignCenter,
+                       f"{rect.width()} x {rect.height()}")
+            if principal:
+                p.setPen(QPen(QColor(theme.RAM), 1))
+                p.drawText(QRect(box.x(), box.bottom() - linha - 4, box.width(), linha),
+                           Qt.AlignmentFlag.AlignCenter, "primária")
+        p.end()
 
 
 class _DisplayCard(Card):
@@ -80,16 +230,25 @@ class _DisplayCard(Card):
         row.addWidget(self.hz_box, 1)
         self.add_layout(row)
 
+        self.rot_box = _combo([(nome, valor) for valor, nome in D.ROTATIONS],
+                              disp.rotation)
+        self.rot_box.currentIndexChanged.connect(self._rotate)
+        row.addWidget(label("Giro", 8.5, color=theme.MUTE))
+        row.addWidget(self.rot_box, 1)
+
         actions = QHBoxLayout()
         actions.setSpacing(theme.scaled(8))
         self.btn_apply = PillButton("Aplicar", theme.FPS, filled=True)
         self.btn_apply.clicked.connect(self._apply_mode)
         self.btn_primary = PillButton("Tornar primária", theme.RAM)
         self.btn_primary.clicked.connect(self._make_primary)
+        self.btn_windows = PillButton("Trazer janelas", theme.CPU)
+        self.btn_windows.clicked.connect(self._pull_windows)
         self.btn_power = PillButton("", theme.MUTE)
         self.btn_power.clicked.connect(self._toggle_power)
         actions.addWidget(self.btn_apply)
         actions.addWidget(self.btn_primary)
+        actions.addWidget(self.btn_windows)
         actions.addWidget(self.btn_power)
         actions.addStretch(1)
         self.add_layout(actions)
@@ -167,6 +326,24 @@ class _DisplayCard(Card):
         self.view.confirm_or_revert(self.disp.device, previous,
                                     f"{self.disp.name} em {mode.label}")
 
+    def _rotate(self) -> None:
+        alvo = self.rot_box.currentData()
+        if alvo is None or alvo == self.disp.rotation:
+            return
+        ok, err = D.set_rotation(self.disp.device, alvo)
+        self.view.notify(f"{self.disp.name}: {err}" if not ok
+                         else f"{self.disp.name} girada", theme.BAD if not ok else theme.OK)
+        self.view.reload()
+
+    def _pull_windows(self) -> None:
+        if not self.disp.active or not self.disp.mode:
+            return
+        x, y = self.disp.position
+        quantas = winapi.move_windows_to(
+            (x, y, x + self.disp.mode.width, y + self.disp.mode.height))
+        self.view.notify(f"{quantas} janela(s) trazidas para {self.disp.name}",
+                         theme.OK if quantas else theme.WARN)
+
     def _make_primary(self) -> None:
         ok, err = D.set_primary(self.disp.device)
         self.view.notify(f"{self.disp.name} agora é a primária" if ok
@@ -215,6 +392,7 @@ class DisplaysView(View):
         self.cards_lay.setSpacing(theme.scaled(theme.GAP))
         self.lay.addWidget(self.cards_holder)
 
+        self.lay.addWidget(self._build_arrange())
         self.lay.addWidget(self._build_topology())
         self.lay.addWidget(self._build_profiles())
         self.lay.addStretch(0)
@@ -242,6 +420,35 @@ class DisplaysView(View):
         row.addWidget(seed)
         card.add_layout(row)
         return card
+
+    def _build_arrange(self) -> Card:
+        card = Card("Arranjo", theme.FPS, "arraste as telas; elas colam nas vizinhas")
+        self.canvas = ArrangeCanvas()
+        self.canvas.moved.connect(self._arrange_dirty)
+        card.add(self.canvas, 1)
+        row = QHBoxLayout()
+        row.setSpacing(theme.scaled(8))
+        self.btn_arrange = PillButton("Aplicar posições", theme.FPS, filled=True)
+        self.btn_arrange.clicked.connect(self._apply_arrange)
+        self.btn_arrange.setVisible(False)
+        reset = PillButton("Descartar", theme.MUTE)
+        reset.clicked.connect(self.reload)
+        self.btn_reset = reset
+        self.btn_reset.setVisible(False)
+        row.addWidget(self.btn_arrange)
+        row.addWidget(self.btn_reset)
+        row.addStretch(1)
+        card.add_layout(row)
+        return card
+
+    def _arrange_dirty(self) -> None:
+        self.btn_arrange.setVisible(True)
+        self.btn_reset.setVisible(True)
+
+    def _apply_arrange(self) -> None:
+        ok, err = ccd.set_positions(self.canvas.positions())
+        self.notify("posições aplicadas" if ok else err, theme.OK if ok else theme.BAD)
+        self.reload()
 
     def _build_topology(self) -> Card:
         card = Card("Modos rápidos", theme.CPU, "o mesmo que o Win+P faz")
@@ -360,6 +567,9 @@ class DisplaysView(View):
         self.kpi.set("on", str(len(active)), theme.OK if active else theme.BAD)
         self.kpi.set("primary", primary.name.split(" ")[0] if primary else "—", theme.RAM)
         self.kpi.set("pixels", f"{pixels / 1_000_000:.1f}M", theme.FPS)
+        self.canvas.load(found)
+        self.btn_arrange.setVisible(False)
+        self.btn_reset.setVisible(False)
 
         # Primeira abertura ja' vem com perfis utilizaveis. Tela vazia com um
         # botao "salvar" nao ensina nada sobre o que a funcao faz.

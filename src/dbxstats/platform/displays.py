@@ -33,6 +33,7 @@ EDD_GET_DEVICE_INTERFACE_NAME = 0x00000001
 
 ENUM_CURRENT_SETTINGS = -1
 
+DM_DISPLAYORIENTATION = 0x00000080
 DM_BITSPERPEL = 0x00040000
 DM_PELSWIDTH = 0x00080000
 DM_PELSHEIGHT = 0x00100000
@@ -40,6 +41,13 @@ DM_DISPLAYFREQUENCY = 0x00400000
 
 CDS_UPDATEREGISTRY = 0x00000001
 CDS_TEST = 0x00000002
+
+DMDO_DEFAULT = 0
+DMDO_90 = 1
+DMDO_180 = 2
+DMDO_270 = 3
+ROTATIONS = ((DMDO_DEFAULT, "Normal"), (DMDO_90, "90°"),
+             (DMDO_180, "180°"), (DMDO_270, "270°"))
 
 DISP_CHANGE_SUCCESSFUL = 0
 _DISP_ERRORS = {
@@ -155,6 +163,7 @@ class Display:
     primary: bool
     mode: Mode | None
     position: tuple[int, int]
+    rotation: int = DMDO_DEFAULT
     native: tuple[int, int] | None = None
     """Resolucao nativa do painel, lida do timing detalhado do EDID."""
     modes: list[Mode] = field(default_factory=list)
@@ -184,15 +193,44 @@ def _new_devmode() -> DEVMODEW:
     return dm
 
 
-def _current_mode(device: str) -> tuple[Mode | None, tuple[int, int]]:
+def _current_mode(device: str) -> tuple[Mode | None, tuple[int, int], int]:
     dm = _new_devmode()
     if not user32.EnumDisplaySettingsExW(device, ENUM_CURRENT_SETTINGS, ctypes.byref(dm), 0):
-        return None, (0, 0)
+        return None, (0, 0), DMDO_DEFAULT
+    pos = (dm.u.dmPos.dmPosition.x, dm.u.dmPos.dmPosition.y)
+    rot = int(dm.u.dmPos.dmDisplayOrientation)
     if not dm.dmPelsWidth or not dm.dmPelsHeight:
-        return None, (dm.u.dmPos.dmPosition.x, dm.u.dmPos.dmPosition.y)
+        return None, pos, rot
     mode = Mode(int(dm.dmPelsWidth), int(dm.dmPelsHeight),
                 int(dm.dmDisplayFrequency), int(dm.dmBitsPerPel))
-    return mode, (dm.u.dmPos.dmPosition.x, dm.u.dmPos.dmPosition.y)
+    return mode, pos, rot
+
+
+def set_rotation(device: str, orientation: int) -> tuple[bool, str]:
+    """Gira a tela.
+
+    Ao passar de retrato para paisagem, ou o contrario, largura e altura precisam
+    trocar de lugar no DEVMODE. Sem isso o driver recusa, porque o modo pedido
+    nao existe na orientacao nova.
+    """
+    if orientation not in (DMDO_DEFAULT, DMDO_90, DMDO_180, DMDO_270):
+        return False, "orientacao invalida"
+    dm = _new_devmode()
+    if not user32.EnumDisplaySettingsExW(device, ENUM_CURRENT_SETTINGS, ctypes.byref(dm), 0):
+        return False, "nao consegui ler o modo atual"
+    atual = int(dm.u.dmPos.dmDisplayOrientation)
+    if atual == orientation:
+        return True, "ja estava assim"
+    if atual % 2 != orientation % 2:
+        dm.dmPelsWidth, dm.dmPelsHeight = dm.dmPelsHeight, dm.dmPelsWidth
+    dm.u.dmPos.dmDisplayOrientation = orientation
+    dm.dmFields = (DM_DISPLAYORIENTATION | DM_PELSWIDTH | DM_PELSHEIGHT
+                   | DM_BITSPERPEL | DM_DISPLAYFREQUENCY)
+    rc = user32.ChangeDisplaySettingsExW(device, ctypes.byref(dm), None,
+                                         CDS_UPDATEREGISTRY, None)
+    if rc != DISP_CHANGE_SUCCESSFUL:
+        return False, _DISP_ERRORS.get(rc, f"codigo {rc}")
+    return True, "ok"
 
 
 def _supported_modes(device: str) -> list[Mode]:
@@ -274,7 +312,7 @@ def list_displays(with_modes: bool = True) -> list[Display]:
                 out[previous].active = True
             continue
 
-        mode, position = _current_mode(device)
+        mode, position, rotation = _current_mode(device)
         seen_monitors[monitor_id] = len(out)
         out.append(Display(
             device=device,
@@ -284,6 +322,7 @@ def list_displays(with_modes: bool = True) -> list[Display]:
             active=active,
             primary=bool(dd.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE),
             mode=mode,
+            rotation=rotation,
             native=edid_native(hardware_id),
             position=position,
             modes=_supported_modes(device) if with_modes else [],

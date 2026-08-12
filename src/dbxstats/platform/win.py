@@ -147,3 +147,100 @@ def set_tool_window(hwnd: int) -> None:
         return
     style = _get_long(hwnd, GWL_EXSTYLE)
     _set_long(hwnd, GWL_EXSTYLE, style | WS_EX_TOOLWINDOW)
+
+
+# ── mover janelas entre telas ────────────────────────────────────────────────
+SW_SHOWNORMAL = 1
+SW_SHOWMAXIMIZED = 3
+SW_SHOWMINIMIZED = 2
+SWP_NOZORDER = 0x0004
+WPF_ASYNCWINDOWPLACEMENT = 0x0004
+
+
+class POINT(ctypes.Structure):
+    _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
+
+
+class WINDOWPLACEMENT(ctypes.Structure):
+    _fields_ = [("length", wintypes.UINT), ("flags", wintypes.UINT),
+                ("showCmd", wintypes.UINT), ("ptMinPosition", POINT),
+                ("ptMaxPosition", POINT), ("rcNormalPosition", RECT)]
+
+
+_ENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+user32.EnumWindows.argtypes = [_ENUMPROC, wintypes.LPARAM]
+user32.EnumWindows.restype = wintypes.BOOL
+user32.IsWindowVisible.argtypes = [wintypes.HWND]
+user32.IsWindowVisible.restype = wintypes.BOOL
+user32.IsIconic.argtypes = [wintypes.HWND]
+user32.IsIconic.restype = wintypes.BOOL
+user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+user32.GetWindowTextLengthW.restype = ctypes.c_int
+user32.GetWindowPlacement.argtypes = [wintypes.HWND, ctypes.POINTER(WINDOWPLACEMENT)]
+user32.GetWindowPlacement.restype = wintypes.BOOL
+user32.SetWindowPlacement.argtypes = [wintypes.HWND, ctypes.POINTER(WINDOWPLACEMENT)]
+user32.SetWindowPlacement.restype = wintypes.BOOL
+
+
+def _movable(hwnd: int) -> bool:
+    """Janela de aplicativo de verdade, com titulo e visivel.
+
+    Sem esse filtro a varredura pega a area de trabalho, a barra de tarefas e
+    dezenas de janelas invisiveis de servico, e mover qualquer uma delas quebra o
+    shell.
+    """
+    if not user32.IsWindowVisible(hwnd):
+        return False
+    if user32.GetWindowTextLengthW(hwnd) == 0:
+        return False
+    style = _get_long(hwnd, GWL_EXSTYLE)
+    return not (style & WS_EX_TOOLWINDOW)
+
+
+def app_windows() -> list[int]:
+    encontradas: list[int] = []
+
+    def callback(hwnd, _):
+        if _movable(hwnd):
+            encontradas.append(int(hwnd))
+        return True
+
+    user32.EnumWindows(_ENUMPROC(callback), 0)
+    return encontradas
+
+
+def move_windows_to(target: tuple[int, int, int, int]) -> int:
+    """Traz todas as janelas de aplicativo para dentro do retangulo dado.
+
+    Janela maximizada e' tratada pela posicao normal guardada no
+    WINDOWPLACEMENT, e volta a maximizar na tela nova. Mover uma maximizada
+    direto com SetWindowPos nao funciona: o Windows a devolve para a tela antiga
+    assim que ela for restaurada.
+
+    Devolve quantas janelas foram movidas.
+    """
+    left, top, right, bottom = target
+    largura, altura = right - left, bottom - top
+    movidas = 0
+
+    for hwnd in app_windows():
+        place = WINDOWPLACEMENT()
+        place.length = ctypes.sizeof(WINDOWPLACEMENT)
+        if not user32.GetWindowPlacement(hwnd, ctypes.byref(place)):
+            continue
+        if place.showCmd == SW_SHOWMINIMIZED:
+            continue
+
+        rc = place.rcNormalPosition
+        w = min(rc.right - rc.left, largura)
+        h = min(rc.bottom - rc.top, altura)
+        x = left + max(0, (largura - w) // 2) if w >= largura else \
+            max(left, min(left + largura - w, left + (largura - w) // 2))
+        y = max(top, min(top + altura - h, top + (altura - h) // 2))
+
+        place.rcNormalPosition = RECT(x, y, x + w, y + h)
+        place.flags |= WPF_ASYNCWINDOWPLACEMENT
+        if user32.SetWindowPlacement(hwnd, ctypes.byref(place)):
+            movidas += 1
+    return movidas
