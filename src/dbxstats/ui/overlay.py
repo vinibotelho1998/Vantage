@@ -172,7 +172,13 @@ class GameOverlay(QWidget):
                   ("ping", "PING", theme.NET), ("clock", "HORA", theme.FPS))
         wanted = [(k, lbl, cor) for k, lbl, cor in linhas
                   if (k in metrics or (k in ("wcpu", "wgpu") and "watts" in metrics))]
-        for r, (key, text, cor) in enumerate(wanted):
+        # Duas colunas quando ha' linha suficiente: torre estreita e alta rouba
+        # muito mais canto de tela do que um bloco largo e baixo.
+        colunas = 2 if len(wanted) >= 5 else 1
+        por_coluna = -(-len(wanted) // colunas)
+        for i, (key, text, cor) in enumerate(wanted):
+            bloco, linha = divmod(i, por_coluna)
+            base = bloco * 4
             tag = QLabel(text)
             tag.setFont(_mono(8, QFont.Weight.Bold, scale))
             tag.setStyleSheet(f"color: {cor};")
@@ -182,11 +188,14 @@ class GameOverlay(QWidget):
             sub = QLabel("")
             sub.setFont(_mono(8, QFont.Weight.Normal, scale))
             sub.setStyleSheet(f"color: {theme.TXT};")
-            grid.addWidget(tag, r, 0)
-            grid.addWidget(main, r, 1)
-            grid.addWidget(sub, r, 2)
+            grid.addWidget(tag, linha, base)
+            grid.addWidget(main, linha, base + 1)
+            grid.addWidget(sub, linha, base + 2)
             self._rows[key] = (tag, main, sub)
-        grid.setColumnStretch(2, 1)
+        for bloco in range(colunas):
+            grid.setColumnStretch(bloco * 4 + 2, 1)
+            if bloco + 1 < colunas:
+                grid.setColumnMinimumWidth(bloco * 4 + 3, int(14 * scale))
         lay.addLayout(grid)
 
     def rebuild(self) -> None:
