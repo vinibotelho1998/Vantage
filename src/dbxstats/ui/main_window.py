@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 
 from .. import theme
 from ..core import units
+from ..platform import win as winapi
 from .components import IconButton, LoadDots, NavButton, label
 from .views.base import View
 from .views.benchmark import BenchmarkView
@@ -25,14 +26,15 @@ from .views.displays import DisplaysView
 from .views.gamepad import GamepadView
 from .views.gaming import GamingView
 from .views.gpu import GpuView
+from .views.launcher import LauncherView
 from .views.memory import MemoryView
 from .views.network import NetworkView
 from .views.processes import ProcessesView
 from .views.sensors import SensorsView
 
 VIEW_CLASSES = (DashboardView, GamingView, CpuView, GpuView, MemoryView,
-                NetworkView, SensorsView, ProcessesView, BenchmarkView, DisplaysView,
-                GamepadView)
+                NetworkView, SensorsView, ProcessesView, BenchmarkView, LauncherView,
+                DisplaysView, GamepadView)
 
 _EDGE = 6
 
@@ -338,6 +340,11 @@ class MainWindow(QWidget):
         self._root.style().polish(self._root)
         self._maximized = target
         self.titlebar.btn_max.setText("❐" if target else "▢")
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        # O app roda elevado; sem isso o Explorer nao consegue soltar arquivo aqui.
+        winapi.allow_drops_from_explorer(int(self.winId()))
 
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.Type.WindowStateChange:

@@ -330,6 +330,8 @@ class GamepadMouse(QObject):
         self._active = False
         self.last: XINPUT_GAMEPAD | None = None
         self._held: dict[int, bool] = {}
+        self._combo_held = False
+        """Back+Start ainda esta' pressionado; segura a borda ate' soltar."""
         self._last_packet = 0
         self._scroll_carry = 0.0
         self._hscroll_carry = 0.0
@@ -347,6 +349,7 @@ class GamepadMouse(QObject):
     def stop(self) -> None:
         self._timer.stop()
         self._release_all()
+        self._combo_held = False
         self._set_active(False)
 
     def set_gate(self, fn) -> None:
@@ -370,8 +373,11 @@ class GamepadMouse(QObject):
             self._release_all()
         self._active = value
         self.active_changed.emit(value)
-        # Um toque curto confirma a troca sem depender da tela, que no sofa pode
-        # estar longe ou mostrando outra coisa.
+        self._feedback(value)
+
+    def _feedback(self, value: bool) -> None:
+        """Um toque curto confirma a troca sem depender da tela, que no sofa pode
+        estar longe ou mostrando outra coisa."""
         alvos = list(self.slots)
         rumble(alvos, 24000 if value else 0, 24000 if value else 12000)
         QTimer.singleShot(180, lambda: rumble(alvos, 0, 0))
@@ -437,12 +443,16 @@ class GamepadMouse(QObject):
             return
 
         buttons = pad.wButtons
+        # O estado do combo vive fora de `_held` de proposito: desligar o modo mouse
+        # chama `_release_all`, que zera `_held`. Com o combo guardado la', a borda
+        # se perdia no mesmo instante e o proximo tick religava tudo — o atalho so'
+        # ligava, nunca desligava.
         if self.cfg.gamepad_toggle_combo and (buttons & BTN_BACK) and (buttons & BTN_START):
-            if not self._held.get(-1):
-                self._held[-1] = True
+            if not self._combo_held:
+                self._combo_held = True
                 self.toggle()
             return
-        self._held[-1] = False
+        self._combo_held = False
 
         if not self._active:
             return

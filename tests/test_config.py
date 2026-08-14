@@ -67,3 +67,49 @@ def test_ping_host_fallback():
 
 def test_corner_fallback():
     assert Settings.from_dict({"overlay_corner": "meio"}).overlay_corner == "top-left"
+
+
+def _profile(**extra):
+    base = {"name": "TV", "entries": [{"device": r"\.\DISPLAY1", "active": True}]}
+    base.update(extra)
+    return base
+
+
+def test_perfil_guarda_topologia_de_espelho():
+    s = Settings.from_dict({"display_profiles": [_profile(topology="CLONE")]})
+    assert s.display_profiles[0]["topology"] == "clone"
+
+
+def test_perfil_topologia_desconhecida_vira_extend():
+    s = Settings.from_dict({"display_profiles": [_profile(topology="pirueta")]})
+    assert s.display_profiles[0]["topology"] == ""
+
+
+def test_perfil_sem_topologia_continua_valido():
+    s = Settings.from_dict({"display_profiles": [_profile()]})
+    assert s.display_profiles[0]["topology"] == ""
+
+
+def test_restaurar_telas_ao_fechar_ligado_por_padrao():
+    assert Settings().display_restore_on_exit is True
+
+
+def test_atalho_sem_caminho_e_descartado():
+    s = Settings.from_dict({"launch_items": [{"name": "x"}]})
+    assert s.launch_items == []
+
+
+def test_atalho_ganha_nome_do_arquivo():
+    s = Settings.from_dict({"launch_items": [{"path": r"C:\Games\bf6.exe"}]})
+    assert s.launch_items[0]["name"] == "bf6"
+    assert s.launch_items[0]["restore"] is True
+
+
+def test_atalho_alvo_invalido_vira_vazio():
+    s = Settings.from_dict({"launch_items": [{"path": "a.exe", "target": "voar:tv"}]})
+    assert s.launch_items[0]["target"] == ""
+
+
+def test_atalho_guarda_alvo_de_primaria():
+    s = Settings.from_dict({"launch_items": [{"path": "a.exe", "target": r"primary:MON\TV"}]})
+    assert s.launch_items[0]["target"] == r"primary:MON\TV"

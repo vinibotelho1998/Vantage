@@ -16,6 +16,7 @@ HWND_TOPMOST = -1
 SWP_NOSIZE = 0x0001
 SWP_NOMOVE = 0x0002
 SWP_NOACTIVATE = 0x0010
+MSGFLT_ALLOW = 1
 
 
 class RECT(ctypes.Structure):
@@ -114,6 +115,39 @@ def _monitor_rect(hwnd: int) -> RECT | None:
     if not user32.GetMonitorInfoW(hmon, ctypes.byref(mi)):
         return None
     return mi.rcMonitor
+
+
+def allow_drops_from_explorer(hwnd: int) -> None:
+    """Libera arrastar-e-soltar do Explorer para uma janela executando como admin.
+
+    O Windows bloqueia mensagens de um processo de integridade menor para um
+    maior (UIPI). Como o DBX Stats se eleva para ler sensores, o Explorer (que
+    roda sem elevacao) nao consegue entregar o arquivo arrastado — o cursor vira
+    "proibido" e o drop simplesmente nao acontece. Liberar as tres mensagens do
+    protocolo de drop e' o caminho oficial para esse caso.
+    """
+    if not hwnd:
+        return
+    for message in (0x0233, 0x0049, 0x004A):   # WM_DROPFILES, WM_COPYGLOBALDATA, WM_COPYDATA
+        try:
+            user32.ChangeWindowMessageFilterEx(hwnd, message, MSGFLT_ALLOW, None)
+        except (AttributeError, OSError):       # Windows antigo: nada a fazer
+            return
+
+
+def foreground_monitor_rect() -> tuple[int, int, int, int] | None:
+    """Retangulo do monitor onde esta' a janela em foco.
+
+    E' o que diz em qual tela o overlay deve aparecer: com TV e monitores ligados
+    ao mesmo tempo, colar sempre na primaria poe o overlay onde o jogo nao esta'.
+    """
+    hwnd = foreground_hwnd()
+    if not hwnd:
+        return None
+    rc = _monitor_rect(hwnd)
+    if rc is None:
+        return None
+    return (rc.left, rc.top, rc.right, rc.bottom)
 
 
 def is_foreground_fullscreen() -> tuple[bool, int]:

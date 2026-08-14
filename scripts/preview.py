@@ -4,8 +4,14 @@ from __future__ import annotations
 import math
 import os
 import sys
+import tempfile
 
 os.environ["QT_QPA_PLATFORM"] = "windows"  # precisa da fonte real do sistema
+# Dados isolados: script de desenvolvimento nunca pode gravar por cima do
+# settings.json de verdade (ja' apagou atalhos de jogo uma vez).
+os.environ.setdefault("DBXSTATS_DATA_DIR",
+                      os.path.join(tempfile.gettempdir(), "dbxstats-dev"))
+os.environ.setdefault("DBXSTATS_NO_FILE_LOG", "1")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 sys.path.insert(0, os.path.dirname(__file__))
 

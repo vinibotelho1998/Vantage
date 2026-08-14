@@ -15,13 +15,21 @@ from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QRect, Qt, QTimer, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen
-from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLineEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QHBoxLayout,
+    QLineEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
 from ... import theme
 from ...platform import ccd
 from ...platform import displays as D
 from ...platform import win as winapi
 from ..components import Badge, Card, KpiStrip, PillButton, divider, label
+from ..confirm import confirm_or_revert as ask_confirm
 from .base import View, scroll_page
 
 _KPIS = [
@@ -246,9 +254,12 @@ class _DisplayCard(Card):
         self.btn_windows.clicked.connect(self._pull_windows)
         self.btn_power = PillButton("", theme.MUTE)
         self.btn_power.clicked.connect(self._toggle_power)
+        self.btn_mirror = PillButton("Espelhar nesta", theme.DISK)
+        self.btn_mirror.clicked.connect(self._save_mirror)
         actions.addWidget(self.btn_apply)
         actions.addWidget(self.btn_primary)
         actions.addWidget(self.btn_windows)
+        actions.addWidget(self.btn_mirror)
         actions.addWidget(self.btn_power)
         actions.addStretch(1)
         self.add_layout(actions)
@@ -319,21 +330,30 @@ class _DisplayCard(Card):
         if mode is None:
             return
         previous = self.disp.mode
-        ok, err = D.set_mode(self.disp.device, mode)
+        device = self.disp.device
+        ok, err = D.set_mode(device, mode)
         if not ok:
             self.view.notify(f"{self.disp.name}: {err}", theme.BAD)
             return
-        self.view.confirm_or_revert(self.disp.device, previous,
-                                    f"{self.disp.name} em {mode.label}")
+        if previous is None:
+            self.view.reload()
+            return
+        self.view.confirm_or_revert(f"{self.disp.name} em {mode.label}",
+                                    lambda: D.set_mode(device, previous))
 
     def _rotate(self) -> None:
         alvo = self.rot_box.currentData()
         if alvo is None or alvo == self.disp.rotation:
             return
-        ok, err = D.set_rotation(self.disp.device, alvo)
-        self.view.notify(f"{self.disp.name}: {err}" if not ok
-                         else f"{self.disp.name} girada", theme.BAD if not ok else theme.OK)
-        self.view.reload()
+        previous = self.disp.rotation
+        device = self.disp.device
+        ok, err = D.set_rotation(device, alvo)
+        if not ok:
+            self.view.notify(f"{self.disp.name}: {err}", theme.BAD)
+            self.view.reload()
+            return
+        self.view.confirm_or_revert(f"{self.disp.name} girada",
+                                    lambda: D.set_rotation(device, previous))
 
     def _pull_windows(self) -> None:
         if not self.disp.active or not self.disp.mode:
@@ -344,6 +364,15 @@ class _DisplayCard(Card):
         self.view.notify(f"{quantas} janela(s) trazidas para {self.disp.name}",
                          theme.OK if quantas else theme.WARN)
 
+    def _save_mirror(self) -> None:
+        """Guarda um perfil de espelho ancorado nesta tela.
+
+        Ancorar e' escolha do usuario de proposito: a TV costuma estar desligada
+        justamente na hora de montar o perfil, e adivinhar pelo tamanho acaba
+        elegendo o monitor da mesa.
+        """
+        self.view.save_mirror_profile(self.disp)
+
     def _make_primary(self) -> None:
         ok, err = D.set_primary(self.disp.device)
         self.view.notify(f"{self.disp.name} agora é a primária" if ok
@@ -352,13 +381,16 @@ class _DisplayCard(Card):
 
     def _toggle_power(self) -> None:
         target = not self.disp.active
-        ok, err = D.set_enabled(self.disp.device, target)
+        device = self.disp.device
+        before = D.snapshot()
+        ok, err = D.set_enabled(device, target)
         if not ok:
             self.view.notify(f"{self.disp.name}: {err}", theme.BAD)
-        else:
-            self.view.notify(f"{self.disp.name} {'ligada' if target else 'desligada'}",
-                             theme.OK)
-        self.view.reload()
+            self.view.reload()
+            return
+        self.view.confirm_or_revert(
+            f"{self.disp.name} {'ligada' if target else 'desligada'}",
+            lambda: D.apply_profile(before))
 
 
 class DisplaysView(View):
@@ -370,7 +402,6 @@ class DisplaysView(View):
     def __init__(self, app) -> None:
         super().__init__(app)
         self._cards: list[_DisplayCard] = []
-        self._pending_revert: QTimer | None = None
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -446,9 +477,13 @@ class DisplaysView(View):
         self.btn_reset.setVisible(True)
 
     def _apply_arrange(self) -> None:
+        before = D.snapshot()
         ok, err = ccd.set_positions(self.canvas.positions())
-        self.notify("posições aplicadas" if ok else err, theme.OK if ok else theme.BAD)
-        self.reload()
+        if not ok:
+            self.notify(err, theme.BAD)
+            self.reload()
+            return
+        self.confirm_or_revert("posições aplicadas", lambda: D.apply_profile(before))
 
     def _build_topology(self) -> Card:
         card = Card("Modos rápidos", theme.CPU, "o mesmo que o Win+P faz")
@@ -463,13 +498,34 @@ class DisplaysView(View):
             row.addWidget(btn)
         row.addStretch(1)
         card.add_layout(row)
+
+        self.c_after_game = QCheckBox("Voltar ao perfil padrão quando um jogo fechar")
+        self.c_after_game.setChecked(bool(self.cfg.display_restore_after_game))
+        self.c_after_game.toggled.connect(self._set_after_game)
+        card.add(self.c_after_game)
+
+        self.c_restore = QCheckBox("Voltar ao perfil padrão ao fechar o DBX Stats")
+        self.c_restore.setChecked(bool(self.cfg.display_restore_on_exit))
+        self.c_restore.toggled.connect(self._set_restore)
+        card.add(self.c_restore)
         return card
 
+    def _set_restore(self, on: bool) -> None:
+        self.cfg.display_restore_on_exit = bool(on)
+        self.cfg.save()
+
+    def _set_after_game(self, on: bool) -> None:
+        self.cfg.display_restore_after_game = bool(on)
+        self.cfg.save()
+
     def _topology(self, mode: str, label_text: str) -> None:
+        before = D.snapshot()
         ok, err = ccd.set_topology_mode(mode)
-        self.notify(f"{label_text} aplicado" if ok else f"{label_text}: {err}",
-                    theme.OK if ok else theme.BAD)
-        self.reload()
+        if not ok:
+            self.notify(f"{label_text}: {err}", theme.BAD)
+            self.reload()
+            return
+        self.confirm_or_revert(f"{label_text} aplicado", lambda: D.apply_profile(before))
 
     def _seed_profiles(self) -> None:
         seeded = D.suggested_profiles()
@@ -485,12 +541,7 @@ class DisplaysView(View):
                     else "os perfis prontos já existem", theme.OK)
 
     def _refresh_profiles(self) -> None:
-        while self.profiles_box.count():
-            item = self.profiles_box.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-            elif item.layout():
-                _clear_layout(item.layout())
+        _clear_layout(self.profiles_box)
         profiles = self.cfg.display_profiles
         if not profiles:
             self.profiles_box.addWidget(
@@ -501,18 +552,47 @@ class DisplaysView(View):
             row.setSpacing(theme.scaled(8))
             ligadas = [e for e in profile["entries"] if e.get("active")]
             resumo = ", ".join(e.get("name") or e.get("device", "") for e in ligadas)
+            espelho = profile.get("topology") == "clone"
+            padrao = profile["name"] == self.cfg.display_default_profile
+            if espelho:
+                resumo = f"espelho · {resumo}"
+            if padrao:
+                resumo = f"{resumo}  —  é para cá que tudo volta"
             col = QVBoxLayout()
             col.setSpacing(0)
-            col.addWidget(label(profile["name"], 10, color=theme.TXT))
+            titulo = QHBoxLayout()
+            titulo.setSpacing(theme.scaled(6))
+            titulo.addWidget(label(profile["name"], 10, color=theme.TXT))
+            if espelho:
+                titulo.addWidget(Badge("espelho", theme.FPS))
+            if padrao:
+                titulo.addWidget(Badge("padrão", theme.OK))
+            titulo.addStretch(1)
+            col.addLayout(titulo)
             col.addWidget(label(resumo, 8, color=theme.FAINT))
             row.addLayout(col, 1)
             apply_btn = PillButton("Aplicar", theme.OK, filled=True)
             apply_btn.clicked.connect(lambda i=index: self._apply_profile(i))
+            padrao_btn = PillButton("Padrão" if not padrao else "Padrão ✓",
+                                    theme.OK if padrao else theme.MUTE)
+            padrao_btn.clicked.connect(lambda i=index: self._set_default(i))
             del_btn = PillButton("Excluir", theme.BAD)
             del_btn.clicked.connect(lambda i=index: self._delete_profile(i))
             row.addWidget(apply_btn)
+            row.addWidget(padrao_btn)
             row.addWidget(del_btn)
             self.profiles_box.addLayout(row)
+
+    def save_mirror_profile(self, anchor: D.Display) -> None:
+        profile = D.mirror_profile(anchor, [c.disp for c in self._cards])
+        profiles = [p for p in self.cfg.display_profiles if p["name"] != profile["name"]]
+        profiles.append(profile)
+        self.cfg.display_profiles = profiles
+        self.cfg.save()
+        self._refresh_profiles()
+        modo = next((e["mode"] for e in profile["entries"] if e.get("primary")), None)
+        detalhe = f" em {modo[0]}x{modo[1]} @ {modo[2]} Hz" if modo else ""
+        self.notify(f"perfil '{profile['name']}' salvo{detalhe}", theme.OK)
 
     def _save_profile(self) -> None:
         name = self.profile_name.text().strip()
@@ -521,7 +601,9 @@ class DisplaysView(View):
             return
         entries = D.snapshot()
         profiles = [p for p in self.cfg.display_profiles if p["name"] != name]
-        profiles.append({"name": name[:40], "hotkey": "", "entries": entries})
+        profiles.append({"name": name[:40], "hotkey": "",
+                         "topology": "clone" if D.looks_cloned() else "",
+                         "entries": entries})
         self.cfg.display_profiles = profiles
         self.cfg.save()
         self.profile_name.clear()
@@ -533,10 +615,29 @@ class DisplaysView(View):
             profile = self.cfg.display_profiles[index]
         except IndexError:
             return
-        ok, err = D.apply_profile(profile["entries"])
-        self.notify(f"perfil '{profile['name']}' aplicado" if ok else err,
-                    theme.OK if ok else theme.BAD)
-        self.reload()
+        before = D.snapshot()
+        ok, err = D.apply_profile(profile["entries"], profile.get("topology", ""))
+        if not ok:
+            self.notify(err, theme.BAD)
+            self.reload()
+            return
+        self.confirm_or_revert(f"perfil '{profile['name']}' aplicado",
+                               lambda: D.apply_profile(before))
+
+    def _set_default(self, index: int) -> None:
+        """Marca (ou desmarca) o perfil que vale como 'meu normal'."""
+        try:
+            profile = self.cfg.display_profiles[index]
+        except IndexError:
+            return
+        virou = "" if self.cfg.display_default_profile == profile["name"] else profile["name"]
+        self.cfg.display_default_profile = virou
+        self.cfg.save()
+        self._refresh_profiles()
+        self.notify(f"'{profile['name']}' é o arranjo padrão — é para cá que as telas "
+                    "voltam depois do jogo e ao fechar o app" if virou
+                    else "sem perfil padrão; volta para o estado de quando o app abriu",
+                    theme.OK if virou else theme.MUTE)
 
     def _delete_profile(self, index: int) -> None:
         try:
@@ -590,49 +691,33 @@ class DisplaysView(View):
         self.status.setVisible(True)
         QTimer.singleShot(6000, lambda: self.status.setVisible(False))
 
-    def confirm_or_revert(self, device: str, previous: D.Mode | None, description: str) -> None:
-        """Volta sozinho ao modo anterior se ninguem confirmar a tempo.
+    def confirm_or_revert(self, description: str, undo) -> bool:
+        """Pergunta num popup e desfaz sozinho se ninguem responder.
 
         Modo invalido em TV costuma dar tela preta, e sem imagem nao ha' como
-        clicar em nada. O relogio corre e desfaz por conta propria.
+        clicar em nada. O relogio do popup corre e desfaz por conta propria.
         """
-        seconds = int(self.cfg.display_confirm_seconds or 0)
         self.reload()
-        if seconds <= 0 or previous is None:
+        seconds = int(self.cfg.display_confirm_seconds or 0)
+        if seconds <= 0:
             self.notify(description, theme.OK)
-            return
-
-        remaining = {"n": seconds}
-        timer = QTimer(self)
-        self._pending_revert = timer
-
-        def keep() -> None:
-            timer.stop()
-            self._pending_revert = None
-            self.status.setVisible(False)
-            self.notify(f"{description} mantido", theme.OK)
-
-        def tick() -> None:
-            remaining["n"] -= 1
-            if remaining["n"] <= 0:
-                timer.stop()
-                self._pending_revert = None
-                D.set_mode(device, previous)
-                self.reload()
-                self.notify("sem confirmação, voltei ao modo anterior", theme.WARN)
-                return
-            self.notify(f"{description}. Clique em Telas de novo para manter. "
-                        f"Desfaço em {remaining['n']}s", theme.WARN)
-
-        timer.timeout.connect(tick)
-        timer.start(1000)
-        self._keep_callback = keep
+            return True
+        kept = ask_confirm(description, seconds, undo, self.window())
+        self.reload()
+        self.notify(f"{description} — mantido" if kept
+                    else "sem confirmação, voltei ao estado anterior",
+                    theme.OK if kept else theme.WARN)
+        return kept
 
 
 def _clear_layout(layout) -> None:
+    # setParent(None) antes do deleteLater: a exclusao so' acontece na volta do
+    # laco de eventos, e ate' la' o widget continuaria desenhado por cima do novo.
     while layout.count():
         item = layout.takeAt(0)
-        if item.widget():
-            item.widget().deleteLater()
+        widget = item.widget()
+        if widget is not None:
+            widget.setParent(None)
+            widget.deleteLater()
         elif item.layout():
             _clear_layout(item.layout())

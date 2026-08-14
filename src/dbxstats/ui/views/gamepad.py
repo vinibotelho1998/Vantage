@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QHBoxLayout, QSlider, QVBoxLayout, QWidget
 
 from ... import theme
 from ...platform import gamepad as G
-from ..components import Card, KpiStrip, MetricList, PillButton, divider, label
+from ..components import Card, KpiStrip, MetricList, divider, label
 from .base import View, scroll_page
 
 _KPIS = [
@@ -246,10 +246,10 @@ class GamepadView(View):
         card.add(divider())
         row = QHBoxLayout()
         row.setSpacing(theme.scaled(8))
-        self.btn_toggle = PillButton("", theme.RAM, filled=True)
-        self.btn_toggle.clicked.connect(self._toggle)
+        # Sem botao de ligar de proposito: a escuta fica sempre de pe' e quem
+        # entrega ou tira o mouse e' o proprio controle, com Back + Start. No sofa
+        # nao da' para depender de clicar em nada na tela.
         self.status = label("", 8.5, color=theme.FAINT)
-        row.addWidget(self.btn_toggle)
         row.addWidget(self.status, 1)
         card.add_layout(row)
         lay.addWidget(card, 3)
@@ -311,21 +311,8 @@ class GamepadView(View):
         self.cfg.gamepad_deadzone = int(v)
 
     # ── ciclo ────────────────────────────────────────────────────────────────
-    def _toggle(self) -> None:
-        pad = getattr(self.app, "gamepad", None)
-        if pad is None or not G.available():
-            return
-        self.cfg.gamepad_enabled = not self.cfg.gamepad_enabled
-        self.cfg.save()
-        pad.start() if self.cfg.gamepad_enabled else pad.stop()
-        self._refresh()
-
     def _refresh(self, _=None) -> None:
         pad = getattr(self.app, "gamepad", None)
-        on = bool(self.cfg.gamepad_enabled)
-        self.btn_toggle.setText("Desativar" if on else "Ativar")
-        self.btn_toggle.set_color(theme.BAD if on else theme.OK)
-
         if not G.available():
             self.status.setText("XInput não disponível nesta máquina")
             self.kpi.set("conn", "—", theme.FAINT)
@@ -340,9 +327,7 @@ class GamepadView(View):
         self.kpi.set("slot", str(quantos) if quantos else "—",
                      theme.OK if quantos > 1 else theme.TXT)
         self.kpi.set("speed", f"{self.cfg.gamepad_speed:.2f}", theme.RAM)
-        if not on:
-            self.status.setText("desativado")
-        elif not conectado:
+        if not conectado:
             self.status.setText("aguardando um controle conectar")
         elif not ativo:
             self.status.setText("conectado; aperte Back + Start para assumir o mouse")

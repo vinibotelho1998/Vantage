@@ -607,11 +607,19 @@ class Sparkline(QWidget):
     """Mini grafico inline usado dentro dos cards."""
 
     def __init__(self, color: str, height: int = 34, fixed_max: float | None = None,
-                 parent: QWidget | None = None) -> None:
+                 parent: QWidget | None = None, from_zero: bool = False,
+                 line_width: float = 1.6) -> None:
         super().__init__(parent)
         self._color = QColor(color)
         self._values: list[float] = []
         self._fixed_max = fixed_max
+        self._from_zero = from_zero
+        """Base no zero em vez do minimo da janela.
+
+        Escala colada no minimo transforma variacao de 3 fps num tobogã. Para FPS
+        o que interessa e' a queda de verdade, e ela so' aparece com o chao fixo.
+        """
+        self._line_width = line_width
         self._smooth = True
         self.setFixedHeight(theme.scaled(height))
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -638,8 +646,12 @@ class Sparkline(QWidget):
         pad = 3.0
         buckets = envelope(self._values, max(8, int(w)))
         vals = [b[2] for b in buckets]
-        hi = self._fixed_max if self._fixed_max is not None else max(vals)
-        lo = 0.0 if self._fixed_max is not None else min(vals)
+        if self._fixed_max is not None:
+            hi, lo = self._fixed_max, 0.0
+        elif self._from_zero:
+            hi, lo = max(vals) * 1.12, 0.0
+        else:
+            hi, lo = max(vals), min(vals)
         rng = max(hi - lo, 1e-6)
         n = len(vals)
         dx = w / max(1, n - 1)
@@ -659,7 +671,13 @@ class Sparkline(QWidget):
         grad.setColorAt(1.0, c1)
         p.fillPath(fill, grad)
         p.setBrush(Qt.BrushStyle.NoBrush)
-        p.setPen(QPen(self._color, 1.6, Qt.PenStyle.SolidLine,
+        if self._line_width > 1.8:
+            brilho = QColor(self._color)
+            brilho.setAlpha(60)
+            p.setPen(QPen(brilho, self._line_width * 2.6, Qt.PenStyle.SolidLine,
+                          Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+            p.drawPath(path)
+        p.setPen(QPen(self._color, self._line_width, Qt.PenStyle.SolidLine,
                       Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
         p.drawPath(path)
 

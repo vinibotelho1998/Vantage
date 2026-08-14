@@ -13,6 +13,7 @@ Configuracoes do Windows.
 from __future__ import annotations
 
 import ctypes
+import time
 from ctypes import wintypes
 from dataclasses import dataclass, field
 
@@ -20,6 +21,9 @@ from .. import log
 from . import ccd
 
 _log = log.get("displays")
+
+REDETECT_WAIT_S = 2.5
+"""Tempo que o Windows leva para reanexar uma tela que tinha sumido."""
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 
@@ -495,13 +499,17 @@ def _best_mode(device: str) -> Mode | None:
     return modes[0]
 
 
-def apply_profile(entries: list[dict]) -> tuple[bool, str]:
+def apply_profile(entries: list[dict], topology: str = "") -> tuple[bool, str]:
     """Aplica um perfil inteiro: topologia, depois primaria, depois modos.
 
     A ordem importa. A topologia entra numa unica chamada CCD, para a tela nao
     piscar por monitor. So' com as telas certas ligadas faz sentido escolher a
     primaria, e so' entao vale ajustar resolucao e taxa, que e' o unico passo em
     que o caminho legado ainda serve.
+
+    Com `topology="clone"` o perfil vira espelho: todas as telas mostram a mesma
+    imagem. Quem decide a topologia nesse caso e' o proprio Windows — montar grupo
+    de clone na mao e' fragil, e o resultado seria o mesmo.
     """
     wanted_on = [e for e in entries if e.get("active")]
     if not wanted_on:
@@ -514,15 +522,34 @@ def apply_profile(entries: list[dict]) -> tuple[bool, str]:
     if not paths:
         return False, "nenhuma tela do perfil esta conectada"
 
+    if topology == "clone":
+        return _apply_clone(wanted_on)
+
     ok, err = ccd.set_topology(paths)
     if not ok:
         return False, err
 
-    primary = next((e for e in wanted_on if e.get("primary")), None)
-    if primary and primary.get("monitor_id") in by_path:
-        ok, err = ccd.make_primary(primary["monitor_id"])
+    # A topologia escolhe uma saida por tela numa tacada so'. Quando varias telas
+    # voltam juntas, essa escolha pode esbarrar em saidas que compartilham a mesma
+    # origem e deixar alguem de fora — foi o caso de voltar do jogo com uma tela
+    # ligada e a outra nao. Aqui conferimos e repescamos uma por uma: cada chamada
+    # relê a configuracao, entao a saida livre e' reavaliada a cada passo.
+    for mid in [p for p in paths if p not in _active_paths()]:
+        ok, err = ccd.set_active(mid, True)
         if not ok:
-            _log.warning("primaria do perfil nao aplicou: %s", err)
+            _log.warning("nao consegui religar %s: %s", mid, err)
+
+    # Ultimo recurso: tela desligada ha' um tempo some da lista de caminhos do
+    # Windows — monitor DisplayPort dorme e derruba o link. "Estender" obriga o
+    # Windows a redetectar tudo que esta' plugado; so' entao a topologia pedida
+    # tem como incluir a tela de volta. Foi o que trouxe o ultrawide de volta.
+    if [p for p in paths if p not in _active_paths()]:
+        _log.info("tela do perfil sumiu da lista; forcando redeteccao")
+        ccd.set_topology_mode("extend")
+        time.sleep(REDETECT_WAIT_S)
+        ok, err = ccd.set_topology(paths)
+        if not ok:
+            _log.warning("topologia apos redeteccao falhou: %s", err)
 
     present = list_displays(with_modes=False)
     by_path = {d.monitor_id: d for d in present if d.monitor_id}
@@ -537,7 +564,66 @@ def apply_profile(entries: list[dict]) -> tuple[bool, str]:
         ok, err = set_mode(disp.device, mode)
         if not ok:
             _log.warning("modo de %s nao aplicou: %s", disp.name, err)
+
+    # Posicoes antes da primaria, nunca depois. `set_positions` normaliza o
+    # conjunto pelo canto superior esquerdo, o que tiraria a primaria do (0,0);
+    # `make_primary` desloca tudo de volta preservando o arranjo relativo. Sem
+    # este passo o perfil volta com as telas em ordem trocada — foi o "voltou
+    # meio bugado" depois do jogo.
+    posicoes = {e["monitor_id"]: (int(e["position"][0]), int(e["position"][1]))
+                for e in wanted_on
+                if e.get("monitor_id") in by_path and len(e.get("position") or ()) == 2}
+    if len(posicoes) > 1:
+        ok, err = ccd.set_positions(posicoes)
+        if not ok:
+            _log.warning("arranjo do perfil nao aplicou: %s", err)
+
+    primary = next((e for e in wanted_on if e.get("primary")), None)
+    if primary and primary.get("monitor_id") in by_path:
+        ok, err = ccd.make_primary(primary["monitor_id"])
+        if not ok:
+            _log.warning("primaria do perfil nao aplicou: %s", err)
     return True, "ok"
+
+
+def _active_paths() -> set[str]:
+    return {d.monitor_id for d in list_displays(with_modes=False)
+            if d.active and d.monitor_id}
+
+
+def _apply_clone(wanted_on: list[dict]) -> tuple[bool, str]:
+    """Espelha: ninguem desliga, todas mostram a mesma imagem.
+
+    O Windows exige uma resolucao que TODAS as telas aceitem — e' assim que clone
+    funciona no hardware, nao e' limitacao daqui. Entao a resolucao pedida no
+    perfil so' entra se couber em todo mundo; senao fica a que o Windows escolheu.
+    """
+    ok, err = ccd.set_topology_mode("clone")
+    if not ok:
+        return False, err
+
+    ancora = next((e for e in wanted_on if e.get("primary")), wanted_on[0])
+    raw = ancora.get("mode")
+    if not raw:
+        return True, "espelhado"
+
+    alvo = Mode(*raw)
+    present = list_displays(with_modes=False)
+    ativas = [d for d in present if d.active]
+    if not ativas:
+        return True, "espelhado"
+
+    for disp in ativas:
+        if not any(m.as_key() == alvo.as_key() for m in _supported_modes(disp.device)):
+            atual = ativas[0].mode
+            return True, (f"espelhado em {atual.label}" if atual else "espelhado")
+
+    for disp in ativas:
+        ok, err = set_mode(disp.device, alvo)
+        if not ok:
+            _log.warning("clone: %s nao aceitou %s (%s)", disp.name, alvo.label, err)
+            break
+    return True, f"espelhado em {alvo.label}"
 
 
 def _entry(disp: Display, active: bool, primary: bool, mode: Mode | None) -> dict:
@@ -588,7 +674,59 @@ def suggested_profiles() -> list[dict]:
             "entries": [_entry(d, True, d.primary, _best_mode(d.device) or d.mode)
                         for d in found],
         })
+
+        # Espelhar e' o caso do sofa: a imagem vai para a TV sem apagar os
+        # monitores da mesa. O palpite e' a maior tela pelo painel — mas a TV
+        # costuma estar desligada na hora de montar o perfil, entao a tela de
+        # Telas tem um botao por monitor para ancorar onde o usuario quiser.
+        profiles.append(mirror_profile(max(found, key=_panel_pixels), found))
     return profiles
+
+
+def mirror_profile(anchor: Display, found: list[Display] | None = None) -> dict:
+    """Perfil de espelho ancorado numa tela: todas ligadas, todas iguais a ela."""
+    telas = found if found is not None else list_displays()
+    if anchor not in telas:
+        telas = [*telas, anchor]
+    return {
+        "name": f"Espelhar em {anchor.name}",
+        "hotkey": "",
+        "topology": "clone",
+        "entries": [_entry(d, True, d is anchor, _shared_mode(telas) if d is anchor else None)
+                    for d in telas],
+    }
+
+
+def _panel_pixels(disp: Display) -> int:
+    if disp.native:
+        return disp.native[0] * disp.native[1]
+    if disp.mode:
+        return disp.mode.width * disp.mode.height
+    return max((m.width * m.height for m in disp.modes), default=0)
+
+
+def _shared_mode(displays: list[Display]) -> Mode | None:
+    """Maior modo que TODAS as telas aceitam — o teto real de um espelho."""
+    comuns: set[tuple[int, int, int]] | None = None
+    for disp in displays:
+        chaves = {m.as_key() for m in _supported_modes(disp.device)}
+        if not chaves:          # tela que nao reporta modos nao restringe ninguem
+            continue
+        comuns = chaves if comuns is None else (comuns & chaves)
+    if not comuns:
+        return None
+    width, height, refresh = max(comuns, key=lambda k: (k[0] * k[1], k[2]))
+    return Mode(width, height, refresh)
+
+
+def looks_cloned() -> bool:
+    """Telas ativas empilhadas na mesma origem e no mesmo modo = espelho."""
+    ativas = [d for d in list_displays(with_modes=False) if d.active]
+    if len(ativas) < 2:
+        return False
+    assinaturas = {(tuple(d.position), d.mode.as_key() if d.mode else None)
+                   for d in ativas}
+    return len(assinaturas) == 1
 
 
 def snapshot() -> list[dict]:

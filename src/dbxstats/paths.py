@@ -18,9 +18,19 @@ def base_dir() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+SANDBOX_ENV = "DBXSTATS_DATA_DIR"
+"""Aponta os dados para outra pasta. Testes e scripts de screenshot usam isso.
+
+Sem essa valvula, qualquer script que instancie a UI acaba gravando por cima do
+settings.json de verdade — foi assim que uma rodada de preview apagou os atalhos
+de jogo do usuario. Dado de producao nao pode estar a um import de distancia.
+"""
+
+
 def data_dir() -> Path:
-    base = os.environ.get("APPDATA") or os.path.expanduser("~")
-    d = Path(base) / APP_NAME
+    override = os.environ.get(SANDBOX_ENV)
+    base = override or os.environ.get("APPDATA") or os.path.expanduser("~")
+    d = Path(base) if override else Path(base) / APP_NAME
     d.mkdir(parents=True, exist_ok=True)
     return d
 

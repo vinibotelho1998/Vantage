@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QApplication,
@@ -18,9 +18,30 @@ from PySide6.QtWidgets import (
 from .. import theme
 from ..core import units
 from ..platform import win
+from .charts import Sparkline
 
 _MONO = "Cascadia Mono"
 _FALLBACK = "Consolas"
+
+
+def rect_center(rect) -> tuple[int, int]:
+    return ((rect[0] + rect[2]) // 2, (rect[1] + rect[3]) // 2)
+
+
+def _ghz(mhz: float | None) -> str:
+    """Frequencia curta, mas com a unidade explicita.
+
+    Sem o 'Hz' a coluna vira armadilha: '6.00G' ao lado de '18.4G' faz parecer
+    que os dois sao gigabytes.
+    """
+    if not mhz:
+        return "—"
+    return f"{mhz / 1000:.2f}GHz" if mhz >= 1000 else f"{mhz:.0f}MHz"
+
+
+def _chunk(caption: str, value: str, color: str) -> str:
+    return (f"<span style='color:{theme.TXT}'>{caption}</span>"
+            f"<span style='color:{color}'>&nbsp;{value}</span>")
 
 
 def _mono(pt: float, weight: int = QFont.Weight.Normal, scale: float = 1.0) -> QFont:
@@ -45,13 +66,42 @@ class GameOverlay(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self._rows: dict[str, tuple[QLabel, QLabel, QLabel]] = {}
+        self._built_for: tuple = ()
         self._build()
+
+    # ── tamanho ──────────────────────────────────────────────────────────────
+    def _screen(self):
+        """A tela onde o jogo esta', que nem sempre e' a primaria."""
+        rect = win.foreground_monitor_rect()
+        if rect is not None:
+            found = QApplication.screenAt(QPoint(*rect_center(rect)))
+            if found is not None:
+                return found
+        return QApplication.primaryScreen()
+
+    def _auto_scale(self) -> float:
+        """Mantem o overlay um cantinho discreto em qualquer tela.
+
+        Duas coisas inflam o overlay num 4K: a fonte e' medida em pontos, entao a
+        escala do Windows ja' multiplica tudo; e a tela e' o dobro de larga, o que
+        pede um pouco mais de corpo para continuar legivel de longe. O primeiro
+        fator e' desfeito, o segundo entra limitado — o resultado e' um painel que
+        ocupa mais ou menos a mesma fracao da tela em 1080p e em 4K.
+        """
+        screen = self._screen()
+        if screen is None:
+            return 1.0
+        dpi = max(72.0, float(screen.logicalDotsPerInch()))
+        largura = max(640, screen.geometry().width())
+        return (96.0 / dpi) * min(1.35, max(0.75, largura / 1920.0))
 
     # ── construcao ───────────────────────────────────────────────────────────
     def _build(self) -> None:
         cfg = self._ctl.settings
-        scale = cfg.overlay_scale
-        alpha = int(cfg.overlay_opacity * 235)
+        self._built_for = self._screen_key()
+        scale = cfg.overlay_scale * self._auto_scale()
+        # Fundo mais leve: por cima do jogo o painel tem que informar, nao tapar.
+        alpha = int(cfg.overlay_opacity * 165)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -82,7 +132,7 @@ class GameOverlay(QWidget):
             self._fps.setStyleSheet(f"color: {theme.MUTE};")
             unit = QLabel("FPS")
             unit.setFont(_mono(7.5, QFont.Weight.Bold, scale))
-            unit.setStyleSheet(f"color: {theme.FAINT};")
+            unit.setStyleSheet(f"color: {theme.accent_color(cfg.accent)};")
             unit.setAlignment(Qt.AlignmentFlag.AlignBottom)
             head.addWidget(self._fps)
             head.addWidget(unit)
@@ -95,6 +145,16 @@ class GameOverlay(QWidget):
         self._sub.setStyleSheet(f"color: {theme.FAINT};")
         lay.addWidget(self._sub)
 
+        # Numero sozinho nao mostra queda: o traco e' o que denuncia o engasgo que
+        # ja' passou. Mesma serie do painel, um ponto por segundo.
+        if "graph" in metrics:
+            self._graph = Sparkline(theme.FPS, height=int(38 * scale),
+                                    from_zero=True, line_width=2.2)
+            self._graph.setMinimumWidth(int(190 * scale))
+            lay.addWidget(self._graph)
+        else:
+            self._graph = None
+
         line = QFrame()
         line.setFixedHeight(1)
         line.setStyleSheet("background: rgba(255,255,255,24);")
@@ -104,20 +164,24 @@ class GameOverlay(QWidget):
         grid.setContentsMargins(0, int(2 * scale), 0, 0)
         grid.setHorizontalSpacing(int(8 * scale))
         grid.setVerticalSpacing(int(2 * scale))
-        wanted = [(k, lbl) for k, lbl in (("cpu", "CPU"), ("gpu", "GPU"), ("ram", "RAM"),
-                                          ("vram", "VRAM"), ("watts", "PWR"),
-                                          ("ping", "PING"), ("clock", "HORA"))
-                  if k in metrics]
-        for r, (key, text) in enumerate(wanted):
+        # Cada linha na cor da sua peca. Tudo cinza era o que fazia o overlay
+        # sumir por cima de cenario claro.
+        linhas = (("cpu", "CPU", theme.CPU), ("gpu", "GPU", theme.GPU),
+                  ("ram", "RAM", theme.RAM), ("vram", "VRAM", theme.DISK),
+                  ("wcpu", "W CPU", theme.CPU), ("wgpu", "W GPU", theme.GPU),
+                  ("ping", "PING", theme.NET), ("clock", "HORA", theme.FPS))
+        wanted = [(k, lbl, cor) for k, lbl, cor in linhas
+                  if (k in metrics or (k in ("wcpu", "wgpu") and "watts" in metrics))]
+        for r, (key, text, cor) in enumerate(wanted):
             tag = QLabel(text)
             tag.setFont(_mono(8, QFont.Weight.Bold, scale))
-            tag.setStyleSheet(f"color: {theme.MUTE};")
+            tag.setStyleSheet(f"color: {cor};")
             main = QLabel("—")
             main.setFont(_mono(9.5, QFont.Weight.DemiBold, scale))
             main.setAlignment(Qt.AlignmentFlag.AlignRight)
             sub = QLabel("")
             sub.setFont(_mono(8, QFont.Weight.Normal, scale))
-            sub.setStyleSheet(f"color: {theme.FAINT};")
+            sub.setStyleSheet(f"color: {theme.TXT};")
             grid.addWidget(tag, r, 0)
             grid.addWidget(main, r, 1)
             grid.addWidget(sub, r, 2)
@@ -143,11 +207,11 @@ class GameOverlay(QWidget):
 
     def place(self) -> None:
         self.adjustSize()
-        screen = QApplication.primaryScreen()
+        screen = self._screen()
         if screen is None:
             return
         area = screen.geometry()
-        m = theme.scaled(14)
+        m = max(8, int(area.height() * 0.012))
         w, h = self.width(), self.height()
         vert, _, horiz = self._ctl.settings.overlay_corner.partition("-")
         x = area.right() - w - m + 1 if horiz == "right" else area.left() + m
@@ -165,47 +229,71 @@ class GameOverlay(QWidget):
             now = m.fps_now or m.fps_avg
             self._fps.setText(units.integer(now))
             self._fps.setStyleSheet(f"color: {theme.fps_color(now)};")
-            parts = []
+            # Cada numero na sua cor, a mesma do painel: cinza para tudo era o que
+            # tornava o 1% low ilegivel por cima do jogo.
+            parts = [_chunk("méd", units.integer(m.fps_avg), theme.FPS)]
             if "low1" in metrics:
-                parts.append(f"1% {units.integer(m.low_1)}")
+                parts.append(_chunk("1%", units.integer(m.low_1), theme.WARN))
             if "low01" in metrics:
-                parts.append(f".1% {units.integer(m.low_01)}")
+                parts.append(_chunk(".1%", units.integer(m.low_01), theme.BAD))
             if "frametime" in metrics:
-                parts.append(f"{units.ms(m.ft_avg, 1)}")
-            self._sub.setText("   ".join(parts))
+                parts.append(_chunk("ft", units.ms(m.ft_avg, 1), theme.FRAME))
+            self._sub.setText("&nbsp;&nbsp;".join(parts))
         else:
             self._fps.setText("—")
             self._fps.setStyleSheet(f"color: {theme.MUTE};")
-            self._sub.setText("sem jogo em foco")
+            self._sub.setText(f"<span style='color:{theme.FAINT}'>sem jogo em foco</span>")
 
         d = self._ctl.last_data() or {}
         g = d.get("gpu") or {}
+        # A coluna da direita carrega carga e frequencia: temperatura sozinha nao
+        # diz se a peca esta' entregando clock ou se afundou por limite termico.
         if "cpu" in self._rows:
             temp = d.get("cpu_temp")
             self._set("cpu", units.temp(temp), theme.temp_color(temp),
-                      f"{d.get('cpu_pct', 0):.0f}%")
+                      f"{d.get('cpu_pct', 0):.0f}%  {_ghz(d.get('cpu_mhz'))}")
         if "gpu" in self._rows:
             temp = g.get("temp")
             self._set("gpu", units.temp(temp), theme.temp_color(temp),
-                      f"{g.get('usage', 0):.0f}%")
+                      f"{g.get('usage', 0):.0f}%  {_ghz(g.get('freq'))}")
         if "ram" in self._rows:
-            self._set("ram", f"{d.get('ram_pct', 0):.0f}%",
+            self._set("ram",
+                      f"{d.get('ram_used', 0):.1f}/{d.get('ram_total', 0):.0f}GB",
                       theme.load_color(d.get("ram_pct")),
-                      f"{d.get('ram_used', 0):.1f}G")
+                      f"{d.get('ram_pct', 0):.0f}%  {_ghz(d.get('ram_freq'))}")
         if "vram" in self._rows:
-            self._set("vram", units.percent(g.get("vram_pct")),
+            self._set("vram",
+                      f"{g.get('vram_used', 0) / 1024:.1f}/"
+                      f"{g.get('vram_total', 0) / 1024:.1f}GB",
                       theme.load_color(g.get("vram_pct")),
-                      f"{g.get('vram_used', 0) / 1024:.1f}G")
-        if "watts" in self._rows:
-            total = (d.get("cpu_watts") or 0) + (g.get("watts") or 0)
-            self._set("watts", f"{total:.0f}W", theme.TXT,
-                      f"G {units.watts(g.get('watts'), 0)}")
+                      f"{units.percent(g.get('vram_pct'))}  {_ghz(g.get('mem_freq'))}")
+        if "wcpu" in self._rows:
+            self._set("wcpu", units.watts(d.get("cpu_watts"), 0), theme.TXT, "")
+        if "wgpu" in self._rows:
+            watts = g.get("watts")
+            limite = g.get("power_limit")
+            self._set("wgpu", units.watts(watts, 0), theme.TXT,
+                      f"de {units.watts(limite, 0)}" if limite else "")
         if "ping" in self._rows:
             ping = d.get("ping_ms")
-            self._set("ping", units.ms(ping, 0), theme.ping_color(ping), "")
+            self._set("ping", units.ms(ping, 0), theme.ping_color(ping),
+                      f"±{units.ms(d.get('ping_jitter'), 1)}")
         if "clock" in self._rows:
             self._set("clock", datetime.now().strftime("%H:%M"), theme.TXT, "")
+        if self._graph is not None:
+            self._graph.set_values(self._ctl.history.values("fps"))
+        # Jogo mudou de monitor: refaz na escala da tela nova antes de reposicionar.
+        if self._screen_key() != self._built_for:
+            self.rebuild()
+            return
         self.place()
+
+    def _screen_key(self) -> tuple:
+        screen = self._screen()
+        if screen is None:
+            return ()
+        return (screen.name(), int(screen.logicalDotsPerInch()),
+                screen.geometry().width(), screen.geometry().height())
 
     def _set(self, key: str, main: str, color: str, sub: str) -> None:
         row = self._rows.get(key)

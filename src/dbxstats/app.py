@@ -9,6 +9,7 @@ import json
 import time
 from datetime import datetime
 from functools import partial
+from pathlib import Path
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
@@ -18,6 +19,7 @@ from .config import Settings
 from .core import export
 from .core import frames as fr
 from .core.series import Accumulator, History
+from .core.session import GameSession
 from .platform import autostart, win
 from .platform import displays as dsp
 from .platform.gamepad import GamepadMouse
@@ -38,6 +40,8 @@ _log = log.get("app")
 
 FAST_TICK_MS = 120
 FOCUS_TICK_MS = 500
+GAME_EXIT_GRACE_S = 5.0
+"""Confirma que o jogo fechou mesmo antes de mexer nas telas."""
 BENCH_HISTORY_MAX = 40
 
 # metricas do snapshot que alimentam graficos e acumulador da sessao
@@ -92,6 +96,13 @@ class App:
         self._dialog: SettingsDialog | None = None
         self._hotkeys: HotkeyManager | None = None
         self._t_sys: QTimer | None = None
+        self._display_boot: list[dict] = []
+        self._session: GameSession | None = None
+        self._session_restore: list[dict] | None = None
+        self._session_name = ""
+        self._game_pid = 0
+        self._game_name = ""
+        self._game_seen_at = 0.0
         self._alerted: dict[str, bool] = {}
         self._tray_hinted = False
 
@@ -116,6 +127,9 @@ class App:
         return self.qt.exec()
 
     def boot(self) -> None:
+        # Fotografia das telas antes de qualquer coisa: e' para onde tudo volta
+        # quando o app fecha, para nao deixar a maquina num arranjo de TV.
+        self._display_boot = dsp.snapshot()
         self.lhm.start()
         self.gpu.start_smi()
         self.ping.start()
@@ -129,8 +143,9 @@ class App:
         self._apply_overlay()
         self._init_timers()
         self._init_hotkeys()
-        if self.settings.gamepad_enabled:
-            self.gamepad.start()
+        # A escuta do controle fica sempre de pe'. Ela nao mexe em nada sozinha:
+        # o modo mouse so' assume quando o usuario aperta Back + Start no controle.
+        self.gamepad.start()
         autostart.set_enabled(self.settings.autostart)
 
     def _init_timers(self) -> None:
@@ -149,6 +164,12 @@ class App:
         self._t_clock = QTimer(self.qt)
         self._t_clock.timeout.connect(self.window.tick_clock)
         self._t_clock.start(1000)
+
+        # Varredura de processo custa caro, mas so' roda com sessao aberta — e a
+        # espera depois do jogo fechar e' o que o usuario sente, entao 1 s.
+        self._t_session = QTimer(self.qt)
+        self._t_session.timeout.connect(self._tick_session)
+        self._t_session.start(1000)
 
     def _init_hotkeys(self) -> None:
         self._hotkeys = HotkeyManager()
@@ -174,7 +195,7 @@ class App:
             profile = self.settings.display_profiles[slot]
         except IndexError:
             return
-        ok, err = dsp.apply_profile(profile["entries"])
+        ok, err = dsp.apply_profile(profile["entries"], profile.get("topology", ""))
         if ok:
             _log.info("perfil de tela '%s' aplicado", profile["name"])
         else:
@@ -190,6 +211,7 @@ class App:
         if self._hotkeys is not None:
             self._hotkeys.unregister_all()
         self.gamepad.stop()
+        self._restore_displays()
         self.collector.stop()
         self.procs.stop()
         self.ping.stop()
@@ -200,6 +222,179 @@ class App:
         self.tray.hide()
         self.lhm.close()
         self.qt.quit()
+
+    # ── atalhos de jogo ──────────────────────────────────────────────────────
+    def play_item(self, item: dict) -> tuple[bool, str]:
+        """Prepara as telas, abre o jogo e agenda a volta para quando ele fechar."""
+        antes = dsp.snapshot()
+        trocou, msg = self._apply_target(item.get("target", ""))
+
+        session = GameSession(item["path"], item.get("args", ""))
+        started, err = session.start()
+        if not started:
+            if trocou and item.get("restore", True):
+                dsp.apply_profile(antes)
+            return False, f"não consegui abrir: {err}"
+
+        self._session = session
+        # So' promete devolver as telas se elas realmente mudaram por causa daqui.
+        self._session_restore = antes if (trocou and item.get("restore", True)) else None
+        self._session_name = item.get("name") or Path(item["path"]).stem
+        aviso = f"{self._session_name} abrindo"
+        return True, f"{aviso} — {msg}" if msg else aviso
+
+    def _apply_target(self, target: str) -> tuple[bool, str]:
+        """Traduz o alvo do atalho numa mudanca de tela. Sem alvo, nao mexe.
+
+        Falhar aqui nunca cancela o jogo: quem clicou em Jogar quer jogar. O que
+        deu errado vira aviso, e o primeiro item do retorno diz se alguma coisa
+        mudou de fato — so' isso e' que gera promessa de devolver depois.
+        """
+        if not target:
+            return False, ""
+        tipo, _, valor = target.partition(":")
+        if tipo == "primary":
+            alvo = next((d for d in dsp.list_displays(with_modes=False)
+                         if d.monitor_id == valor), None)
+            if alvo is None:
+                return False, "a tela desse atalho não está conectada, abri assim mesmo"
+            ok, err = dsp.set_primary(alvo.device)
+            return (True, f"{alvo.name} virou a primária") if ok else (False, err)
+        if tipo == "profile":
+            profile = next((p for p in self.settings.display_profiles
+                            if p["name"] == valor), None)
+            if profile is None:
+                return False, f"perfil '{valor}' não existe mais, abri assim mesmo"
+            ok, err = dsp.apply_profile(profile["entries"], profile.get("topology", ""))
+            return (True, f"perfil '{valor}' aplicado") if ok else (False, err)
+        return False, ""
+
+    def _tick_session(self) -> None:
+        """Vigia o jogo — o que abrimos e o que o usuario abriu por fora."""
+        self._watch_any_game()
+        session = self._session
+        if session is None:
+            return
+        self._adopt_game_process(session)
+        if session.running():
+            return
+
+        self._session = None
+        restore = self._session_restore
+        self._session_restore = None
+        if restore is None:
+            return
+        restore = self._normal_layout() or restore
+        if not session.ever_started:
+            # Nunca reconhecemos o jogo. Trocar de tela agora seria pior que nao
+            # fazer nada: se ele estiver rodando, a mudanca cai em cima do jogo.
+            _log.warning("nao consegui acompanhar o processo de %s; telas ficam como estao",
+                         self._session_name)
+            self.notify("DBX Stats",
+                        f"não consegui acompanhar {self._session_name}. "
+                        "As telas ficam como estão — use a aba Telas quando terminar.")
+            return
+        try:
+            if not _same_layout(restore, dsp.snapshot()):
+                dsp.apply_profile(restore)
+                self.notify("DBX Stats", f"{self._session_name} fechou — telas de volta")
+        except Exception:
+            _log.exception("falha devolvendo as telas depois do jogo")
+
+    def _watch_any_game(self) -> None:
+        """Volta ao arranjo padrao quando QUALQUER jogo fecha.
+
+        O atalho do app so' cobre o que foi aberto por ele. Na pratica o jogo
+        entra por fora — pelo launcher da loja, pelo atalho da area de trabalho —
+        e a TV ficava ligada depois de fechar. Aqui a regra e' simples: enquanto
+        houver jogo em tela cheia apresentando quadros, guarda o pid; quando esse
+        processo morre e as telas nao estao no padrao, devolve o padrao.
+        """
+        if not self.settings.display_restore_after_game:
+            return
+        agora = time.monotonic()
+        pid = self._fg_pid if self._fg_fullscreen else 0
+        if pid and self.fps.stream(pid) is not None:
+            nome = _process_name(pid)
+            if nome and nome.lower() not in _NOT_A_GAME:
+                self._game_pid = pid
+                self._game_name = nome
+                self._game_seen_at = agora
+                return
+
+        if not self._game_pid:
+            return
+        if _pid_alive(self._game_pid):
+            self._game_seen_at = agora
+            return
+        if agora - self._game_seen_at < GAME_EXIT_GRACE_S:
+            return
+
+        nome, self._game_name = self._game_name, ""
+        self._game_pid = 0
+        alvo = self._normal_layout()
+        if alvo is None or _same_layout(alvo, dsp.snapshot()):
+            return
+        ok, err = dsp.apply_profile(alvo, self._normal_topology())
+        _log.info("%s fechou; telas de volta ao padrao (%s)", nome, "ok" if ok else err)
+        if ok:
+            self.notify("DBX Stats", f"{nome} fechou — telas de volta ao padrão")
+
+    def _normal_topology(self) -> str:
+        nome = self.settings.display_default_profile
+        profile = next((p for p in self.settings.display_profiles
+                        if p["name"] == nome), None)
+        return profile.get("topology", "") if profile else ""
+
+    def _normal_layout(self) -> list[dict] | None:
+        """Entradas do perfil marcado como padrao, se houver um."""
+        nome = self.settings.display_default_profile
+        if not nome:
+            return None
+        profile = next((p for p in self.settings.display_profiles
+                        if p["name"] == nome), None)
+        return profile["entries"] if profile else None
+
+    def _adopt_game_process(self, session) -> None:
+        """Descobre o processo real do jogo e ensina a sessao a segui-lo.
+
+        Atalho de loja (.url, .lnk de protocolo) abre o cliente, e o jogo sobe
+        depois com outro nome — o nome do atalho nao serve de nada. Quem sabe a
+        resposta e' o que ja' esta' na mao: a janela em tela cheia em foco, com o
+        PresentMon confirmando que ela esta' apresentando quadros.
+        """
+        if session.adopted or not self._fg_fullscreen or not self._fg_pid:
+            return
+        stream = self.fps.stream(self._fg_pid)
+        nome = stream.app if stream is not None else _process_name(self._fg_pid)
+        if not nome or nome.lower() in _NOT_A_GAME:
+            return
+        session.watch({nome})
+        session.adopted = True
+        _log.info("sessao '%s' seguindo o processo %s", self._session_name, nome)
+
+    def _restore_displays(self) -> None:
+        """Devolve as telas ao arranjo de quando o app abriu.
+
+        Perfil de TV apaga os monitores da mesa. Fechar o app com a maquina nesse
+        estado deixa o usuario sem imagem onde ele esta' — e sem o app para
+        desfazer. Entao a volta e' automatica, e so' acontece se algo mudou.
+        """
+        if not self.settings.display_restore_on_exit:
+            return
+        # Fechar com jogo aberto volta para o estado de antes do jogo, que e' mais
+        # recente que o do boot — e' o que o usuario reconhece como "o normal".
+        alvo = self._normal_layout() or self._session_restore or self._display_boot
+        if not alvo:
+            return
+        try:
+            if _same_layout(alvo, dsp.snapshot()):
+                return
+            ok, err = dsp.apply_profile(alvo)
+            _log.info("telas restauradas ao fechar" if ok
+                      else f"nao consegui restaurar as telas: {err}")
+        except Exception:
+            _log.exception("falha restaurando as telas ao fechar")
 
     # ── timers ───────────────────────────────────────────────────────────────
     def _tick_system(self) -> None:
@@ -519,6 +714,40 @@ class App:
             return None
         return export.export_frames(self._bench_result["samples"],
                                     self._bench_result["game"])
+
+
+_NOT_A_GAME = {
+    "explorer.exe", "dwm.exe", "applicationframehost.exe", "shellexperiencehost.exe",
+    "searchhost.exe", "startmenuexperiencehost.exe", "textinputhost.exe",
+    "pythonw.exe", "dbx-stats.exe", "dbxstats.exe",
+}
+"""Janelas que podem ficar em tela cheia sem serem o jogo que acabamos de abrir."""
+
+
+def _process_name(pid: int) -> str:
+    try:
+        import psutil
+        return psutil.Process(pid).name()
+    except Exception:
+        return ""
+
+
+def _pid_alive(pid: int) -> bool:
+    try:
+        import psutil
+        return psutil.pid_exists(pid)
+    except Exception:
+        return False
+
+
+def _same_layout(a: list[dict], b: list[dict]) -> bool:
+    """Compara dois retratos de tela pelo que importa: quem esta' ligada e como."""
+    def chave(entries: list[dict]) -> set:
+        return {(e.get("monitor_id") or e.get("device"), bool(e.get("active")),
+                 bool(e.get("primary")), tuple(e.get("position") or ()),
+                 tuple(e.get("mode") or ()))
+                for e in entries}
+    return chave(a) == chave(b)
 
 
 def _summary_row(m: fr.FrameMetrics) -> dict:

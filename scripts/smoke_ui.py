@@ -9,8 +9,14 @@ import math
 import os
 import random
 import sys
+import tempfile
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# Dados isolados: script de desenvolvimento nunca pode gravar por cima do
+# settings.json de verdade (ja' apagou atalhos de jogo uma vez).
+os.environ.setdefault("DBXSTATS_DATA_DIR",
+                      os.path.join(tempfile.gettempdir(), "dbxstats-dev"))
+os.environ.setdefault("DBXSTATS_NO_FILE_LOG", "1")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
 from PySide6.QtGui import QPixmap  # noqa: E402
@@ -263,6 +269,26 @@ def main() -> int:
             import traceback
             failures.append(f"{cls.key} (sem jogo): {e}\n{traceback.format_exc()}")
     print("  cenario sem jogo ok")
+
+    # popup de confirmar telas: conta pra tras e reverte sozinho no fim
+    from dbxstats.ui.confirm import ConfirmRevertDialog
+    try:
+        dlg = ConfirmRevertDialog("1920x1080 @ 180 Hz", 3)
+        pix = QPixmap(dlg.sizeHint())
+        dlg.render(pix)
+        dlg._tick()
+        dlg._tick()
+        dlg._tick()
+        if dlg._kept:
+            failures.append("confirm: devia ter revertido sozinho ao fim do relogio")
+        dlg2 = ConfirmRevertDialog("teste", 5)
+        dlg2._keep()
+        if not dlg2._kept:
+            failures.append("confirm: botao Manter nao marcou a escolha")
+        print("  popup de telas  ok")
+    except Exception as e:  # noqa: BLE001
+        import traceback
+        failures.append(f"confirm: {e}\n{traceback.format_exc()}")
 
     theme.set_scale(1.0)
     if failures:

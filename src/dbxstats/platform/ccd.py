@@ -284,19 +284,58 @@ def _source_key(path: PATH_INFO) -> tuple:
     return (path.sourceInfo.adapterId.key(), path.sourceInfo.id)
 
 
+def _candidate(cfg: Config, monitor_path: str, used: set[tuple]) -> PATH_INFO | None:
+    """Melhor caminho inativo para essa tela.
+
+    Prefere um com origem livre, mas aceita conflito: `_rebuild` remaneja a
+    origem e o `SDC_ALLOW_CHANGES` deixa o Windows ajustar o resto. Recusar de
+    saida era o que fazia a segunda tela ficar apagada ao voltar do jogo.
+    """
+    reserva = None
+    for i in range(cfg.path_count):
+        path = cfg.paths[i]
+        if path.active:
+            continue
+        _, device_path = target_name(path)
+        if device_path != monitor_path:
+            continue
+        if _source_key(path) not in used:
+            return path
+        if reserva is None:
+            reserva = path
+    return reserva
+
+
+def _free_source(adapter, usados: set[tuple]) -> int:
+    chave = adapter.key()
+    for sid in range(16):
+        if (chave, sid) not in usados:
+            return sid
+    return 0
+
+
 def _rebuild(chosen: list[PATH_INFO]) -> Config:
     """Monta uma topologia so' com os caminhos escolhidos, sem fixar modos.
 
     Os indices de modo vao como invalidos de proposito: assim o Windows escolhe
     resolucao e posicao coerentes sozinho. Tentar ditar os modos aqui e' o que
     torna a chamada fragil, porque qualquer combinacao invalida derruba tudo.
+
+    Duas telas nao podem sair da mesma origem (fora do modo clone). Quando os
+    caminhos disponiveis colidem, a origem repetida e' trocada por uma livre —
+    sem isso a segunda tela simplesmente nao acende, que era o motivo de voltar
+    do jogo com o ultrawide apagado.
     """
     array = (PATH_INFO * len(chosen))()
+    usados: set[tuple] = set()
     for i, path in enumerate(chosen):
         array[i] = path
         array[i].flags |= DISPLAYCONFIG_PATH_ACTIVE
         array[i].sourceInfo.modeInfoIdx = DISPLAYCONFIG_PATH_MODE_IDX_INVALID
         array[i].targetInfo.modeInfoIdx = DISPLAYCONFIG_PATH_MODE_IDX_INVALID
+        if _source_key(array[i]) in usados:
+            array[i].sourceInfo.id = _free_source(array[i].sourceInfo.adapterId, usados)
+        usados.add(_source_key(array[i]))
     return Config(array, (MODE_INFO * 0)(), len(chosen), 0)
 
 
@@ -327,20 +366,9 @@ def set_active(monitor_path: str, active: bool) -> tuple[bool, str]:
         used.add(_source_key(path))
 
     if active and not already:
-        candidate = None
-        for i in range(cfg.path_count):
-            path = cfg.paths[i]
-            if path.active:
-                continue
-            _, device_path = target_name(path)
-            if device_path != monitor_path:
-                continue
-            if _source_key(path) in used:
-                continue
-            candidate = path
-            break
+        candidate = _candidate(cfg, monitor_path, used)
         if candidate is None:
-            return False, "nao ha' saida livre para essa tela"
+            return False, "essa tela nao aparece mais na lista de caminhos do Windows"
         chosen.append(candidate)
 
     if not chosen:
@@ -379,17 +407,12 @@ def set_topology(wanted: list[str]) -> tuple[bool, str]:
         used.add(_source_key(path))
 
     for device_path in list(pending):
-        for i in range(cfg.path_count):
-            path = cfg.paths[i]
-            if path.active:
-                continue
-            _, found = target_name(path)
-            if found != device_path or _source_key(path) in used:
-                continue
-            chosen.append(path)
-            used.add(_source_key(path))
-            pending.remove(device_path)
-            break
+        candidate = _candidate(cfg, device_path, used)
+        if candidate is None:
+            continue
+        chosen.append(candidate)
+        used.add(_source_key(candidate))
+        pending.remove(device_path)
 
     if pending:
         _log.warning("telas do perfil sem caminho livre: %s", pending)

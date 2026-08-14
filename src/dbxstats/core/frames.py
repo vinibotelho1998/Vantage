@@ -35,11 +35,21 @@ def _fps(ms: float | None) -> float | None:
     return 1000.0 / ms
 
 
+MIN_LOW_SAMPLES = 3
+"""Piso de quadros na media dos piores.
+
+Com 1400 quadros na janela, 0,1% da' um unico quadro — e ai' a metrica vira "o
+pior frame da janela", que pula a cada engasgo isolado e nao descreve mais a
+experiencia. Tres quadros e' o minimo para o numero significar alguma coisa.
+"""
+
+
 def _worst_avg(ordered_desc: list[float], fraction: float) -> float | None:
     """Media dos piores `fraction` frametimes (definicao usada em reviews de hardware)."""
     if not ordered_desc:
         return None
-    count = max(1, int(len(ordered_desc) * fraction))
+    count = min(len(ordered_desc),
+                max(MIN_LOW_SAMPLES, int(len(ordered_desc) * fraction)))
     return sum(ordered_desc[:count]) / count
 
 

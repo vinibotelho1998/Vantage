@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field, fields
+from pathlib import Path
 
 from . import log, paths
 
@@ -15,14 +16,15 @@ FPS_NOW_WINDOWS = (0.5, 1.0, 2.0)
 ACCENTS = ("cyan", "blue", "green", "purple", "orange", "red", "pink")
 CORNERS = ("top-left", "top-right", "bottom-left", "bottom-right")
 VIEWS = ("dashboard", "gaming", "cpu", "gpu", "memory", "network", "sensors",
-         "processes", "benchmark", "displays", "gamepad")
+         "processes", "benchmark", "launcher", "displays", "gamepad")
 
 GAMEPAD_BUTTONS = ("a", "b", "x", "y", "lb", "rb", "back", "start")
 
 OVERLAY_METRICS = [
-    ("fps", "FPS"), ("low1", "1% Low"), ("low01", "0.1% Low"), ("frametime", "Frametime"),
-    ("cpu", "CPU (uso/temp)"), ("gpu", "GPU (uso/temp)"), ("ram", "RAM"),
-    ("vram", "VRAM"), ("ping", "Ping"), ("watts", "Consumo"), ("clock", "Relógio"),
+    ("fps", "FPS"), ("graph", "Gráfico de FPS"), ("low1", "1% Low"),
+    ("low01", "0.1% Low"), ("frametime", "Frametime"), ("cpu", "CPU (uso/temp)"),
+    ("gpu", "GPU (uso/temp)"), ("ram", "RAM"), ("vram", "VRAM"),
+    ("ping", "Ping"), ("watts", "Consumo"), ("clock", "Relógio"),
 ]
 _OVERLAY_KEYS = {k for k, _ in OVERLAY_METRICS}
 
@@ -72,12 +74,13 @@ class Settings:
     chart_glow: bool = True
 
     # overlay
-    overlay_enabled: bool = False
+    overlay_enabled: bool = True
     overlay_corner: str = "top-left"
     overlay_opacity: float = 0.88
     overlay_scale: float = 1.0
     overlay_metrics: list[str] = field(
-        default_factory=lambda: ["fps", "low1", "frametime", "cpu", "gpu", "ram"])
+        default_factory=lambda: [k for k, _ in OVERLAY_METRICS])
+    """Vem completo de proposito: overlay pela metade nao serve para diagnosticar nada."""
     overlay_auto_game: bool = True
 
     # alertas
@@ -99,9 +102,25 @@ class Settings:
     """Cada perfil e' {"name", "hotkey", "entries": [...]}. Ver platform/displays.py."""
     display_confirm_seconds: int = 15
     """Segundos para desfazer sozinho se a tela nova nao der imagem. 0 desliga."""
+    display_restore_on_exit: bool = True
+    """Ao fechar, devolve as telas ao arranjo normal."""
+    display_restore_after_game: bool = True
+    """Quando um jogo fecha, devolve as telas ao perfil padrao — abriu por onde abriu."""
+    display_default_profile: str = ""
+    """Perfil que representa o 'meu normal'. Vazio = usa o estado de quando abriu.
+
+    E' para onde as telas voltam depois do jogo e ao fechar o app. Um perfil
+    escolhido a dedo e' mais confiavel que uma fotografia tirada num momento
+    qualquer, que pode ter pego a maquina ja' fora do arranjo de sempre.
+    """
+
+    # atalhos de jogo
+    launch_items: list[dict] = field(default_factory=list)
+    """Cada item e' {"name", "path", "args", "target", "restore"}. Ver ui/views/launcher.py."""
 
     # controle como mouse
-    gamepad_enabled: bool = False
+    gamepad_enabled: bool = True
+    """Obsoleto: a escuta e' sempre ligada. Mantido para nao invalidar settings antigos."""
     gamepad_speed: float = 1.0
     gamepad_deadzone: int = 8000
     gamepad_scroll_speed: float = 1.0
@@ -159,9 +178,15 @@ class Settings:
                            if c in _DASH_KEYS] or [k for k, _ in DASH_CARDS]
 
         self.display_confirm_seconds = int(_clamp(_num(self.display_confirm_seconds, 15), 0, 60))
+        self.launch_items = [i for i in
+                             (_clean_launch_item(i) for i in _as_list(self.launch_items))
+                             if i]
         self.display_profiles = [p for p in
                                  (_clean_profile(p) for p in _as_list(self.display_profiles))
                                  if p]
+        nomes = {p["name"] for p in self.display_profiles}
+        if str(self.display_default_profile) not in nomes:
+            self.display_default_profile = ""
 
         self.gamepad_speed = round(_clamp(_num(self.gamepad_speed, 1.0), 0.2, 4.0), 2)
         self.gamepad_scroll_speed = round(_clamp(_num(self.gamepad_scroll_speed, 1.0), 0.2, 4.0), 2)
@@ -216,6 +241,30 @@ def _as_list(v) -> list:
     return list(v) if isinstance(v, (list, tuple)) else []
 
 
+def _clean_launch_item(raw) -> dict | None:
+    """Valida um atalho de jogo vindo do disco.
+
+    `target` diz o que fazer com as telas antes de abrir: vazio nao mexe,
+    `primary:<monitor_id>` troca a primaria, `profile:<nome>` aplica um perfil.
+    """
+    if not isinstance(raw, dict):
+        return None
+    path = str(raw.get("path", "")).strip()
+    if not path:
+        return None
+    target = str(raw.get("target", "")).strip()
+    if target and not target.startswith(("primary:", "profile:")):
+        target = ""
+    name = str(raw.get("name", "")).strip() or Path(path).stem
+    return {
+        "name": name[:40],
+        "path": path,
+        "args": str(raw.get("args", "")),
+        "target": target,
+        "restore": bool(raw.get("restore", True)),
+    }
+
+
 def _clean_profile(raw) -> dict | None:
     """Valida um perfil de telas vindo do disco.
 
@@ -258,5 +307,9 @@ def _clean_profile(raw) -> dict | None:
         })
     if not any(e["active"] for e in entries):
         return None
-    return {"name": name[:40], "hotkey": str(raw.get("hotkey", "")), "entries": entries}
+    topology = str(raw.get("topology", "")).strip().lower()
+    if topology not in ("", "clone"):
+        topology = ""
+    return {"name": name[:40], "hotkey": str(raw.get("hotkey", "")),
+            "topology": topology, "entries": entries}
 
