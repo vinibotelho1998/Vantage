@@ -24,6 +24,7 @@ from .platform import autostart, win
 from .platform import displays as dsp
 from .platform.gamepad import GamepadMouse
 from .platform.hotkeys import MOD_ALT, MOD_CONTROL, HotkeyManager
+from .sensors import net as netmod
 from .sensors.collector import Collector
 from .sensors.fps import FpsEngine
 from .sensors.gpu import GpuReader
@@ -42,6 +43,8 @@ FAST_TICK_MS = 120
 FOCUS_TICK_MS = 500
 GAME_EXIT_GRACE_S = 5.0
 """Confirma que o jogo fechou mesmo antes de mexer nas telas."""
+SERVER_SCAN_TICKS = 5
+"""Ticks de sessao (1 s cada) entre buscas do servidor do jogo."""
 BENCH_HISTORY_MAX = 40
 
 # metricas do snapshot que alimentam graficos e acumulador da sessao
@@ -103,6 +106,7 @@ class App:
         self._game_pid = 0
         self._game_name = ""
         self._game_seen_at = 0.0
+        self._server_countdown = 1
         self._alerted: dict[str, bool] = {}
         self._tray_hinted = False
 
@@ -272,6 +276,7 @@ class App:
     def _tick_session(self) -> None:
         """Vigia o jogo — o que abrimos e o que o usuario abriu por fora."""
         self._watch_any_game()
+        self._follow_game_server()
         session = self._session
         if session is None:
             return
@@ -300,6 +305,26 @@ class App:
                 self.notify("DBX Stats", f"{self._session_name} fechou — telas de volta")
         except Exception:
             _log.exception("falha devolvendo as telas depois do jogo")
+
+    def _follow_game_server(self) -> None:
+        """Aponta o ping para o servidor do jogo em foco.
+
+        Latencia de DNS publico nao diz nada sobre a partida. Enumerar conexoes
+        de outro processo e' caro, entao so' de poucos em poucos segundos.
+        """
+        self._server_countdown -= 1
+        if self._server_countdown > 0:
+            return
+        self._server_countdown = SERVER_SCAN_TICKS
+        stream = self._stream
+        if stream is None:
+            self.ping.set_auto_target(None)
+            return
+        alvo = netmod.game_server(stream.pid)
+        if alvo is None:
+            self.ping.set_auto_target(None)
+            return
+        self.ping.set_auto_target(alvo[0], stream.app or "jogo")
 
     def _watch_any_game(self) -> None:
         """Volta ao arranjo padrao quando QUALQUER jogo fecha.

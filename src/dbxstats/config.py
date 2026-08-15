@@ -82,6 +82,12 @@ class Settings:
         default_factory=lambda: [k for k, _ in OVERLAY_METRICS])
     """Vem completo de proposito: overlay pela metade nao serve para diagnosticar nada."""
     overlay_auto_game: bool = True
+    overlay_refresh_hz: float = 3.0
+    """Quantas vezes por segundo os numeros trocam. Alto demais nao da' para ler."""
+    overlay_graph_seconds: int = 45
+    """Janela do grafico de FPS. Menos segundos = tracado mais aberto e mais liso."""
+    overlay_columns: int = 0
+    """0 decide sozinho pelo numero de metricas; 1 ou 2 forcam o formato."""
 
     # alertas
     alert_cpu_temp: int = 90
@@ -154,6 +160,9 @@ class Settings:
         self.fps_now_window = _nearest(_num(self.fps_now_window, 1.0), FPS_NOW_WINDOWS)
         self.overlay_opacity = round(_clamp(_num(self.overlay_opacity, 0.88), 0.3, 1.0), 2)
         self.overlay_scale = round(_clamp(_num(self.overlay_scale, 1.0), 0.7, 2.5), 2)
+        self.overlay_refresh_hz = round(_clamp(_num(self.overlay_refresh_hz, 3.0), 1.0, 10.0), 1)
+        self.overlay_graph_seconds = int(_clamp(_num(self.overlay_graph_seconds, 45), 10, 300))
+        self.overlay_columns = int(_clamp(_num(self.overlay_columns, 0), 0, 2))
         self.ping_port = int(_clamp(_num(self.ping_port, 53), 1, 65535))
         self.bench_seconds = int(_clamp(_num(self.bench_seconds, 60), 10, 3600))
 

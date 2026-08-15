@@ -1,6 +1,7 @@
 """Overlay in-game estilo RTSS: click-through, sempre no topo e configuravel."""
 from __future__ import annotations
 
+import time
 from datetime import datetime
 
 from PySide6.QtCore import QPoint, Qt
@@ -67,6 +68,7 @@ class GameOverlay(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self._rows: dict[str, tuple[QLabel, QLabel, QLabel]] = {}
         self._built_for: tuple = ()
+        self._painted = 0.0
         self._build()
 
     # ── tamanho ──────────────────────────────────────────────────────────────
@@ -114,21 +116,16 @@ class GameOverlay(QWidget):
         outer.addWidget(self._root)
 
         lay = QVBoxLayout(self._root)
-        m = int(11 * scale)
-        lay.setContentsMargins(m, int(8 * scale), m + 1, int(9 * scale))
-        lay.setSpacing(int(3 * scale))
+        pad = int(14 * scale)
+        lay.setContentsMargins(pad, int(11 * scale), pad, int(11 * scale))
+        lay.setSpacing(int(8 * scale))
 
         metrics = cfg.overlay_metrics
         if "fps" in metrics:
             head = QHBoxLayout()
-            head.setSpacing(int(7 * scale))
-            brand = QLabel("DBX")
-            brand.setFont(_mono(8.5, QFont.Weight.Bold, scale))
-            brand.setStyleSheet(f"color: {theme.accent_color(cfg.accent)};")
-            head.addWidget(brand)
-            head.addStretch(1)
+            head.setSpacing(int(14 * scale))
             self._fps = QLabel("—")
-            self._fps.setFont(_mono(23, QFont.Weight.Bold, scale))
+            self._fps.setFont(_mono(26, QFont.Weight.Bold, scale))
             self._fps.setStyleSheet(f"color: {theme.MUTE};")
             unit = QLabel("FPS")
             unit.setFont(_mono(7.5, QFont.Weight.Bold, scale))
@@ -136,45 +133,50 @@ class GameOverlay(QWidget):
             unit.setAlignment(Qt.AlignmentFlag.AlignBottom)
             head.addWidget(self._fps)
             head.addWidget(unit)
+            # Media e lows moram ao lado do numero grande: e' a leitura que se faz
+            # de um olho so' no meio da partida.
+            self._sub = QLabel("")
+            self._sub.setFont(_mono(8.5, QFont.Weight.DemiBold, scale))
+            self._sub.setAlignment(Qt.AlignmentFlag.AlignRight
+                                   | Qt.AlignmentFlag.AlignVCenter)
+            head.addStretch(1)
+            head.addWidget(self._sub)
             lay.addLayout(head)
         else:
             self._fps = QLabel()
-
-        self._sub = QLabel("")
-        self._sub.setFont(_mono(7.5, QFont.Weight.Normal, scale))
-        self._sub.setStyleSheet(f"color: {theme.FAINT};")
-        lay.addWidget(self._sub)
+            self._sub = QLabel("")
+            lay.addWidget(self._sub)
 
         # Numero sozinho nao mostra queda: o traco e' o que denuncia o engasgo que
-        # ja' passou. Mesma serie do painel, um ponto por segundo.
+        # ja' passou. Janela curta de proposito — o desenho fica mais liso.
         if "graph" in metrics:
-            self._graph = Sparkline(theme.FPS, height=int(38 * scale),
-                                    from_zero=True, line_width=2.2)
-            self._graph.setMinimumWidth(int(190 * scale))
+            self._graph = Sparkline(theme.FPS, height=int(46 * scale),
+                                    from_zero=True, line_width=2.4)
+            self._graph.setMinimumWidth(int(230 * scale))
             lay.addWidget(self._graph)
         else:
             self._graph = None
 
         line = QFrame()
         line.setFixedHeight(1)
-        line.setStyleSheet("background: rgba(255,255,255,24);")
+        line.setStyleSheet("background: rgba(255,255,255,22);")
         lay.addWidget(line)
 
         grid = QGridLayout()
-        grid.setContentsMargins(0, int(2 * scale), 0, 0)
-        grid.setHorizontalSpacing(int(8 * scale))
-        grid.setVerticalSpacing(int(2 * scale))
+        grid.setContentsMargins(0, int(3 * scale), 0, 0)
+        grid.setHorizontalSpacing(int(10 * scale))
+        grid.setVerticalSpacing(int(5 * scale))
         # Cada linha na cor da sua peca. Tudo cinza era o que fazia o overlay
-        # sumir por cima de cenario claro.
+        # sumir por cima de cenario claro. Potencia entra na linha da propria
+        # peca: "68 W" na linha CPU ja' diz tudo, nao precisa de rotulo proprio.
         linhas = (("cpu", "CPU", theme.CPU), ("gpu", "GPU", theme.GPU),
                   ("ram", "RAM", theme.RAM), ("vram", "VRAM", theme.DISK),
-                  ("wcpu", "W CPU", theme.CPU), ("wgpu", "W GPU", theme.GPU),
                   ("ping", "PING", theme.NET), ("clock", "HORA", theme.FPS))
-        wanted = [(k, lbl, cor) for k, lbl, cor in linhas
-                  if (k in metrics or (k in ("wcpu", "wgpu") and "watts" in metrics))]
+        wanted = [(k, lbl, cor) for k, lbl, cor in linhas if k in metrics]
         # Duas colunas quando ha' linha suficiente: torre estreita e alta rouba
         # muito mais canto de tela do que um bloco largo e baixo.
-        colunas = 2 if len(wanted) >= 5 else 1
+        colunas = cfg.overlay_columns or (2 if len(wanted) >= 5 else 1)
+        colunas = max(1, min(colunas, max(1, len(wanted))))
         por_coluna = -(-len(wanted) // colunas)
         for i, (key, text, cor) in enumerate(wanted):
             bloco, linha = divmod(i, por_coluna)
@@ -192,11 +194,22 @@ class GameOverlay(QWidget):
             grid.addWidget(main, linha, base + 1)
             grid.addWidget(sub, linha, base + 2)
             self._rows[key] = (tag, main, sub)
+        self._grid_cols = colunas
         for bloco in range(colunas):
             grid.setColumnStretch(bloco * 4 + 2, 1)
             if bloco + 1 < colunas:
-                grid.setColumnMinimumWidth(bloco * 4 + 3, int(14 * scale))
+                grid.setColumnMinimumWidth(bloco * 4 + 3, int(22 * scale))
         lay.addLayout(grid)
+
+        # Assinatura discreta no rodape: identifica sem disputar espaco com o dado.
+        rodape = QHBoxLayout()
+        rodape.setContentsMargins(0, 0, 0, 0)
+        marca = QLabel("dbx")
+        marca.setFont(_mono(6.5, QFont.Weight.Bold, scale))
+        marca.setStyleSheet(f"color: {theme.rgba(theme.accent_color(cfg.accent), 0.45)};")
+        rodape.addStretch(1)
+        rodape.addWidget(marca)
+        lay.addLayout(rodape)
 
     def rebuild(self) -> None:
         old = self.layout()
@@ -230,6 +243,14 @@ class GameOverlay(QWidget):
     # ── atualizacao ──────────────────────────────────────────────────────────
     def refresh(self) -> None:
         cfg = self._ctl.settings
+        # O controlador chama a 8 Hz para o overlay acompanhar o mouse e o topmost,
+        # mas numero trocando nessa velocidade nao da' para ler. O texto anda no
+        # ritmo escolhido nas configuracoes.
+        agora = time.monotonic()
+        if agora - self._painted < 1.0 / max(1.0, cfg.overlay_refresh_hz):
+            return
+        self._painted = agora
+
         metrics = cfg.overlay_metrics
         stream = self._ctl.active_stream()
 
@@ -255,16 +276,19 @@ class GameOverlay(QWidget):
 
         d = self._ctl.last_data() or {}
         g = d.get("gpu") or {}
+        watts_on = "watts" in metrics
         # A coluna da direita carrega carga e frequencia: temperatura sozinha nao
         # diz se a peca esta' entregando clock ou se afundou por limite termico.
         if "cpu" in self._rows:
             temp = d.get("cpu_temp")
             self._set("cpu", units.temp(temp), theme.temp_color(temp),
-                      f"{d.get('cpu_pct', 0):.0f}%  {_ghz(d.get('cpu_mhz'))}")
+                      f"{d.get('cpu_pct', 0):.0f}%  {_ghz(d.get('cpu_mhz'))}"
+                      + (f"  {units.watts(d.get('cpu_watts'), 0)}" if watts_on else ""))
         if "gpu" in self._rows:
             temp = g.get("temp")
             self._set("gpu", units.temp(temp), theme.temp_color(temp),
-                      f"{g.get('usage', 0):.0f}%  {_ghz(g.get('freq'))}")
+                      f"{g.get('usage', 0):.0f}%  {_ghz(g.get('freq'))}"
+                      + (f"  {units.watts(g.get('watts'), 0)}" if watts_on else ""))
         if "ram" in self._rows:
             self._set("ram",
                       f"{d.get('ram_used', 0):.1f}/{d.get('ram_total', 0):.0f}GB",
@@ -276,21 +300,20 @@ class GameOverlay(QWidget):
                       f"{g.get('vram_total', 0) / 1024:.1f}GB",
                       theme.load_color(g.get("vram_pct")),
                       f"{units.percent(g.get('vram_pct'))}  {_ghz(g.get('mem_freq'))}")
-        if "wcpu" in self._rows:
-            self._set("wcpu", units.watts(d.get("cpu_watts"), 0), theme.TXT, "")
-        if "wgpu" in self._rows:
-            watts = g.get("watts")
-            limite = g.get("power_limit")
-            self._set("wgpu", units.watts(watts, 0), theme.TXT,
-                      f"de {units.watts(limite, 0)}" if limite else "")
         if "ping" in self._rows:
             ping = d.get("ping_ms")
+            perda = d.get("packet_loss")
+            cor_perda = theme.BAD if (perda or 0) > 1 else theme.TXT
+            self._rows["ping"][2].setStyleSheet(f"color: {cor_perda};")
             self._set("ping", units.ms(ping, 0), theme.ping_color(ping),
-                      f"±{units.ms(d.get('ping_jitter'), 1)}")
+                      f"{perda:.0f}% perda" if perda is not None else "")
         if "clock" in self._rows:
             self._set("clock", datetime.now().strftime("%H:%M"), theme.TXT, "")
         if self._graph is not None:
-            self._graph.set_values(self._ctl.history.values("fps"))
+            # Menos segundos na tela = cada ponto mais largo = tracado mais liso.
+            valores = self._ctl.history.values("fps")
+            passo = max(0.05, float(cfg.update_interval))
+            self._graph.set_values(valores[-max(8, int(cfg.overlay_graph_seconds / passo)):])
         # Jogo mudou de monitor: refaz na escala da tela nova antes de reposicionar.
         if self._screen_key() != self._built_for:
             self.rebuild()

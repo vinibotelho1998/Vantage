@@ -665,7 +665,9 @@ class Sparkline(QWidget):
         fill.closeSubpath()
         grad = QLinearGradient(0, 0, 0, h)
         c0, c1 = QColor(self._color), QColor(self._color)
-        c0.setAlpha(88)
+        # Com o chao no zero a linha vive no alto, e o preenchimento cheio vira um
+        # bloco solido — mais leve ele volta a ser fundo, nao figura.
+        c0.setAlpha(46 if self._from_zero else 88)
         c1.setAlpha(0)
         grad.setColorAt(0.0, c0)
         grad.setColorAt(1.0, c1)

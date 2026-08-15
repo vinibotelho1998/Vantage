@@ -262,9 +262,16 @@ class SettingsDialog(QDialog):
         self.w_corner = _combo(_CORNERS, self._cfg.overlay_corner)
         op_row, self.w_opacity = _slider(30, 100, int(self._cfg.overlay_opacity * 100), "%")
         sc_row, self.w_oscale = _slider(70, 250, int(self._cfg.overlay_scale * 100), "%")
+        hz_row, self.w_ohz = _slider(10, 100, int(self._cfg.overlay_refresh_hz * 10), "")
+        gr_row, self.w_ograph = _slider(10, 300, int(self._cfg.overlay_graph_seconds), " s")
+        self.w_ocols = _combo([("Automático", 0), ("Uma coluna", 1), ("Duas colunas", 2)],
+                              self._cfg.overlay_columns)
         form.addRow("Canto da tela", self.w_corner)
         form.addRow("Opacidade", op_row)
         form.addRow("Tamanho", sc_row)
+        form.addRow("Formato", self.w_ocols)
+        form.addRow("Atualizações por segundo (x10)", hz_row)
+        form.addRow("Janela do gráfico", gr_row)
         lay.addLayout(form)
 
         lay.addWidget(_header("Métricas exibidas"))
@@ -356,6 +363,9 @@ class SettingsDialog(QDialog):
         c.overlay_corner = self.w_corner.currentData()
         c.overlay_opacity = self.w_opacity.value() / 100
         c.overlay_scale = self.w_oscale.value() / 100
+        c.overlay_refresh_hz = self.w_ohz.value() / 10
+        c.overlay_graph_seconds = self.w_ograph.value()
+        c.overlay_columns = self.w_ocols.currentData()
         c.overlay_metrics = [k for k, chk in self.overlay_checks.items() if chk.isChecked()]
 
         c.alerts_enabled = self.c_alerts.isChecked()
