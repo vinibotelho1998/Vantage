@@ -1,6 +1,8 @@
 """Tela de sensores: arvore completa do LibreHardwareMonitor com mín/méd/máx."""
 from __future__ import annotations
 
+import os
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor, QFont
 from PySide6.QtWidgets import (
@@ -77,9 +79,23 @@ class SensorsView(View):
         card.add(self.table, 1)
         root.addWidget(card, 1)
 
-        self.empty = label("Aguardando o LibreHardwareMonitor…", 9,
-                           QFont.Weight.Normal, theme.FAINT)
+        # Falha de sensor nao pode virar "aguardando" eterno: numa maquina nova
+        # e' justamente aqui que o app parece quebrado sem explicar nada.
+        self.empty = label("Procurando sensores…", 9, QFont.Weight.Normal, theme.FAINT)
+        self.empty.setWordWrap(True)
         root.addWidget(self.empty)
+
+        self.acoes = QHBoxLayout()
+        self.acoes.setSpacing(theme.scaled(8))
+        self.btn_retry = PillButton("Tentar de novo", theme.OK)
+        self.btn_retry.clicked.connect(self._retry)
+        self.btn_logs = PillButton("Abrir pasta de logs", theme.MUTE)
+        self.btn_logs.clicked.connect(self._open_logs)
+        self.acoes.addWidget(self.btn_retry)
+        self.acoes.addWidget(self.btn_logs)
+        self.acoes.addStretch(1)
+        root.addLayout(self.acoes)
+        self._mostrar_acoes(False)
 
         self._keys: list[str] = []
         self._rows: dict[str, int] = {}
@@ -94,12 +110,35 @@ class SensorsView(View):
     def on_settings_changed(self) -> None:
         self.export_btn.set_color(theme.accent_color(self.cfg.accent))
 
+    def _mostrar_acoes(self, visivel: bool) -> None:
+        self.btn_retry.setVisible(visivel)
+        self.btn_logs.setVisible(visivel)
+
+    def _retry(self) -> None:
+        self.app.lhm.start()
+        self.empty.setText("Tentando abrir os sensores de novo…")
+        self.empty.setStyleSheet(f"color: {theme.MUTE}; background: transparent;")
+
+    def _open_logs(self) -> None:
+        from ... import paths
+        os.startfile(str(paths.logs_dir()))  # noqa: S606
+
     def on_system(self, _d: dict) -> None:
         nodes = self.app.lhm.tree()
         if not nodes:
+            erro = getattr(self.app.lhm, "error", "")
+            if erro:
+                self.empty.setText("Não consegui ler os sensores.\n" + erro)
+                self.empty.setStyleSheet(f"color: {theme.WARN}; background: transparent;")
+                self._mostrar_acoes(True)
+            else:
+                self.empty.setText("Procurando sensores…")
+                self.empty.setStyleSheet(f"color: {theme.FAINT}; background: transparent;")
             self.empty.setVisible(True)
+            self.count_badge.update_badge("sem sensores", theme.WARN if erro else theme.FAINT)
             return
         self.empty.setVisible(False)
+        self._mostrar_acoes(False)
         needle = self.filter.text().strip().lower()
         if needle:
             nodes = [n for n in nodes

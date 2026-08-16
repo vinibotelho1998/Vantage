@@ -65,6 +65,24 @@ def _gpu_score(g: dict) -> tuple:
     return (rank, vram, g.get("usage", 0) or 0)
 
 
+def _explicar(erro: Exception) -> str:
+    """Traduz a falha do LHM no que o usuario precisa fazer."""
+    texto = f"{type(erro).__name__}: {erro}".lower()
+    if "clr" in texto and "no module" in texto:
+        return ("A ponte com o .NET (pythonnet) nao carregou. "
+                "Reinstale o DBX Stats para repor as dependencias.")
+    if "hostfxr" in texto or "runtimeconfig" in texto or "coreclr" in texto:
+        return ("O .NET Desktop Runtime nao esta instalado. "
+                "Instale o .NET Desktop Runtime 8 (x64) e abra o app de novo.")
+    if "access" in texto or "denied" in texto or "0x80070005" in texto:
+        return ("Sem permissao para ler os sensores. "
+                "Abra o DBX Stats como administrador.")
+    if "librehardwaremonitorlib" in texto or "could not add reference" in texto:
+        return ("Os arquivos do LibreHardwareMonitor nao foram encontrados. "
+                "Reinstale o DBX Stats.")
+    return f"{type(erro).__name__}: {erro}"
+
+
 class LhmReader:
     def __init__(self) -> None:
         self._computer = None
@@ -86,6 +104,12 @@ class LhmReader:
         threading.Thread(target=self._init, name="lhm-init", daemon=True).start()
 
     def _init(self) -> None:
+        """Sobe o LibreHardwareMonitor.
+
+        Falhar aqui e' o modo mais comum de o app "nao pegar nada" em outra
+        maquina, e cada causa pede uma acao diferente do usuario. Por isso o erro
+        vira uma frase que diz o que fazer, e nao so' a excecao crua.
+        """
         try:
             lhm_dir = str(paths.lhm_dir())
             if lhm_dir not in sys.path:
@@ -110,7 +134,7 @@ class LhmReader:
                 self._ready = True
             _log.info("LHM aberto (%s)", lhm_dir)
         except Exception as e:
-            self._error = str(e)
+            self._error = _explicar(e)
             _log.exception("falha inicializando LHM")
 
     def read(self) -> dict:

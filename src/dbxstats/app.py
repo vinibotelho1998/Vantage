@@ -346,8 +346,6 @@ class App:
         houver jogo em tela cheia apresentando quadros, guarda o pid; quando esse
         processo morre e as telas nao estao no padrao, devolve o padrao.
         """
-        if not self.settings.display_restore_after_game:
-            return
         agora = time.monotonic()
         pid = self._fg_pid if self._fg_fullscreen else 0
         if pid and self.fps.stream(pid) is not None:
@@ -368,6 +366,8 @@ class App:
 
         nome, self._game_name = self._game_name, ""
         self._game_pid = 0
+        if not self.settings.display_restore_after_game:
+            return
         alvo = self._normal_layout()
         if alvo is None or _same_layout(alvo, dsp.snapshot()):
             return
@@ -662,12 +662,25 @@ class App:
             self._overlay.rebuild()
         self._sync_overlay_visibility()
 
+    def game_in_focus(self) -> bool:
+        """Ha' um jogo de verdade na tela agora.
+
+        "Alguem apresentando quadros" nao serve como criterio: no desktop o
+        navegador e o Discord tambem apresentam, e o overlay aparecia por cima
+        da area de trabalho. Jogo e' o processo em foco que esta' apresentando
+        quadros — em tela cheia, ou em janela mas com o foco na mao dele.
+        """
+        pid = self._fg_pid
+        if not pid or self.fps.stream(pid) is None:
+            return False
+        return _process_name(pid).lower() not in _NOT_A_GAME
+
     def _sync_overlay_visibility(self) -> None:
         if self._overlay is None:
             return
         show = True
         if self.settings.overlay_auto_game:
-            show = self._stream is not None or self._fg_fullscreen
+            show = self.game_in_focus()
         if show and not self._overlay.isVisible():
             self._overlay.show()
         elif not show and self._overlay.isVisible():
