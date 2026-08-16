@@ -90,6 +90,9 @@ Filename: "{tmp}\PawnIO_setup.exe"; Parameters: "-install -silent"; StatusMsg: "
 ; o pedido de permissao.
 Filename: "{app}\{#MyAppExeName}"; Description: "Abrir o {#MyAppName} agora"; Flags: nowait postinstall skipifsilent shellexec
 
+[Messages]
+FinishedLabel=A instalação do [name] terminou.%n%nAbra pelo atalho na área de trabalho — ele pede permissão de administrador, que é o necessário para ler os sensores e capturar o FPS.%n%nSe as temperaturas da CPU não aparecerem, reinicie o computador: o driver de sensores (PawnIO) só carrega depois de reiniciar.
+
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\_internal\__pycache__"
 
@@ -112,25 +115,53 @@ begin
     Result := '';
 end;
 
+function DotnetRoot: string;
+begin
+  Result := ExpandConstant('{commonpf}\dotnet');
+  if not DirExists(Result) then
+    Result := ExpandConstant('{commonpf64}\dotnet');
+end;
+
+// Um runtime instalado e' uma pasta com o numero da versao dentro de
+// dotnet\shared\Microsoft.WindowsDesktop.App — e' assim que o proprio .NET
+// resolve o que existe na maquina, entao e' o que conferimos.
+//
+// Ja' tentei duas rotas piores: procurar dotnet.exe em System32 (ele nunca
+// esta la', a checagem dava False sempre e o runtime era reinstalado em toda
+// instalacao) e ler o registro em InstalledVersions\x64\sharedfx (a subchave
+// nao existe nem numa maquina com 6.0.36 e 8.0.29 instalados).
 function IsWindowsDesktopRuntimeInstalled(const MajorPrefix: string): Boolean;
 var
+  Base: string;
+  Rec: TFindRec;
   ResultCode: Integer;
-  DotnetExe: string;
   OutFile: string;
-  Content: string;
 begin
   Result := False;
-  DotnetExe := ExpandConstant('{sys}\dotnet.exe');
-  if not FileExists(DotnetExe) then
-    Exit;
+  Base := DotnetRoot + '\shared\Microsoft.WindowsDesktop.App';
 
-  OutFile := ExpandConstant('{tmp}\dotnet_runtimes.txt');
-  if Exec(ExpandConstant('{cmd}'), '/C ""' + DotnetExe + '" --list-runtimes > "' + OutFile + '""', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  if DirExists(Base) and FindFirst(Base + '\*', Rec) then
   begin
-    Content := ReadTextFileSafe(OutFile);
-    if Pos('Microsoft.WindowsDesktop.App ' + MajorPrefix, Content) > 0 then
-      Result := True;
+    try
+      repeat
+        if (Rec.Attributes and FILE_ATTRIBUTE_DIRECTORY <> 0)
+           and (Pos(MajorPrefix, Rec.Name) = 1) then
+        begin
+          Result := True;
+          Exit;
+        end;
+      until not FindNext(Rec);
+    finally
+      FindClose(Rec);
+    end;
   end;
+
+  // Reserva para instalacao fora do lugar padrao (DOTNET_ROOT customizado):
+  // pergunta ao proprio dotnet, se ele estiver no PATH.
+  OutFile := ExpandConstant('{tmp}\dotnet_runtimes.txt');
+  if Exec(ExpandConstant('{cmd}'), '/C dotnet --list-runtimes > "' + OutFile + '" 2>nul', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    Result := Pos('Microsoft.WindowsDesktop.App ' + MajorPrefix,
+                  ReadTextFileSafe(OutFile)) > 0;
 end;
 
 // Configuracoes, perfis de tela e atalhos de jogo ficam em %APPDATA%. Apagar
