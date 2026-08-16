@@ -107,6 +107,7 @@ class StubApp:
                        "Load", "%", 41.0),
         ])
         self.procs = _StubProcs()
+        self.ping = _StubPing()
         self._bench_result = {
             "_rev": 1, "game": "game.exe", "metrics": self._stream.metrics,
             "frametimes": [s[1] for s in self._samples], "samples": self._samples,
@@ -200,6 +201,11 @@ class _StubLhm:
 
     def tree(self):
         return self._nodes
+
+
+class _StubPing:
+    target_label = "game.exe"
+    following_game = True
 
 
 class _StubProcs:

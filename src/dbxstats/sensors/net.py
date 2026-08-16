@@ -35,7 +35,11 @@ class PingMonitor:
         self._best: float | None = None
         self._worst: float | None = None
         self._auto_host: str | None = None
+        self._auto_port = 0
         self._auto_label = ""
+        self._mudos: set[str] = set()
+        """Alvos que nao responderam a nada. Servidor de jogo costuma ignorar ICMP,
+        e insistir neles pintaria 100% de perda numa conexao perfeitamente saudavel."""
         self._history: deque[float] = deque(maxlen=60)
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -50,13 +54,16 @@ class PingMonitor:
                 self._history.clear()
                 self._best = self._worst = None
 
-    def set_auto_target(self, host: str | None, label: str = "") -> None:
+    def set_auto_target(self, host: str | None, port: int = 0, label: str = "") -> None:
         """Alvo do jogo em foco. `None` volta para o host das configuracoes."""
         with self._lock:
+            if host is not None and host in self._mudos:
+                return          # ja' provamos que esse alvo nao responde
             if host == self._auto_host:
                 self._auto_label = label
                 return
             self._auto_host = host
+            self._auto_port = int(port or 0)
             self._auto_label = label
             self._history.clear()
             self._best = self._worst = None
@@ -74,7 +81,7 @@ class PingMonitor:
     def _target(self) -> tuple[str, int]:
         with self._lock:
             if self._auto_host:
-                return self._auto_host, 0
+                return self._auto_host, self._auto_port
             return self._host, self._port
 
     def read(self) -> dict:
@@ -103,11 +110,13 @@ class PingMonitor:
                     return
                 results.append(_probe(host, port))
                 self._stop.wait(0.15)
-            self._publish(results)
+            self._publish(host, results)
             self._stop.wait(self._interval)
 
-    def _publish(self, results: list[float | None]) -> None:
+    def _publish(self, host: str, results: list[float | None]) -> None:
         ok = [r for r in results if r is not None]
+        if not ok and self._descartar_alvo(host):
+            return          # alvo mudo: nao publica perda que nao e' do usuario
         avg = sum(ok) / len(ok) if ok else None
         jitter = None
         if len(ok) > 1:
@@ -121,6 +130,25 @@ class PingMonitor:
                 self._history.append(round(avg, 1))
                 self._best = avg if self._best is None else min(self._best, avg)
                 self._worst = avg if self._worst is None else max(self._worst, avg)
+
+
+    def _descartar_alvo(self, host: str) -> bool:
+        """Alvo automatico que nao respondeu nada volta para o host fixo.
+
+        Muito servidor de jogo simplesmente ignora ICMP. Continuar apontado para
+        ele mostraria "100% de perda" com a partida rodando lisa — mentira que
+        assusta e nao ajuda em nada.
+        """
+        with self._lock:
+            if not self._auto_host or self._auto_host != host:
+                return False
+            self._mudos.add(host)
+            self._auto_host = None
+            self._auto_port = 0
+            self._auto_label = ""
+            self._history.clear()
+            self._best = self._worst = None
+        return True
 
 
 def _probe(host: str, port: int, timeout: float = 1.5) -> float | None:

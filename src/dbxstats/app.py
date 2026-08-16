@@ -324,7 +324,7 @@ class App:
         if alvo is None:
             self.ping.set_auto_target(None)
             return
-        self.ping.set_auto_target(alvo[0], stream.app or "jogo")
+        self.ping.set_auto_target(alvo[0], alvo[1], stream.app or "jogo")
 
     def _watch_any_game(self) -> None:
         """Volta ao arranjo padrao quando QUALQUER jogo fecha.

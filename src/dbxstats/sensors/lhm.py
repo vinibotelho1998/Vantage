@@ -14,9 +14,12 @@ from .. import log, paths
 
 _log = log.get("lhm")
 
+# Package primeiro: Tctl/Tdie e' a temperatura do encapsulamento, que e' a que o
+# proprio processador usa para decidir boost e limite. CCD e' o die individual —
+# util para detalhe, mas nao e' o numero que representa a peca.
 _CPU_TEMP_PRIORITY = (
-    "CCD", "Core (Tctl/Tdie)", "Tctl/Tdie", "Tdie",
-    "CPU Package", "Package", "Core Max", "Core Average",
+    "Core (Tctl/Tdie)", "Tctl/Tdie", "Tdie", "CPU Package", "Package",
+    "CCD", "Core Max", "Core Average",
 )
 
 _GPU_DISCRETE_KW = ("rtx", "gtx", "rx ", " arc", "radeon pro", "quadro", "tesla", "geforce")

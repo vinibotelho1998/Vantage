@@ -207,6 +207,12 @@ class GameOverlay(QWidget):
         marca = QLabel("dbx")
         marca.setFont(_mono(6.5, QFont.Weight.Bold, scale))
         marca.setStyleSheet(f"color: {theme.rgba(theme.accent_color(cfg.accent), 0.45)};")
+        # De qual processo saem estes numeros. Com launcher, overlay de loja e
+        # segunda janela na jogada, saber a origem evita ler o FPS errado.
+        self._origem = QLabel("")
+        self._origem.setFont(_mono(6.5, QFont.Weight.Normal, scale))
+        self._origem.setStyleSheet(f"color: {theme.rgba(theme.TXT, 0.5)};")
+        rodape.addWidget(self._origem)
         rodape.addStretch(1)
         rodape.addWidget(marca)
         lay.addLayout(rodape)
@@ -274,6 +280,12 @@ class GameOverlay(QWidget):
             self._fps.setStyleSheet(f"color: {theme.MUTE};")
             self._sub.setText(f"<span style='color:{theme.FAINT}'>sem jogo em foco</span>")
 
+        origem = stream.app if stream is not None else ""
+        alvo = getattr(self._ctl.ping, "target_label", "")
+        if origem and alvo and alvo != origem:
+            origem = f"{origem}  ·  ping {alvo}"
+        self._origem.setText(origem or "sem captura")
+
         d = self._ctl.last_data() or {}
         g = d.get("gpu") or {}
         watts_on = "watts" in metrics
@@ -285,7 +297,9 @@ class GameOverlay(QWidget):
                       f"{d.get('cpu_pct', 0):.0f}%  {_ghz(d.get('cpu_mhz'))}"
                       + (f"  {units.watts(d.get('cpu_watts'), 0)}" if watts_on else ""))
         if "gpu" in self._rows:
-            temp = g.get("temp")
+            # Hot spot e' o ponto mais quente do die e o que dita throttle; o
+            # "GPU Core" e' uma media mais fria e mais otimista que a realidade.
+            temp = g.get("temp_hotspot") or g.get("temp")
             self._set("gpu", units.temp(temp), theme.temp_color(temp),
                       f"{g.get('usage', 0):.0f}%  {_ghz(g.get('freq'))}"
                       + (f"  {units.watts(g.get('watts'), 0)}" if watts_on else ""))

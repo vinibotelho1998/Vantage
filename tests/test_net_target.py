@@ -23,15 +23,15 @@ def test_lixo_nao_quebra():
 def test_alvo_automatico_substitui_o_host_fixo():
     p = PingMonitor("8.8.8.8", 53)
     assert p._target() == ("8.8.8.8", 53)
-    p.set_auto_target("155.133.227.42", "jogo.exe")
-    assert p._target() == ("155.133.227.42", 0)
+    p.set_auto_target("155.133.227.42", 27019, "jogo.exe")
+    assert p._target() == ("155.133.227.42", 27019)
     assert p.following_game is True
     assert p.target_label == "jogo.exe"
 
 
 def test_voltar_para_o_host_fixo():
     p = PingMonitor("8.8.8.8", 53)
-    p.set_auto_target("1.2.3.4", "jogo.exe")
+    p.set_auto_target("1.2.3.4", 1234, "jogo.exe")
     p.set_auto_target(None)
     assert p._target() == ("8.8.8.8", 53)
     assert p.following_game is False
@@ -40,5 +40,29 @@ def test_voltar_para_o_host_fixo():
 def test_trocar_de_alvo_zera_o_historico():
     p = PingMonitor()
     p._history.extend([10.0, 11.0])
-    p.set_auto_target("1.2.3.4", "jogo.exe")
+    p.set_auto_target("1.2.3.4", 1234, "jogo.exe")
     assert p.history() == []
+
+
+def test_alvo_mudo_volta_para_o_host_fixo():
+    """Servidor que ignora ICMP nao pode virar '100% de perda' na cara do usuario."""
+    p = PingMonitor("8.8.8.8", 53)
+    p.set_auto_target("203.0.113.7", 27015, "jogo.exe")
+    p._publish("203.0.113.7", [None, None, None])
+    assert p.following_game is False
+    assert p._target() == ("8.8.8.8", 53)
+    assert p.read()["loss"] is None          # nada foi publicado sobre o alvo mudo
+
+
+def test_alvo_mudo_nao_e_readotado():
+    p = PingMonitor("8.8.8.8", 53)
+    p.set_auto_target("203.0.113.7", 27015, "jogo.exe")
+    p._publish("203.0.113.7", [None])
+    p.set_auto_target("203.0.113.7", 27015, "jogo.exe")
+    assert p.following_game is False
+
+
+def test_perda_real_do_host_fixo_continua_sendo_publicada():
+    p = PingMonitor("8.8.8.8", 53)
+    p._publish("8.8.8.8", [12.0, None, 14.0, None])
+    assert p.read()["loss"] == 50.0

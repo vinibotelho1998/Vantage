@@ -14,6 +14,7 @@ reiniciado, jogo fechando o swapchain) e detectada e recuperada automaticamente.
 from __future__ import annotations
 
 import io
+import math
 import os
 import subprocess
 import threading
@@ -38,7 +39,7 @@ EXCLUDED = (
     "PhoneExperienceHost.exe", "Widgets.exe", "dbx-stats.exe", "DBXStats.exe",
 )
 
-MAX_SAMPLES = 32000        # ~4 min a 120 fps por swapchain
+MAX_SAMPLES = 60000        # ~7 min a 144 fps por swapchain
 AGGREGATE_HZ = 4.0
 STALE_STREAM_S = 5.0       # sem frames por tanto tempo -> some da lista
 RETAIN_S = 20.0            # ...mas o historico so e descartado depois disso
@@ -58,6 +59,16 @@ _COLUMNS_V2 = {
     "displayed": ("displayedtime", "msbetweendisplaychange"),
     "c2p": ("clicktophotonlatency",),
 }
+# O CPUStartTime do v2 vem em MILISSEGUNDOS; o TimeInSeconds do v1, em segundos.
+# Medido no CSV real: captura de 20 s va de t=21 a t=19932, e o passo entre frames
+# bate com o FrameTime em ms. Tratar isso como segundos encolhia a janela de
+# analise em mil vezes — sobravam poucos quadros, e 1% e 0,1% low caiam no mesmo
+# punhado de frames, saindo sempre iguais.
+_TIME_SCALE = {"cpustarttime": 1e-3, "timeinseconds": 1.0}
+# Escalas plausiveis para a autocalibracao (s, ms, us, ticks de QPC).
+_SCALE_CANDIDATES = (1.0, 1e-3, 1e-6, 1e-7, 1e-9)
+CALIBRATION_SAMPLES = 150
+
 _COLUMNS_META = {
     "app": ("application",),
     "pid": ("processid",),
@@ -75,13 +86,17 @@ class _Layout:
         cols = [c.strip().lower() for c in header.split(",")]
         index = {name: i for i, name in enumerate(cols)}
         self.idx: dict[str, int] = {}
+        self.t_column = ""
         for key, names in {**_COLUMNS_META, **_COLUMNS_V2}.items():
             for name in names:
                 if name in index:
                     self.idx[key] = index[name]
+                    if key == "t":
+                        self.t_column = name
                     break
         self.needed = max(self.idx.values()) if self.idx else 0
         self.ok = all(k in self.idx for k in ("app", "pid", "swap", "t", "ft"))
+        self.t_scale = _TIME_SCALE.get(self.t_column, 1.0)
 
     def get(self, key: str) -> int:
         return self.idx.get(key, -1)
@@ -129,6 +144,11 @@ class FpsEngine:
         self._capture_pid: int | None = None
         self._capture: list[tuple] = []
         self._capture_active = False
+
+        self._t_scale = 1.0
+        self._cal_done = True
+        self._cal_prev: dict[tuple[int, str], float] = {}
+        self._cal_ratios: list[float] = []
 
     # ── ciclo de vida ────────────────────────────────────────────────────────
     def start(self) -> None:
@@ -336,7 +356,9 @@ class FpsEngine:
                         if not layout.ok:
                             _log.warning("cabecalho inesperado do PresentMon: %s", head[:200])
                             return
-                        _log.info("PresentMon conectado (%d colunas mapeadas)", len(layout.idx))
+                        self._begin_calibration(layout)
+                        _log.info("PresentMon conectado (%d colunas, tempo em %s)",
+                                  len(layout.idx), layout.t_column or "?")
                         break
                     if layout is None:
                         continue
@@ -363,6 +385,10 @@ class FpsEngine:
         i_dp, i_c2p = layout.get("displayed"), layout.get("c2p")
         need = layout.needed
 
+        scale = self._t_scale
+        calibrando = not self._cal_done
+        cal_rows: list[tuple[tuple[int, str], float, float]] = []
+
         batch: list[tuple[tuple[int, str], tuple, str, str, int]] = []
         for line in lines:
             if not line:
@@ -378,7 +404,10 @@ class FpsEngine:
                 continue
             if ft <= 0.0 or ft > 10_000.0:
                 continue
-            sample = (t, ft, _f(parts, i_cb), _f(parts, i_gb), _f(parts, i_gt),
+            key = (pid, parts[i_swap])
+            if calibrando:
+                cal_rows.append((key, t, ft))
+            sample = (t * scale, ft, _f(parts, i_cb), _f(parts, i_gb), _f(parts, i_gt),
                       _f(parts, i_dl), _f(parts, i_dp), _f(parts, i_c2p))
             app = os.path.basename(parts[i_app]).strip()
             sync = -1
@@ -389,8 +418,14 @@ class FpsEngine:
                     sync = -1
             mode = parts[i_mode].strip() if i_mode >= 0 else ""
             runtime = parts[i_rt].strip() if i_rt >= 0 else ""
-            batch.append(((pid, parts[i_swap]), sample, app, f"{mode}|{runtime}", sync))
+            batch.append((key, sample, app, f"{mode}|{runtime}", sync))
 
+        if cal_rows:
+            self._calibrate(cal_rows)
+            if self._t_scale != scale:   # a calibracao corrigiu a unidade no lote
+                fator = self._t_scale / scale
+                batch = [(k, (sm[0] * fator,) + sm[1:], a, m, y)
+                         for k, sm, a, m, y in batch]
         if not batch:
             return
         now = time.monotonic()
@@ -407,6 +442,57 @@ class FpsEngine:
                 if self._capture_active and key[0] == self._capture_pid:
                     self._capture.append(sample)
         self._last_frame_at = now
+
+    # ── unidade da coluna de tempo ───────────────────────────────────────────
+    def _begin_calibration(self, layout: _Layout) -> None:
+        """Assume a unidade indicada pelo cabecalho e prepara a conferencia."""
+        self._t_scale = layout.t_scale
+        self._cal_done = False
+        self._cal_prev.clear()
+        self._cal_ratios.clear()
+
+    def _calibrate(self, rows: list[tuple[tuple[int, str], float, float]]) -> None:
+        """Confere a unidade real comparando o avanco do relogio com o frametime.
+
+        Em qualquer versao do PresentMon, o tempo entre dois presents da mesma
+        swapchain e' exatamente o FrameTime — entao a razao entre os dois revela a
+        unidade, mesmo que uma versao futura mude o padrao ou alguem ligue
+        --qpc_time. Errar essa unidade encolhe a janela de analise e faz 1% e
+        0,1% low colapsarem no mesmo numero.
+        """
+        for key, t_raw, ft in rows:
+            prev = self._cal_prev.get(key)
+            self._cal_prev[key] = t_raw
+            if prev is None:
+                continue
+            delta = t_raw - prev
+            if delta <= 0.0 or ft <= 0.0:
+                continue
+            self._cal_ratios.append(delta / ft)     # unidades de tempo por ms de frame
+            if len(self._cal_ratios) >= CALIBRATION_SAMPLES:
+                self._finish_calibration()
+                return
+
+    def _finish_calibration(self) -> None:
+        ratios = sorted(self._cal_ratios)
+        mediana = ratios[len(ratios) // 2]
+        self._cal_done = True
+        self._cal_prev.clear()
+        self._cal_ratios.clear()
+        if mediana <= 0.0:
+            return
+        medido = 1e-3 / mediana                     # unidades -> segundos
+        melhor = min(_SCALE_CANDIDATES, key=lambda c: abs(math.log10(c / medido)))
+        if abs(math.log10(melhor / medido)) > math.log10(3.0):
+            _log.warning("nao consegui confirmar a unidade do relogio do PresentMon "
+                         "(fator medido %.3g); mantendo %.3g", medido, self._t_scale)
+            return
+        if melhor == self._t_scale:
+            return
+        _log.warning("unidade da coluna de tempo corrigida: %.3g -> %.3g s por unidade",
+                     self._t_scale, melhor)
+        self._t_scale = melhor
+        self.reset()                                # o pouco que entrou veio errado
 
     # ── agregador ────────────────────────────────────────────────────────────
     def _aggregate_loop(self) -> None:

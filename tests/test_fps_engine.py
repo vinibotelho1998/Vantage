@@ -17,9 +17,11 @@ HEADER_V1 = ("Application,ProcessID,SwapChainAddress,Runtime,SyncInterval,Presen
 
 
 def row_v2(t, ft, pid=1234, app="game.exe", swap="0x1", mode="Hardware: Independent Flip",
-           sync=0, cpu=5.0, gpu=9.0, displayed="16.7"):
-    return (f"{app},{pid},{swap},DXGI,{sync},512,0,{mode},{t:.4f},{ft:.4f},{cpu},0.1,"
-            f"0.5,{gpu},{gpu},0.02,12.0,{displayed},NA,{t:.4f},NA,NA,NA").encode()
+           sync=0, cpu=5.0, gpu=9.0, displayed="16.7", t_scale=1000.0):
+    """`t` em segundos; o CSV do PresentMon 2.x publica CPUStartTime em ms."""
+    raw = t * t_scale
+    return (f"{app},{pid},{swap},DXGI,{sync},512,0,{mode},{raw:.4f},{ft:.4f},{cpu},0.1,"
+            f"0.5,{gpu},{gpu},0.02,12.0,{displayed},NA,{raw:.4f},NA,NA,NA").encode()
 
 
 def test_layout_v2_maps_all_columns():
@@ -29,6 +31,8 @@ def test_layout_v2_maps_all_columns():
         assert layout.get(key) >= 0
     assert layout.get("t") == 8
     assert layout.get("ft") == 9
+    assert layout.t_column == "cpustarttime"
+    assert layout.t_scale == 1e-3          # CPUStartTime do v2 vem em milissegundos
 
 
 def test_layout_v1_falls_back_to_legacy_names():
@@ -37,6 +41,7 @@ def test_layout_v1_falls_back_to_legacy_names():
     assert layout.get("t") == 9          # TimeInSeconds
     assert layout.get("ft") == 11        # msBetweenPresents
     assert layout.get("cpu_busy") == -1  # nao existe no v1
+    assert layout.t_scale == 1.0         # o v1 ja' publica em segundos
 
 
 def test_layout_rejects_garbage():
@@ -45,6 +50,7 @@ def test_layout_rejects_garbage():
 
 def _feed(engine, rows):
     layout = _Layout(HEADER_V2)
+    engine._begin_calibration(layout)
     engine._ingest(layout, rows)
 
 
@@ -172,3 +178,29 @@ def test_expect_resets_watchdog_clock():
 def test_excluded_processes_are_declared():
     assert "dwm.exe" in fpsmod.EXCLUDED
     assert "explorer.exe" in fpsmod.EXCLUDED
+
+
+def test_relogio_em_ms_nao_encolhe_a_janela():
+    """Foi o bug de raiz: 60 s viravam 60 ms, e 1% e 0,1% low saiam iguais."""
+    engine = FpsEngine(analysis_window=60.0)
+    engine_rows = [row_v2(i * 0.008, 8.0 + (12.0 if i % 300 == 0 else 0.0))
+                   for i in range(1, 5000)]      # ~40 s a 125 fps
+    _feed(engine, engine_rows)
+    engine._recompute()
+    m = engine.snapshot()[1234].metrics
+    assert m.frames > 4000
+    assert 39.0 < m.duration < 41.0
+    assert round(m.low_1) != round(m.low_01)     # cada um no seu punhado de quadros
+
+
+def test_calibracao_corrige_palpite_errado():
+    """Se o PresentMon mudar a unidade, o motor se acerta sozinho."""
+    engine = FpsEngine(analysis_window=10.0)
+    _feed(engine, [row_v2(i * 0.008, 8.0, t_scale=1.0) for i in range(1, 400)])
+    assert engine._cal_done
+    assert engine._t_scale == 1.0
+    _feed(engine, [row_v2(1.0 + i * 0.008, 8.0, t_scale=1.0) for i in range(1, 400)])
+    engine._recompute()
+    m = engine.snapshot()[1234].metrics
+    assert 2.9 < m.duration < 3.3
+    assert round(m.fps_avg) == 125
