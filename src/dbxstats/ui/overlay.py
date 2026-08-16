@@ -270,8 +270,6 @@ class GameOverlay(QWidget):
             parts = [_chunk("méd", units.integer(m.fps_avg), theme.FPS)]
             if "low1" in metrics:
                 parts.append(_chunk("1%", units.integer(m.low_1), theme.WARN))
-            if "low01" in metrics:
-                parts.append(_chunk(".1%", units.integer(m.low_01), theme.BAD))
             if "frametime" in metrics:
                 parts.append(_chunk("ft", units.ms(m.ft_avg, 1), theme.FRAME))
             self._sub.setText("&nbsp;&nbsp;".join(parts))

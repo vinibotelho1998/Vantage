@@ -22,7 +22,7 @@ GAMEPAD_BUTTONS = ("a", "b", "x", "y", "lb", "rb", "back", "start")
 
 OVERLAY_METRICS = [
     ("fps", "FPS"), ("graph", "Gráfico de FPS"), ("low1", "1% Low"),
-    ("low01", "0.1% Low"), ("frametime", "Frametime"), ("cpu", "CPU (uso/temp)"),
+    ("frametime", "Frametime"), ("cpu", "CPU (uso/temp)"),
     ("gpu", "GPU (uso/temp)"), ("ram", "RAM"), ("vram", "VRAM"),
     ("ping", "Ping"), ("watts", "Consumo"), ("clock", "Relógio"),
 ]

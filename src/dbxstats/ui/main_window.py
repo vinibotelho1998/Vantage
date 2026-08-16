@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 from .. import theme
 from ..core import units
 from ..platform import win as winapi
-from .components import IconButton, LoadDots, NavButton, label
+from .components import IconButton, LoadDots, NavButton, PillButton, label
 from .views.base import View
 from .views.benchmark import BenchmarkView
 from .views.cpu import CpuView
@@ -35,6 +35,11 @@ from .views.sensors import SensorsView
 VIEW_CLASSES = (DashboardView, GamingView, CpuView, GpuView, MemoryView,
                 NetworkView, SensorsView, ProcessesView, BenchmarkView, LauncherView,
                 DisplaysView, GamepadView)
+
+# O painel ja' mostra FPS, lows e frametime do jogo em foco; a tela de Jogos
+# repetia isso na barra lateral. Ela continua existindo (e acessivel como tela
+# inicial nas configuracoes), so' saiu do menu.
+NAV_OCULTAS = ("gaming",)
 
 _EDGE = 6
 
@@ -71,7 +76,10 @@ class TitleBar(QWidget):
         lay.addWidget(self.clock)
         lay.addSpacing(theme.scaled(8))
 
-        self.btn_overlay = IconButton("▣", "Overlay no jogo (Ctrl+Alt+O)")
+        # Glifo nao dizia nem o que era nem se estava ligado. Texto com estado
+        # resolve os dois de uma vez.
+        self.btn_overlay = PillButton("OVERLAY", theme.MUTE)
+        self.btn_overlay.setToolTip("Liga e desliga o overlay no jogo (Ctrl+Alt+O)")
         self.btn_overlay.clicked.connect(window.app.toggle_overlay)
         self.btn_settings = IconButton("⚙", "Configurações")
         self.btn_settings.clicked.connect(lambda: window.app.open_settings())
@@ -81,9 +89,16 @@ class TitleBar(QWidget):
         self.btn_max.clicked.connect(window.toggle_maximized)
         self.btn_close = IconButton("✕", "Fechar", danger=True)
         self.btn_close.clicked.connect(window.close)
-        for b in (self.btn_overlay, self.btn_settings, self.btn_min,
-                  self.btn_max, self.btn_close):
+        lay.addWidget(self.btn_overlay)
+        lay.addSpacing(theme.scaled(6))
+        for b in (self.btn_settings, self.btn_min, self.btn_max, self.btn_close):
             lay.addWidget(b)
+        self.sync_overlay_button()
+
+    def sync_overlay_button(self) -> None:
+        ligado = bool(self._win.app.settings.overlay_enabled)
+        self.btn_overlay.setText("OVERLAY ON" if ligado else "OVERLAY OFF")
+        self.btn_overlay.set_color(theme.OK if ligado else theme.MUTE)
 
     def resizeEvent(self, event) -> None:
         self.chips.setVisible(self.width() >= self._chips_min)
@@ -129,6 +144,8 @@ class Sidebar(QWidget):
 
         self.buttons: dict[str, NavButton] = {}
         for cls in VIEW_CLASSES:
+            if cls.key in NAV_OCULTAS:
+                continue
             btn = NavButton(cls.key, cls.title, cls.glyph)
             btn.clicked.connect(window.show_view)
             self.buttons[cls.key] = btn
@@ -284,6 +301,7 @@ class MainWindow(QWidget):
     # ── configuracoes ────────────────────────────────────────────────────────
     def apply_settings(self) -> None:
         cfg = self.app.settings
+        self.titlebar.sync_overlay_button()
         flags = Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint
         if cfg.always_on_top:
             flags |= Qt.WindowType.WindowStaysOnTopHint

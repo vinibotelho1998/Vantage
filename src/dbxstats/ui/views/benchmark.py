@@ -1,9 +1,15 @@
 """Tela de benchmark: captura uma corrida, resume e exporta."""
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint
+from PySide6.QtCore import QPoint, QTimer
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QHBoxLayout, QMenu, QProgressBar, QVBoxLayout
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QMenu,
+    QPlainTextEdit,
+    QProgressBar,
+    QVBoxLayout,
+)
 
 from ... import theme
 from ...core import frames as fr
@@ -13,7 +19,7 @@ from ..components import Badge, Card, KpiStrip, MetricList, PillButton, label
 from .base import View, scroll_page
 
 _KPIS = [
-    ("avg", "FPS médio", ""), ("low1", "1% Low", ""), ("low01", "0.1% Low", ""),
+    ("avg", "FPS médio", ""), ("low1", "1% Low", ""),
     ("ft", "Frametime", "ms"), ("stutter", "Stutter", "%"), ("smooth", "Fluidez", ""),
 ]
 
@@ -107,7 +113,33 @@ class BenchmarkView(View):
         card_hist_runs.body.addStretch(1)
         bottom.addWidget(card_hist_runs, 1)
         lay.addLayout(bottom, 2)
+
+        # Relatorio corrido: os cards de cima mostram cada numero no seu lugar,
+        # mas na hora de comparar com alguem, ou de guardar, o que serve e' o
+        # texto inteiro num bloco so'.
+        card_rel = Card("Relatório da corrida", theme.accent_color(self.cfg.accent),
+                        "tudo o que foi observado no período")
+        self.relatorio = QPlainTextEdit()
+        self.relatorio.setReadOnly(True)
+        self.relatorio.setMinimumHeight(theme.scaled(210))
+        self.relatorio.setFont(QFont(theme.FONT_MONO if hasattr(theme, "FONT_MONO")
+                                     else theme.FONT_UI, max(7, theme.scaled(9))))
+        card_rel.add(self.relatorio, 1)
+        linha = QHBoxLayout()
+        linha.setSpacing(theme.scaled(8))
+        self.btn_copiar = PillButton("Copiar relatório", theme.accent_color(self.cfg.accent))
+        self.btn_copiar.clicked.connect(self._copiar)
+        linha.addWidget(self.btn_copiar)
+        linha.addStretch(1)
+        card_rel.add_layout(linha)
+        lay.addWidget(card_rel, 2)
         lay.addStretch(0)
+
+    def _copiar(self) -> None:
+        from PySide6.QtWidgets import QApplication
+        QApplication.clipboard().setText(self.relatorio.toPlainText())
+        self.btn_copiar.setText("Copiado!")
+        QTimer.singleShot(1600, lambda: self.btn_copiar.setText("Copiar relatório"))
 
     # ── acoes ────────────────────────────────────────────────────────────────
     def _toggle(self) -> None:
@@ -171,7 +203,6 @@ class BenchmarkView(View):
         self.progress.setValue(1000)
         self.kpi.set("avg", units.integer(m.fps_avg), theme.fps_color(m.fps_avg))
         self.kpi.set("low1", units.integer(m.low_1), theme.fps_color(m.low_1))
-        self.kpi.set("low01", units.integer(m.low_01), theme.fps_color(m.low_01))
         self.kpi.set("ft", f"{m.ft_avg:.2f}" if m.ft_avg else units.DASH,
                      theme.frametime_color(m.ft_avg))
         self.kpi.set("stutter", f"{m.stutter_pct:.1f}", theme.stutter_color(m.stutter_pct))
@@ -195,6 +226,7 @@ class BenchmarkView(View):
                              is not None else units.DASH, theme.score_color(m.consistency))
         self.result_rows.set("bottleneck", m.bottleneck)
         self.verdict.setText(fr.verdict(m))
+        self.relatorio.setPlainText(_texto_relatorio(result))
 
         env = result.get("system", {})
         for key, unit, decimals in (("cpu", "%", 0), ("cpu_temp", "°C", 0),
@@ -221,3 +253,59 @@ class BenchmarkView(View):
             else:
                 row.set_label("—")
                 row.set(units.DASH, theme.MUTE)
+
+
+def _linha(rotulo: str, valor: str) -> str:
+    return f"  {rotulo:<22}{valor}"
+
+
+def _texto_relatorio(result: dict) -> str:
+    """Relatorio legivel de uma corrida inteira.
+
+    Pensado para ser copiado e colado: e' o formato que serve para comparar com
+    outra maquina, ou para guardar antes de mexer em alguma configuracao.
+    """
+    m = result["metrics"]
+    sistema = result.get("system") or {}
+    linhas = [
+        "DBX STATUS — relatório de benchmark",
+        f"  jogo: {result.get('game') or '—'}",
+    ]
+    if result.get("quando"):
+        linhas.append(f"  quando: {result['quando']}")
+    linhas += [
+        "",
+        "DESEMPENHO",
+        _linha("FPS médio", units.integer(m.fps_avg)),
+        _linha("1% low", units.integer(m.low_1)),
+        _linha("FPS mínimo / máximo", f"{units.integer(m.fps_min)} / {units.integer(m.fps_max)}"),
+        _linha("percentil 1", units.integer(m.p1)),
+        "",
+        "ENTREGA DE QUADROS",
+        _linha("frames", f"{m.frames}"),
+        _linha("duração", units.duration(m.duration)),
+        _linha("frametime médio", units.ms(m.ft_avg, 2)),
+        _linha("frametime máximo", units.ms(m.ft_max, 2)),
+        _linha("desvio padrão", units.ms(m.ft_std, 2)),
+        _linha("stutter", f"{m.stutter_pct:.2f}%"),
+        _linha("engasgos (>50 ms)", f"{m.hitches}"),
+        _linha("quadros descartados", f"{m.dropped_pct:.2f}%"),
+        _linha("consistência", f"{m.consistency:.0f}%" if m.consistency is not None else "—"),
+        _linha("fluidez", f"{m.smoothness:.0f}/100" if m.smoothness is not None else "—"),
+        _linha("gargalo", m.bottleneck),
+    ]
+    if sistema:
+        linhas += ["", "SISTEMA NO PERÍODO (média / máximo)"]
+        rotulos = {
+            "cpu": ("CPU", "%"), "cpu_temp": ("CPU temp", " °C"),
+            "cpu_watts": ("CPU potência", " W"), "gpu": ("GPU", "%"),
+            "gpu_temp": ("GPU temp", " °C"), "gpu_watts": ("GPU potência", " W"),
+            "ram": ("RAM", "%"), "vram": ("VRAM", "%"),
+        }
+        for chave, (rotulo, unidade) in rotulos.items():
+            faixa = sistema.get(chave)
+            if not faixa:
+                continue
+            linhas.append(_linha(rotulo, f"{faixa[0]:.0f}{unidade} / {faixa[1]:.0f}{unidade}"))
+    linhas += ["", "LEITURA", "  " + fr.verdict(m)]
+    return "\n".join(linhas)

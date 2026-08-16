@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout
 
 from ... import theme
 from ...core import units
-from ..charts import BarMeter, FrameTimeChart, Gauge, Plot, Sparkline, TimeSeriesChart
+from ..charts import BarMeter, Gauge, Plot, Sparkline, TimeSeriesChart
 from ..components import Badge, Card, KpiStrip, MetricList, label
 from .base import View
 
@@ -117,7 +117,7 @@ class DashboardView(View):
         hero.addStretch(1)
 
         self.lows = MetricList([("avg", "Média"), ("low1", "1% Low"),
-                                ("low01", "0.1% Low"), ("ft", "Frametime")])
+                                ("ft", "Frametime")])
         self.lows.setFixedWidth(theme.scaled(148))
         hero.addWidget(self.lows)
         card.add_layout(hero)
@@ -132,8 +132,16 @@ class DashboardView(View):
         chips.addStretch(1)
         card.add_layout(chips)
 
-        self.ft_chart = FrameTimeChart(height=118)
-        card.add(self.ft_chart, 1)
+        # Frametime cru vira uma cerca de espetos: cada quadro ruim e' uma barra
+        # inteira, e o desenho conta mais sobre densidade do que sobre a jogada.
+        # Aqui vale a mesma leitura do overlay — linha de FPS por segundo, com os
+        # lows por baixo, que e' onde a queda aparece.
+        self.fps_chart = TimeSeriesChart([
+            Plot("fps", "FPS", theme.FPS),
+            Plot("low", "1% low", theme.WARN, width=1.4),
+        ], y_max=None, height=118, unit="")
+        self.fps_chart.set_span(self.cfg.history_window)
+        card.add(self.fps_chart, 1)
         return card
 
     def _build_cpu(self) -> Card:
@@ -204,10 +212,11 @@ class DashboardView(View):
         for key, card in self._cards.items():
             card.setVisible(key in wanted)
         self._relayout_cards()
-        self.ft_chart.setVisible("frametime" in wanted)
+        self.fps_chart.setVisible("frametime" in wanted)
         self.chart.configure(legend=False, **self.chart_config())
         self.chart.set_span(self.cfg.history_window)
-        self.ft_chart.configure(self.cfg.smooth_lines)
+        self.fps_chart.configure(**self.chart_config())
+        self.fps_chart.set_span(self.cfg.history_window)
         for spark in (self.cpu_spark, self.gpu_spark, self.ram_spark,
                       self.disk_spark, self.net_spark):
             spark.configure(self.cfg.smooth_lines)
@@ -251,6 +260,10 @@ class DashboardView(View):
             self.chart.set_values(key, values)
         self.chart.refresh()
         self._span_label.setText(f"últimos {self.cfg.history_window}s")
+
+        self.fps_chart.set_values("fps", h.values("fps"))
+        self.fps_chart.set_values("low", h.values("fps_low1"))
+        self.fps_chart.refresh()
 
         cpu = d.get("cpu_pct", 0.0)
         ct = d.get("cpu_temp")
@@ -324,12 +337,11 @@ class DashboardView(View):
             self.fps_value.setText("—")
             self.fps_value.setStyleSheet(f"color: {theme.MUTE};")
             self.game_badge.update_badge("nenhum jogo", theme.FAINT)
-            for key in ("avg", "low1", "low01", "ft"):
+            for key in ("avg", "low1", "ft"):
                 self.lows.set(key, units.DASH, theme.MUTE)
             self.bottleneck.update_badge(self.app.fps_hint(), theme.FAINT)
             self.smooth_badge.update_badge("—", theme.FAINT)
             self.sync_badge.update_badge("—", theme.FAINT)
-            self.ft_chart.set_data([])
             return
 
         m = stream.metrics
@@ -339,7 +351,6 @@ class DashboardView(View):
         self.game_badge.update_badge(stream.app or "?", theme.FPS)
         self.lows.set("avg", units.integer(m.fps_avg), theme.fps_color(m.fps_avg))
         self.lows.set("low1", units.integer(m.low_1), theme.fps_color(m.low_1))
-        self.lows.set("low01", units.integer(m.low_01), theme.fps_color(m.low_01))
         self.lows.set("ft", units.ms(m.ft_avg, 2), theme.frametime_color(m.ft_avg))
         self.bottleneck.update_badge(
             f"gargalo: {m.bottleneck}",
@@ -351,4 +362,4 @@ class DashboardView(View):
         self.sync_badge.update_badge(
             "VSync ligado" if stream.vsync else "VSync desligado",
             theme.WARN if stream.vsync else theme.OK)
-        self.ft_chart.set_data(self.app.fps.frametimes(stream.pid, 30.0))
+

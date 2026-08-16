@@ -121,6 +121,9 @@ class App:
         self._bench_result: dict | None = None
         self._bench_rev = 0
         self.bench_history: list[dict] = _load_bench_history()
+        # O ultimo resultado volta com o app: fechar a janela nao pode apagar o
+        # benchmark que a pessoa acabou de rodar.
+        self._bench_result = _load_last_bench()
 
         qt.setQuitOnLastWindowClosed(False)
         qt.setStyleSheet(style.build_qss(self.settings.accent))
@@ -450,10 +453,12 @@ class App:
             m = stream.metrics
             self.history.push("fps", m.fps_now)
             self.history.push("fps_low1", m.low_1)
+            self.history.push("fps_low01", m.low_01)
             self.stats.update("fps", m.fps_now)
         else:
             self.history.push("fps", None)
             self.history.push("fps_low1", None)
+            self.history.push("fps_low01", None)
 
         for node in self.lhm.tree():
             self.stats.update(node.key, node.value)
@@ -648,6 +653,7 @@ class App:
         self.settings.overlay_enabled = not self.settings.overlay_enabled
         self.settings.save()
         self._apply_overlay()
+        self.window.titlebar.sync_overlay_button()
         self.tray.sync()
 
     def _apply_overlay(self) -> None:
@@ -670,10 +676,14 @@ class App:
         da area de trabalho. Jogo e' o processo em foco que esta' apresentando
         quadros — em tela cheia, ou em janela mas com o foco na mao dele.
         """
-        pid = self._fg_pid
-        if not pid or self.fps.stream(pid) is None:
+        # Tela cheia e' o que separa jogo de janela qualquer: o terminal e o
+        # navegador tambem apresentam quadros, e sem esse criterio o overlay
+        # aparecia por cima da area de trabalho.
+        if not self._fg_fullscreen or not self._fg_pid:
             return False
-        return _process_name(pid).lower() not in _NOT_A_GAME
+        if self.fps.stream(self._fg_pid) is None:
+            return False
+        return _process_name(self._fg_pid).lower() not in _NOT_A_GAME
 
     def _sync_overlay_visibility(self) -> None:
         if self._overlay is None:
@@ -751,6 +761,7 @@ class App:
         })
         del self.bench_history[:-BENCH_HISTORY_MAX]
         _save_bench_history(self.bench_history)
+        _save_last_bench(self._bench_result)
         if self.settings.bench_autosave:
             export.export_benchmark(_summary_row(metrics), self._bench_game)
         self.notify("DBX Stats",
@@ -805,6 +816,51 @@ def _summary_row(m: fr.FrameMetrics) -> dict:
 
 def _bench_file():
     return paths.data_dir() / "benchmarks.json"
+
+
+def _last_bench_file():
+    return paths.data_dir() / "ultimo-benchmark.json"
+
+
+def _save_last_bench(resultado: dict) -> None:
+    """Guarda o resultado inteiro, menos as amostras cruas.
+
+    Frametime a frametime sao dezenas de milhares de numeros — o suficiente para
+    o histograma e a curva de percentis ja' esta' na lista de frametimes, e o
+    resto do relatorio sai das metricas.
+    """
+    try:
+        m = resultado["metrics"]
+        _last_bench_file().write_text(json.dumps({
+            "quando": datetime.now().strftime("%d/%m/%Y %H:%M"),
+            "game": resultado.get("game", ""),
+            "metrics": {k: v for k, v in m.as_dict().items()
+                        if isinstance(v, (int, float, str)) or v is None},
+            "frametimes": [round(f, 3) for f in resultado.get("frametimes", [])],
+            "system": {k: list(v) for k, v in (resultado.get("system") or {}).items()},
+        }, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        _log.exception("nao consegui guardar o ultimo benchmark")
+
+
+def _load_last_bench() -> dict | None:
+    try:
+        bruto = json.loads(_last_bench_file().read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    metrics = fr.FrameMetrics()
+    for chave, valor in (bruto.get("metrics") or {}).items():
+        if hasattr(metrics, chave):
+            setattr(metrics, chave, valor)
+    return {
+        "_rev": 0,
+        "quando": bruto.get("quando", ""),
+        "game": bruto.get("game", ""),
+        "metrics": metrics,
+        "frametimes": bruto.get("frametimes") or [],
+        "samples": [],
+        "system": {k: tuple(v) for k, v in (bruto.get("system") or {}).items()},
+    }
 
 
 def _load_bench_history() -> list[dict]:

@@ -31,12 +31,26 @@ PM_FALLBACK_URL = ("https://github.com/GameTechDev/PresentMon/releases/"
                    "download/v2.5.1/PresentMon-2.5.1-x64.exe")
 
 SESSION = "DBXStats"
-# Processos que sempre apresentam quadros mas nunca sao "o jogo".
+# Processos que apresentam quadros mas nunca sao "o jogo". Sem essa lista o
+# terminal, o navegador e o Discord entram na disputa — e como o painel escolhe
+# quem tem mais quadros, o "jogo em foco" acabava sendo o Warp ou o Chrome.
 EXCLUDED = (
+    # shell do Windows
     "dwm.exe", "explorer.exe", "ShellExperienceHost.exe", "SearchHost.exe",
     "StartMenuExperienceHost.exe", "TextInputHost.exe", "WidgetService.exe",
     "ApplicationFrameHost.exe", "SystemSettings.exe", "LockApp.exe",
-    "PhoneExperienceHost.exe", "Widgets.exe", "dbx-stats.exe", "DBXStats.exe",
+    "PhoneExperienceHost.exe", "Widgets.exe",
+    # o proprio app
+    "dbx-stats.exe", "DBXStats.exe",
+    # navegadores
+    "chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe",
+    "opera_gx.exe", "vivaldi.exe",
+    # terminais e editores
+    "WindowsTerminal.exe", "warp.exe", "powershell.exe", "pwsh.exe", "cmd.exe",
+    "Code.exe", "devenv.exe", "notepad.exe",
+    # comunicacao, midia e lojas
+    "Discord.exe", "Spotify.exe", "Telegram.exe", "WhatsApp.exe", "obs64.exe",
+    "steamwebhelper.exe", "EpicGamesLauncher.exe", "Battle.net.exe",
 )
 
 MAX_SAMPLES = 60000        # ~7 min a 144 fps por swapchain

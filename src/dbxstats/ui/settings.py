@@ -241,7 +241,7 @@ class SettingsDialog(QDialog):
         lay.addWidget(restart)
         note = QLabel(
             "O motor usa PresentMon 2 e reinicia sozinho se a sessão de captura cair. "
-            "O cálculo de 1% e 0.1% low é a média dos piores frames da janela — o mesmo "
+            "O cálculo do 1% low é a média dos piores frames da janela — o mesmo "
             "critério usado em análises de hardware.")
         note.setWordWrap(True)
         note.setStyleSheet(f"color: {theme.FAINT};")

@@ -14,7 +14,7 @@ from .base import View, scroll_page
 
 _KPIS = [
     ("fps", "FPS agora", ""), ("avg", "Média", ""), ("low1", "1% Low", ""),
-    ("low01", "0.1% Low", ""), ("ft", "Frametime", "ms"), ("stutter", "Stutter", "%"),
+    ("ft", "Frametime", "ms"), ("stutter", "Stutter", "%"),
     ("smooth", "Fluidez", ""), ("bottleneck", "Gargalo", ""),
 ]
 
@@ -200,8 +200,6 @@ class GamingView(View):
                      f"máx {units.integer(m.fps_max)}")
         self.kpi.set("low1", units.integer(m.low_1), theme.fps_color(m.low_1),
                      f"P1 {units.integer(m.p1)}")
-        self.kpi.set("low01", units.integer(m.low_01), theme.fps_color(m.low_01),
-                     f"P0.1 {units.integer(m.p01)}")
         self.kpi.set("ft", f"{m.ft_avg:.2f}" if m.ft_avg else units.DASH,
                      theme.frametime_color(m.ft_avg),
                      f"máx {units.ms(m.ft_max, 1)}")
@@ -245,7 +243,7 @@ class GamingView(View):
         self.hint.setText(_advice(m, stream))
 
     def _clear(self) -> None:
-        for key in ("fps", "avg", "low1", "low01", "ft", "stutter", "smooth"):
+        for key in ("fps", "avg", "low1", "ft", "stutter", "smooth"):
             self.kpi.set(key, units.DASH, theme.MUTE, "")
         self.kpi.set("bottleneck", "—", theme.MUTE, self.app.fps_hint())
         self.ft_chart.set_data([])
