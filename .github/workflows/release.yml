@@ -41,7 +41,9 @@ jobs:
         run: choco install innosetup --no-progress -y
 
       - name: Compilar instalador
-        run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging\DBXStats_Setup.iss'
+        run: |
+          $versao = (Select-String -Path src/dbxstats/__init__.py -Pattern '__version__\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$versao" packaging\DBXStats_Setup.iss
 
       - name: Publicar release "latest"
         env:

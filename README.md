@@ -95,6 +95,10 @@ Baixe o **DBXStats-Setup.exe** da [última release](https://github.com/vinibotel
 execute e pronto. O instalador leva o app, o LibreHardwareMonitor, o PresentMon e
 instala sozinho o que faltar de runtime. Não precisa de Python nem do repositório.
 
+O instalador se chama **DBX STATUS**, com assistente em português, licença,
+atalho opcional na área de trabalho e desinstalador que pergunta se você quer
+manter suas configurações.
+
 Para gerar o instalador você mesmo, a partir de um clone limpo:
 
 ```powershell
@@ -172,7 +176,9 @@ src/dbxstats/
 powershell -File packaginguild.ps1 -SemInstalador   # so' a pasta dist\DBXStats
 ```
 
-A versão do instalador sai de `src/dbxstats/__init__.py`, então não há número
+A arte do assistente é gerada por `scripts/make_installer_art.py` a partir do
+tema do app e fica versionada em `packaging/assets`. A versão do instalador sai
+de `src/dbxstats/__init__.py`, então não há número
 para atualizar em dois lugares. Todo push na `main` também gera o instalador
 pelo GitHub Actions e publica na release `latest`.
 
