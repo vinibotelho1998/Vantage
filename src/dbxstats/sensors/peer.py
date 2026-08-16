@@ -43,14 +43,31 @@ def available() -> bool:
 
 def local_ports(pid: int) -> set[int]:
     """Portas UDP que o processo abriu — a metade da informacao que o Windows da'."""
+    return local_endpoints(pid)[0]
+
+
+def local_endpoints(pid: int) -> tuple[set[int], set[str]]:
+    """Portas e enderecos locais do processo.
+
+    O endereco importa quando o jogo sai por outra interface — VPN, adaptador
+    virtual — porque e' nela que o trafego dele passa, e nao na rota padrao.
+    """
     if pid <= 4:
-        return set()
+        return set(), set()
     try:
         conexoes = psutil.Process(pid).net_connections(kind="inet")
     except (psutil.Error, OSError):
-        return set()
-    return {c.laddr.port for c in conexoes
-            if c.type == socket.SOCK_DGRAM and c.laddr}
+        return set(), set()
+    portas: set[int] = set()
+    enderecos: set[str] = set()
+    for c in conexoes:
+        if c.type != socket.SOCK_DGRAM or not c.laddr:
+            continue
+        portas.add(c.laddr.port)
+        ip = getattr(c.laddr, "ip", "")
+        if ip and not ip.startswith(("0.", "127.", "::")):
+            enderecos.add(ip)
+    return portas, enderecos
 
 
 def _outbound_ip() -> str | None:
@@ -65,11 +82,12 @@ def _outbound_ip() -> str | None:
         s.close()
 
 
-def sniff_peer(ports: set[int], seconds: float = SNIFF_S) -> tuple[str, int] | None:
+def sniff_peer(ports: set[int], seconds: float = SNIFF_S,
+               bind_ip: str | None = None) -> tuple[str, int] | None:
     """Par (ip, porta) que mais trocou pacotes com essas portas locais."""
     if not ports or not available():
         return None
-    host = _outbound_ip()
+    host = bind_ip or _outbound_ip()
     if host is None:
         return None
 
@@ -170,8 +188,11 @@ class PeerFinder:
                 self._wake.clear()
                 continue
 
-            portas = local_ports(pid)
-            achado = sniff_peer(portas) if portas else None
+            portas, enderecos = local_endpoints(pid)
+            # Escuta na interface do proprio jogo quando ele declara uma; com VPN
+            # ligada a rota padrao nao e' por onde os pacotes dele passam.
+            bind_ip = next(iter(enderecos), None)
+            achado = sniff_peer(portas, bind_ip=bind_ip) if portas else None
             with self._lock:
                 if pid == self._pid:                 # o alvo pode ter mudado no meio
                     self._checked_pid = pid

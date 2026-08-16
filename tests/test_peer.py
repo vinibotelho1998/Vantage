@@ -74,3 +74,9 @@ def test_piscada_do_jogo_nao_joga_o_cache_fora():
     assert f.peer is None
     f.watch(1234)                                # e voltou
     assert f.peer == ("155.133.227.35", 27032)   # sem farejar de novo
+
+
+def test_endereco_local_concreto_vira_interface_de_escuta():
+    """Jogo atras de VPN declara o IP do adaptador; e' nele que os pacotes passam."""
+    portas, enderecos = peer.local_endpoints(0)
+    assert (portas, enderecos) == (set(), set())
