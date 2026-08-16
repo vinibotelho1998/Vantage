@@ -37,13 +37,14 @@ MIN_PACKETS = 8
 _UDP = 17
 
 
-RTT_PERCENTILE = 0.2
+RTT_PERCENTILE = 0.10
 """Percentil usado como RTT.
 
 O intervalo entre o que sai e a resposta nunca e' menor que a ida e volta real,
-mas pode ser bem maior quando o servidor demora a falar por conta propria. Entao
-a estimativa mora embaixo na distribuicao: o minimo seria refem de um unico
-pacote sortudo, a mediana ja' carrega a cadencia do servidor.
+mas pode ser bem maior: o servidor responde no tick dele, nao no instante em que
+o pacote chega. Por isso a estimativa mora bem embaixo na distribuicao — o
+minimo seria refem de um pacote sortudo, e a mediana ja' carrega a cadencia do
+servidor inteira.
 """
 RTT_CEILING_MS = 1500.0
 """Acima disso nao e' resposta, e' o proximo ciclo do jogo."""

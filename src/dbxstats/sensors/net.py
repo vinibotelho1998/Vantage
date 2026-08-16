@@ -110,11 +110,18 @@ class PingMonitor:
 
     def read(self) -> dict:
         with self._lock:
-            if self._measured_fresh():
-                return {"ms": self._measured, "jitter": self._measured_jitter,
-                        "loss": self._loss if self._auto_host is None else None,
+            if not self._measured_fresh():
+                return {"ms": self._ms, "jitter": self._jitter, "loss": self._loss,
                         "best": self._best, "worst": self._worst}
-            return {"ms": self._ms, "jitter": self._jitter, "loss": self._loss,
+            # Os dois medem "rede + algo a mais que nunca e' negativo": a sonda
+            # carrega o tempo de tratar o ICMP, a medida passiva carrega o tick
+            # do servidor. Entao a latencia de rede honesta e' a menor das duas —
+            # e' o que faz o numero bater com o que o jogo mostra na tela.
+            ms = self._measured
+            if self._ms is not None and ms is not None:
+                ms = min(ms, self._ms)
+            return {"ms": ms, "jitter": self._measured_jitter,
+                    "loss": self._loss if self._auto_host is None else None,
                     "best": self._best, "worst": self._worst}
 
     def history(self) -> list[float]:

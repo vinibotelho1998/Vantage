@@ -96,3 +96,23 @@ def test_limpar_medida_volta_para_a_sonda():
     p.set_measured(15.0, 1.0, "jogo.exe")
     p.set_measured(None, None, "")
     assert p.read()["ms"] == 20.0
+
+
+def test_leitura_fica_com_a_menor_das_duas_medidas():
+    """Sonda e medida passiva carregam sobras diferentes; a rede e' o piso comum.
+
+    A sonda leva o tempo de tratar o ICMP; a passiva leva o tick do servidor.
+    Mostrar a maior das duas era o que deixava o numero 1 ms acima do que o
+    proprio jogo exibe.
+    """
+    p = PingMonitor("8.8.8.8", 53)
+    p._publish("155.133.227.57", [15.0, 15.0, 16.0, 15.0])   # sonda: 15.2
+    p.set_measured(16.4, 1.1, "cs2.exe")                     # passiva: tick do servidor
+    assert p.read()["ms"] == 15.2
+    assert p.read()["jitter"] == 1.1     # jitter continua vindo do trafego do jogo
+
+
+def test_medida_passiva_vale_sozinha_quando_a_sonda_nao_responde():
+    p = PingMonitor("8.8.8.8", 53)
+    p.set_measured(16.4, 1.1, "cs2.exe")
+    assert p.read()["ms"] == 16.4
