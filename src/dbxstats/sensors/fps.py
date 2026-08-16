@@ -261,6 +261,8 @@ class FpsEngine:
         exe = self._ensure_presentmon()
         if not exe:
             self._status = "PresentMon indisponivel"
+            _log.error("PresentMon nao encontrado em %s e o download falhou; "
+                       "captura desligada", paths.presentmon_path())
             return
         attempt = 0
         while not self._stop.is_set():
@@ -288,6 +290,7 @@ class FpsEngine:
         handle = _create_pipe(pipe_name)
         if handle is None:
             self._status = "falha criando pipe"
+            _log.warning("nao consegui criar o pipe %s", pipe_name)
             self._stop.wait(3.0)
             return
         proc = None
@@ -295,13 +298,18 @@ class FpsEngine:
             self._status = "iniciando PresentMon"
             proc = subprocess.Popen(
                 self._command(exe, pipe_name),
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                 stdin=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
             with self._proc_lock:
                 self._proc = proc
 
             if not _wait_connect(handle, proc, timeout=12.0):
                 self._status = "PresentMon nao conectou"
+                # A queixa do PresentMon e' a unica pista quando ele nao sobe:
+                # "access denied" (sessao presa / sem admin) contra "in use"
+                # sao problemas diferentes, e sem isso o log fica mudo.
+                _log.warning("PresentMon nao conectou (saida %s): %s",
+                             proc.poll(), _stderr_tail(proc))
                 self._note_failure()
                 return
             self._consecutive_failures = 0
@@ -599,6 +607,19 @@ def _create_pipe(name: str) -> int | None:
         _log.warning("CreateNamedPipeW falhou (%d)", k32.GetLastError())
         return None
     return int(handle)
+
+
+def _stderr_tail(proc: subprocess.Popen, limit: int = 300) -> str:
+    """Ultima queixa do processo, sem travar se ele ainda estiver vivo."""
+    if proc.stderr is None:
+        return "(sem saida de erro)"
+    if proc.poll() is None:
+        return "(ainda rodando)"
+    try:
+        texto = proc.stderr.read().decode("latin-1", "ignore").strip()
+    except (OSError, ValueError):
+        return "(nao consegui ler)"
+    return " ".join(texto.split())[-limit:] or "(nada)"
 
 
 def _wait_connect(handle: int, proc: subprocess.Popen, timeout: float) -> bool:

@@ -37,6 +37,9 @@ class PingMonitor:
         self._auto_host: str | None = None
         self._auto_port = 0
         self._auto_label = ""
+        self._measured: float | None = None
+        self._measured_jitter: float | None = None
+        self._measured_at = 0.0
         self._mudos: set[str] = set()
         """Alvos que nao responderam a nada. Servidor de jogo costuma ignorar ICMP,
         e insistir neles pintaria 100% de perda numa conexao perfeitamente saudavel."""
@@ -68,6 +71,27 @@ class PingMonitor:
             self._history.clear()
             self._best = self._worst = None
 
+    def set_measured(self, rtt: float | None, jitter: float | None, label: str) -> None:
+        """Latencia medida no proprio trafego do jogo.
+
+        Vale mais que a sonda: nao depende do servidor responder ICMP e mede o
+        caminho que o jogo realmente usa. Quando existe, manda na leitura.
+        """
+        with self._lock:
+            self._measured = rtt
+            self._measured_jitter = jitter
+            self._measured_at = time.monotonic() if rtt is not None else 0.0
+            if rtt is not None:
+                self._auto_label = label or self._auto_label
+
+    def _measured_fresh(self) -> bool:
+        return self._measured is not None and (time.monotonic() - self._measured_at) < 15.0
+
+    @property
+    def measuring_game(self) -> bool:
+        with self._lock:
+            return self._measured_fresh()
+
     @property
     def target_label(self) -> str:
         with self._lock:
@@ -86,6 +110,10 @@ class PingMonitor:
 
     def read(self) -> dict:
         with self._lock:
+            if self._measured_fresh():
+                return {"ms": self._measured, "jitter": self._measured_jitter,
+                        "loss": self._loss if self._auto_host is None else None,
+                        "best": self._best, "worst": self._worst}
             return {"ms": self._ms, "jitter": self._jitter, "loss": self._loss,
                     "best": self._best, "worst": self._worst}
 

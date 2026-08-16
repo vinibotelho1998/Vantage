@@ -323,11 +323,14 @@ class App:
         stream = self._stream
         if stream is None:
             self.peers.watch(0)
+            self.ping.set_measured(None, None, "")
             self.ping.set_auto_target(None)
             return
         # Tabela de conexoes primeiro (barata). Jogo so' de UDP nao aparece la',
         # e ai' entra o farejador, que cruza porta local com trafego real.
         self.peers.watch(stream.pid)
+        rtt, jitter = self.peers.latency
+        self.ping.set_measured(rtt, jitter, stream.app or "jogo")
         alvo = netmod.game_server(stream.pid) or self.peers.peer
         if alvo is None:
             self.ping.set_auto_target(None)

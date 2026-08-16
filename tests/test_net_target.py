@@ -66,3 +66,33 @@ def test_perda_real_do_host_fixo_continua_sendo_publicada():
     p = PingMonitor("8.8.8.8", 53)
     p._publish("8.8.8.8", [12.0, None, 14.0, None])
     assert p.read()["loss"] == 50.0
+
+
+def test_medida_do_trafego_manda_na_leitura():
+    """Sem depender do servidor responder ICMP: o numero vem do proprio jogo."""
+    p = PingMonitor("8.8.8.8", 53)
+    p._publish("8.8.8.8", [18.0, 18.0])
+    assert p.read()["ms"] == 18.0
+    p.set_measured(15.2, 1.4, "dota2.exe")
+    leitura = p.read()
+    assert leitura["ms"] == 15.2
+    assert leitura["jitter"] == 1.4
+    assert p.measuring_game is True
+    assert p.target_label == "dota2.exe"
+
+
+def test_medida_velha_devolve_a_sonda():
+    p = PingMonitor("8.8.8.8", 53)
+    p._publish("8.8.8.8", [18.0])
+    p.set_measured(15.2, 1.0, "jogo.exe")
+    p._measured_at -= 60.0            # envelheceu
+    assert p.measuring_game is False
+    assert p.read()["ms"] == 18.0
+
+
+def test_limpar_medida_volta_para_a_sonda():
+    p = PingMonitor("8.8.8.8", 53)
+    p._publish("8.8.8.8", [20.0])
+    p.set_measured(15.0, 1.0, "jogo.exe")
+    p.set_measured(None, None, "")
+    assert p.read()["ms"] == 20.0
