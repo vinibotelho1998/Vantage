@@ -30,7 +30,16 @@ _log = log.get("fps")
 PM_FALLBACK_URL = ("https://github.com/GameTechDev/PresentMon/releases/"
                    "download/v2.5.1/PresentMon-2.5.1-x64.exe")
 
-SESSION = "DBXStats"
+SESSION_PREFIX = "DBXStats"
+SESSION = f"{SESSION_PREFIX}_{os.getpid()}"
+"""Nome da sessao ETW, unico por processo.
+
+Ja' foi a constante "DBXStats" para todo mundo, e duas copias do app abertas ao
+mesmo tempo viravam uma briga sem fim: cada uma subia o PresentMon com
+--stop_existing_session e derrubava a sessao da outra. O sintoma era o
+PresentMon ficar vivo sem nunca conectar no pipe. Com o pid no nome, duas
+instancias se ignoram.
+"""
 # Processos que apresentam quadros mas nunca sao "o jogo". Sem essa lista o
 # terminal, o navegador e o Discord entram na disputa — e como o painel escolhe
 # quem tem mais quadros, o "jogo em foco" acabava sendo o Warp ou o Chrome.
@@ -59,6 +68,7 @@ STALE_STREAM_S = 5.0       # sem frames por tanto tempo -> some da lista
 RETAIN_S = 20.0            # ...mas o historico so e descartado depois disso
 WATCHDOG_S = 20.0          # jogo em foco sem nenhum frame -> reinicia o PresentMon
 STUCK_S = 45.0             # captura sem sinal de vida nenhum -> supervisor travado
+REVIVE_S = 120.0           # supervisor sem dar uma volta -> aposenta e sobe outro
 RESTART_BACKOFF = (1.0, 2.0, 4.0, 8.0, 15.0)
 
 NAN = float("nan")
@@ -159,6 +169,13 @@ class FpsEngine:
         self._force_restart = threading.Event()
         self._use_v1 = False
         self._consecutive_failures = 0
+        self._gen = 0
+        self._loop_at = time.monotonic()
+        """Ultima volta completa do supervisor. Se para de andar, ele travou.
+
+        Comeca no relogio de agora, e nao em zero: um motor recem-criado nao
+        pode parecer travado ha' uma eternidade.
+        """
 
         self._capture_pid: int | None = None
         self._capture: list[tuple] = []
@@ -174,11 +191,27 @@ class FpsEngine:
         if self._threads:
             return
         self._stop.clear()
-        for target, name in ((self._supervise, "fps-supervisor"),
-                             (self._aggregate_loop, "fps-aggregator")):
-            t = threading.Thread(target=target, name=name, daemon=True)
-            t.start()
-            self._threads.append(t)
+        self._spawn_supervisor()
+        t = threading.Thread(target=self._aggregate_loop, name="fps-aggregator", daemon=True)
+        t.start()
+        self._threads.append(t)
+
+    def _spawn_supervisor(self) -> None:
+        """Sobe (ou substitui) a thread que cuida do PresentMon.
+
+        A geracao serve para aposentar a thread antiga: se ela estiver travada
+        num desmonte e acordar depois, ve' que nao e' mais a da vez e sai, em
+        vez de subir um segundo PresentMon disputando a mesma sessao.
+        """
+        self._gen += 1
+        geracao = self._gen
+        self._loop_at = time.monotonic()
+        self._threads = [t for t in self._threads
+                         if not isinstance(t, threading.Thread) or t.is_alive()]
+        t = threading.Thread(target=self._supervise, args=(geracao,),
+                             name=f"fps-supervisor-{geracao}", daemon=True)
+        t.start()
+        self._threads.append(t)
 
     def stop(self) -> None:
         self._stop.set()
@@ -276,15 +309,17 @@ class FpsEngine:
         return self._capture_active
 
     # ── supervisor ───────────────────────────────────────────────────────────
-    def _supervise(self) -> None:
+    def _supervise(self, geracao: int = 1) -> None:
         exe = self._ensure_presentmon()
         if not exe:
             self._status = "PresentMon indisponivel"
             _log.error("PresentMon nao encontrado em %s e o download falhou; "
                        "captura desligada", paths.presentmon_path())
             return
+        sweep_stale_sessions()
         attempt = 0
-        while not self._stop.is_set():
+        while not self._stop.is_set() and geracao == self._gen:
+            self._loop_at = time.monotonic()
             started = time.monotonic()
             try:
                 self._run_session(exe)
@@ -325,10 +360,14 @@ class FpsEngine:
                 self._proc = proc
 
             if not _wait_connect(handle, proc, timeout=12.0):
+                handle = None   # quem desiste do connect nao fecha; ver _wait_connect
                 self._status = "PresentMon nao conectou"
                 # A queixa do PresentMon e' a unica pista quando ele nao sobe:
                 # "access denied" (sessao presa / sem admin) contra "in use"
-                # sao problemas diferentes, e sem isso o log fica mudo.
+                # sao problemas diferentes, e sem isso o log fica mudo. Encerrar
+                # antes de ler e' o que fecha o stderr — com ele vivo a leitura
+                # so' podia devolver "(ainda rodando)", que nao diz nada.
+                _terminate(proc)
                 _log.warning("PresentMon nao conectou (saida %s): %s",
                              proc.poll(), _stderr_tail(proc))
                 self._note_failure()
@@ -617,6 +656,15 @@ class FpsEngine:
                 pass
         self._kill_process()
 
+        # Fechar o pipe e matar o processo so' adianta se o supervisor ainda
+        # estiver de pe' para recomecar. Quando e' ele que travou, esse aviso se
+        # repetia a cada 45s para sempre — 111 vezes no log, meia hora sem
+        # captura. Se ele nao deu nem uma volta nesse tempo todo, esta' preso:
+        # aposenta e sobe outro.
+        if self._threads and agora - self._loop_at > REVIVE_S:
+            _log.warning("supervisor parado ha %.0fs; subindo outro", agora - self._loop_at)
+            self._spawn_supervisor()
+
     # ── processo auxiliar ────────────────────────────────────────────────────
     def _kill_process(self) -> None:
         with self._proc_lock:
@@ -625,20 +673,9 @@ class FpsEngine:
             _terminate(proc)
 
     def _cleanup_session(self) -> None:
-        """Derruba a sessao ETW que tenha sobrado de uma execucao anterior.
-
-        Com timeout: `logman` ja' apareceu travado aqui, e sem prazo ele
-        segurava o supervisor inteiro — captura parada e nenhuma linha no log.
-        """
+        """Derruba a sessao ETW que tenha sobrado de uma execucao anterior."""
         for verb in ("stop", "delete"):
-            try:
-                subprocess.run(["logman", verb, SESSION, "-ets"],
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                               creationflags=subprocess.CREATE_NO_WINDOW, timeout=10)
-            except subprocess.TimeoutExpired:
-                _log.warning("logman %s travou; seguindo mesmo assim", verb)
-            except Exception:
-                pass
+            _run_bounded(["logman", verb, SESSION, "-ets"], 8.0, f"logman {verb}")
 
     def _ensure_presentmon(self) -> str | None:
         exe = paths.presentmon_path()
@@ -655,6 +692,68 @@ class FpsEngine:
         except Exception as e:
             _log.warning("falha baixando PresentMon: %s", e)
             return None
+
+
+def _run_bounded(cmd: list[str], seconds: float, what: str) -> None:
+    """Roda um comando auxiliar sem nunca segurar quem chamou.
+
+    subprocess.run(timeout=...) parece resolver e nao resolve: quando o prazo
+    estoura ele mata o filho e *espera* o wait terminar. Se o processo estiver
+    preso no kernel — `logman` com uma sessao ETW em estado ruim faz isso — esse
+    wait nunca volta, e o supervisor congela sem escrever uma linha no log. Foi
+    exatamente assim que a captura morreu por meia hora com o watchdog gritando
+    "reiniciando" 111 vezes e nada acontecendo.
+
+    Aqui a espera tem fim de verdade: passado o prazo mandamos matar e seguimos
+    em frente sem esperar resposta.
+    """
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                stdin=subprocess.DEVNULL,
+                                creationflags=subprocess.CREATE_NO_WINDOW)
+    except Exception as e:
+        _log.debug("nao consegui rodar %s: %s", what, e)
+        return
+    fim = time.monotonic() + seconds
+    while time.monotonic() < fim:
+        if proc.poll() is not None:
+            return
+        time.sleep(0.1)
+    _log.warning("%s nao terminou em %.0fs; abandonando", what, seconds)
+    try:
+        proc.kill()
+    except Exception:
+        pass
+
+
+def sweep_stale_sessions() -> None:
+    """Apaga sessoes ETW deixadas por instancias antigas do app.
+
+    Como o nome agora leva o pid, uma copia que morreu de forma feia deixa a
+    sessao dela para tras — e sessao ETW e' recurso global e limitado. Cada uma
+    e' derrubada em processo separado para que uma travada nao impeca as outras.
+    """
+    saida: list[str] = []
+
+    def _consultar() -> None:
+        try:
+            r = subprocess.run(["logman", "query", "-ets"], capture_output=True,
+                               creationflags=subprocess.CREATE_NO_WINDOW)
+            saida.append(r.stdout.decode("latin-1", "ignore"))
+        except Exception:
+            pass
+
+    t = threading.Thread(target=_consultar, name="fps-sweep", daemon=True)
+    t.start()
+    t.join(8.0)
+    if not saida:
+        return
+    for linha in saida[0].splitlines():
+        nome = linha.split()[0] if linha.split() else ""
+        if nome.startswith(SESSION_PREFIX + "_") and nome != SESSION:
+            _log.info("removendo sessao ETW orfa: %s", nome)
+            _run_bounded(["logman", "stop", nome, "-ets"], 8.0, f"logman stop {nome}")
+            _run_bounded(["logman", "delete", nome, "-ets"], 8.0, f"logman delete {nome}")
 
 
 # ── helpers win32 ─────────────────────────────────────────────────────────────
@@ -686,24 +785,66 @@ def _stderr_tail(proc: subprocess.Popen, limit: int = 300) -> str:
 
 
 def _wait_connect(handle: int, proc: subprocess.Popen, timeout: float) -> bool:
+    """Espera o PresentMon abrir a outra ponta do pipe.
+
+    Quem desiste aqui NAO deve fechar o handle depois: ConnectNamedPipe e'
+    sincrono e, quando o prazo estoura, a thread auxiliar continua parada dentro
+    do kernel segurando esse mesmo handle. Fechar por fora um handle com I/O
+    pendente de outra thread e' exatamente o tipo de coisa que congela o
+    supervisor sem deixar rastro no log. Entao cancelamos a operacao e, dando ou
+    nao certo, o fechamento fica com a thread presa — ela fecha quando acordar.
+    """
     import ctypes
     k32 = ctypes.windll.kernel32
     k32.ConnectNamedPipe.restype = ctypes.c_bool
+    k32.OpenThread.restype = ctypes.c_void_p
     done = threading.Event()
+    abandonado = threading.Event()
+    tid: list[int] = []
+    trava = threading.Lock()
+    fechado = [False]
+
+    def _fechar_uma_vez() -> None:
+        # Fechar duas vezes e' pior do que vazar: o numero pode ja' pertencer a
+        # outro handle quando o segundo fechamento chegar.
+        with trava:
+            if fechado[0]:
+                return
+            fechado[0] = True
+        _close_handle(handle)
 
     def _connect() -> None:
+        tid.append(int(k32.GetCurrentThreadId()))
         try:
             k32.ConnectNamedPipe(ctypes.c_void_p(handle), None)
         finally:
             done.set()
+            if abandonado.is_set():
+                _fechar_uma_vez()
 
     threading.Thread(target=_connect, name="fps-connect", daemon=True).start()
     deadline = time.monotonic() + timeout
+    ligou = False
     while time.monotonic() < deadline:
         if done.wait(0.2):
-            return True
+            ligou = True
+            break
         if proc.poll() is not None:
-            return False
+            break
+    if ligou:
+        return True
+
+    abandonado.set()
+    if tid:
+        THREAD_TERMINATE = 0x0001   # o acesso que CancelSynchronousIo exige
+        h = k32.OpenThread(THREAD_TERMINATE, False, tid[0])
+        if h:
+            k32.CancelSynchronousIo(ctypes.c_void_p(h))
+            k32.CloseHandle(ctypes.c_void_p(h))
+    if done.wait(1.0):
+        _fechar_uma_vez()   # cobre a corrida: a thread pode ter saido antes do aviso
+        return False
+    _log.warning("thread do pipe nao respondeu ao cancelamento; handle abandonado")
     return False
 
 

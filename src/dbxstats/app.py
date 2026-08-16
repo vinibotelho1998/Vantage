@@ -681,9 +681,17 @@ class App:
         # aparecia por cima da area de trabalho.
         if not self._fg_fullscreen or not self._fg_pid:
             return False
-        if self.fps.stream(self._fg_pid) is None:
+        nome = _process_name(self._fg_pid).lower()
+        if nome in _NOT_A_GAME:
             return False
-        return _process_name(self._fg_pid).lower() not in _NOT_A_GAME
+        if self.fps.stream(self._fg_pid) is not None:
+            return True
+        # Nem sempre quem tem a janela e' quem desenha: ha' jogo em que o
+        # PresentMon reporta um processo filho, e exigir o pid exato deixava o
+        # overlay fora da tela justamente onde ele serve. O nome do executavel
+        # ainda amarra o quadro ao que esta' em foco.
+        atual = self._stream
+        return atual is not None and bool(nome) and atual.app.lower() == nome
 
     def _sync_overlay_visibility(self) -> None:
         if self._overlay is None:
