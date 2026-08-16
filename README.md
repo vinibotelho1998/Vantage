@@ -89,6 +89,22 @@ janela sem moldura com redimensionamento e snap nativos do Windows.
 | `Ctrl+Alt+O` | liga/desliga o overlay |
 | `Ctrl+Alt+B` | inicia/para o benchmark |
 
+## Instalação
+
+Baixe o **DBXStats-Setup.exe** da [última release](https://github.com/vinibotelho1998/DBX-Stats/releases/latest),
+execute e pronto. O instalador leva o app, o LibreHardwareMonitor, o PresentMon e
+instala sozinho o que faltar de runtime. Não precisa de Python nem do repositório.
+
+Para gerar o instalador você mesmo, a partir de um clone limpo:
+
+```powershell
+.\BUILD.bat
+```
+
+Ele acha o Python, monta um ambiente próprio, baixa o que falta (inclusive uma
+cópia local do Inno Setup, sem instalar nada no sistema) e entrega
+`dist\DBXStats-Setup.exe` — que é o arquivo único para mandar para outra pessoa.
+
 ## Requisitos
 
 - Windows 10/11 x64
@@ -152,11 +168,13 @@ src/dbxstats/
 ## Build
 
 ```powershell
-.\.venv\Scripts\python.exe -m PyInstaller packaging\DBXStats.spec --noconfirm
-# instalador (requer Inno Setup 6):
-powershell -File packaging\prepare_prereqs.ps1
-ISCC packaging\DBXStats_Setup.iss
+.\BUILD.bat                                     # instalador completo
+powershell -File packaginguild.ps1 -SemInstalador   # so' a pasta dist\DBXStats
 ```
+
+A versão do instalador sai de `src/dbxstats/__init__.py`, então não há número
+para atualizar em dois lugares. Todo push na `main` também gera o instalador
+pelo GitHub Actions e publica na release `latest`.
 
 ## Tecnologias
 

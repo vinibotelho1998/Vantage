@@ -1,5 +1,9 @@
 #define MyAppName "DBX Stats"
-#define MyAppVersion "2.0.0"
+; A versao vem de src/dbxstats/__init__.py via /DMyAppVersion= (ver packaging/build.ps1).
+; O valor abaixo e' so' a reserva para quem compilar o .iss na mao.
+#ifndef MyAppVersion
+  #define MyAppVersion "3.0.0"
+#endif
 #define MyAppPublisher "DBX"
 #define MyAppExeName "DBXStats.exe"
 

@@ -301,6 +301,8 @@ class FpsEngine:
         proc = None
         try:
             self._status = "iniciando PresentMon"
+            _log.info("subindo PresentMon (tentativa %d, %s)",
+                      self._restarts + 1, "v1" if self._use_v1 else "v2")
             proc = subprocess.Popen(
                 self._command(exe, pipe_name),
                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
@@ -609,11 +611,18 @@ class FpsEngine:
             _terminate(proc)
 
     def _cleanup_session(self) -> None:
+        """Derruba a sessao ETW que tenha sobrado de uma execucao anterior.
+
+        Com timeout: `logman` ja' apareceu travado aqui, e sem prazo ele
+        segurava o supervisor inteiro — captura parada e nenhuma linha no log.
+        """
         for verb in ("stop", "delete"):
             try:
-                subprocess.call(["logman", verb, SESSION, "-ets"],
-                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                creationflags=subprocess.CREATE_NO_WINDOW)
+                subprocess.run(["logman", verb, SESSION, "-ets"],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               creationflags=subprocess.CREATE_NO_WINDOW, timeout=10)
+            except subprocess.TimeoutExpired:
+                _log.warning("logman %s travou; seguindo mesmo assim", verb)
             except Exception:
                 pass
 

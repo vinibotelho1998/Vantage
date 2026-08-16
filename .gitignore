@@ -12,7 +12,11 @@ __pycache__/
 
 # Ambiente virtual
 .venv/
+.venv-build/
 venv/
+
+# Copia local de ferramentas de build
+/.tools/
 
 # Logs e artefatos de runtime
 *.log
