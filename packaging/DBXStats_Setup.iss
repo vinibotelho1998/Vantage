@@ -84,7 +84,11 @@ Filename: "{tmp}\vc_redist.x64.exe"; Parameters: "/install /quiet /norestart"; S
 Filename: "{tmp}\windowsdesktop-runtime-8.0-x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "Instalando .NET Desktop Runtime 8..."; Flags: waituntilterminated; Check: not IsWindowsDesktopRuntimeInstalled('8.')
 Filename: "{tmp}\windowsdesktop-runtime-6.0-x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "Instalando .NET Desktop Runtime 6..."; Flags: waituntilterminated; Check: not IsWindowsDesktopRuntimeInstalled('6.')
 Filename: "{tmp}\PawnIO_setup.exe"; Parameters: "-install -silent"; StatusMsg: "Instalando PawnIO (driver de sensores da CPU)..."; Flags: waituntilterminated
-Filename: "{app}\{#MyAppExeName}"; Description: "Abrir o {#MyAppName} agora"; Flags: nowait postinstall skipifsilent
+; shellexec e' obrigatorio aqui: o Inno roda o "abrir agora" com o usuario que
+; iniciou o setup, sem elevacao, e o app exige admin no manifesto. Sem passar
+; pelo shell, o CreateProcess falha com 740 (requer elevacao) em vez de mostrar
+; o pedido de permissao.
+Filename: "{app}\{#MyAppExeName}"; Description: "Abrir o {#MyAppName} agora"; Flags: nowait postinstall skipifsilent shellexec
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\_internal\__pycache__"
