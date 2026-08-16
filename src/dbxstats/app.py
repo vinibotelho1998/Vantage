@@ -30,6 +30,7 @@ from .sensors.fps import FpsEngine
 from .sensors.gpu import GpuReader
 from .sensors.lhm import LhmReader
 from .sensors.net import PingMonitor
+from .sensors.peer import PeerFinder
 from .sensors.procs import ProcessMonitor
 from .ui import style
 from .ui.main_window import MainWindow
@@ -87,6 +88,7 @@ class App:
         self.ping = PingMonitor(self.settings.ping_host, self.settings.ping_port)
         self.fps = FpsEngine(self.settings.fps_window, self.settings.fps_now_window)
         self.procs = ProcessMonitor()
+        self.peers = PeerFinder()
         self.collector = Collector(self.lhm, self.gpu, self.ping,
                                    self.settings.update_interval)
         self.gamepad = GamepadMouse(self.settings, qt)
@@ -139,6 +141,7 @@ class App:
         self.ping.start()
         self.fps.start()
         self.procs.start()
+        self.peers.start()
         self.collector.start()
 
         self.window.restore_geometry()
@@ -215,6 +218,7 @@ class App:
         if self._hotkeys is not None:
             self._hotkeys.unregister_all()
         self.gamepad.stop()
+        self.peers.stop()
         self._restore_displays()
         self.collector.stop()
         self.procs.stop()
@@ -318,9 +322,13 @@ class App:
         self._server_countdown = SERVER_SCAN_TICKS
         stream = self._stream
         if stream is None:
+            self.peers.watch(0)
             self.ping.set_auto_target(None)
             return
-        alvo = netmod.game_server(stream.pid)
+        # Tabela de conexoes primeiro (barata). Jogo so' de UDP nao aparece la',
+        # e ai' entra o farejador, que cruza porta local com trafego real.
+        self.peers.watch(stream.pid)
+        alvo = netmod.game_server(stream.pid) or self.peers.peer
         if alvo is None:
             self.ping.set_auto_target(None)
             return
