@@ -44,6 +44,7 @@ AGGREGATE_HZ = 4.0
 STALE_STREAM_S = 5.0       # sem frames por tanto tempo -> some da lista
 RETAIN_S = 20.0            # ...mas o historico so e descartado depois disso
 WATCHDOG_S = 20.0          # jogo em foco sem nenhum frame -> reinicia o PresentMon
+STUCK_S = 45.0             # captura sem sinal de vida nenhum -> supervisor travado
 RESTART_BACKOFF = (1.0, 2.0, 4.0, 8.0, 15.0)
 
 NAN = float("nan")
@@ -135,6 +136,10 @@ class FpsEngine:
         self._status = "parado"
         self._restarts = 0
         self._last_frame_at = 0.0
+        self._alive_at = 0.0
+        """Ultimo sinal de vida da captura: frame novo ou troca de sessao."""
+        self._reader: io.FileIO | None = None
+        """Pipe em leitura. Fechar daqui e' o que solta um `read` travado."""
         self._expected_pid: int | None = None
         self._expected_since = 0.0
         self._force_restart = threading.Event()
@@ -313,6 +318,7 @@ class FpsEngine:
                 self._note_failure()
                 return
             self._consecutive_failures = 0
+            self._alive_at = time.monotonic()
             self._status = "capturando"
             self._read_pipe(handle, proc)
             handle = None  # consumido pelo FileIO
@@ -345,6 +351,7 @@ class FpsEngine:
         import msvcrt
         fd = msvcrt.open_osfhandle(handle, os.O_RDONLY)
         raw = io.FileIO(fd, closefd=True)
+        self._reader = raw
         pending = b""
         layout: _Layout | None = None
         try:
@@ -376,6 +383,7 @@ class FpsEngine:
             _log.info("leitura do pipe encerrada: %s", e)
         finally:
             self._force_restart.clear()
+            self._reader = None
             try:
                 raw.close()
             except OSError:
@@ -545,7 +553,8 @@ class FpsEngine:
             self._windows = windows
 
     def _watchdog(self) -> None:
-        """Reinicia a captura se o jogo esperado nao produz frame nenhum."""
+        """Reinicia a captura se ela parar de dar sinal de vida."""
+        self._rescue_if_stuck()
         pid = self._expected_pid
         if pid is None or not self.running:
             return
@@ -560,6 +569,37 @@ class FpsEngine:
             self._status = "watchdog: reiniciando"
             self._expected_since = time.monotonic()
             self.restart()
+
+    def _rescue_if_stuck(self) -> None:
+        """Solta a captura quando ela para sem morrer.
+
+        O leitor bloqueia num `read` do pipe. Se o PresentMon some sem fechar a
+        ponta dele — sessao ETW roubada por outra instancia, processo morto a
+        forca — esse read nunca volta, e o supervisor fica parado para sempre
+        sem log nenhum. Fechar o pipe daqui e' o que faz o read levantar erro e
+        o ciclo recomecar.
+        """
+        if self._stop.is_set():
+            return
+        agora = time.monotonic()
+        vivo = max(self._alive_at, self._last_frame_at)
+        if not vivo:
+            self._alive_at = agora
+            return
+        if agora - vivo < STUCK_S:
+            return
+        _log.warning("captura sem sinal de vida ha %.0fs (processo %s); reiniciando",
+                     agora - vivo, "vivo" if self.running else "morto")
+        self._alive_at = agora
+        self._status = "destravando captura"
+        self._force_restart.set()
+        leitor, self._reader = self._reader, None
+        if leitor is not None:
+            try:
+                leitor.close()
+            except OSError:
+                pass
+        self._kill_process()
 
     # ── processo auxiliar ────────────────────────────────────────────────────
     def _kill_process(self) -> None:
