@@ -287,18 +287,36 @@ class KpiStrip(QWidget):
             self._order.append(tile)
         self._relayout(self._max_columns)
 
-    def _relayout(self, columns: int) -> None:
-        if columns == self._columns:
+    def _relayout(self, columns: int, forcar: bool = False) -> None:
+        if columns == self._columns and not forcar:
             return
         self._columns = columns
         while self._grid.count():
             self._grid.takeAt(0)
         for i in range(self._grid.columnCount()):
             self._grid.setColumnStretch(i, 0)
-        for i, tile in enumerate(self._order):
+        visiveis = [t for t in self._order if not t.isHidden()]
+        for i, tile in enumerate(visiveis):
             self._grid.addWidget(tile, i // columns, i % columns)
-        for i in range(min(columns, len(self._order))):
+        for i in range(min(columns, len(visiveis) or 1)):
             self._grid.setColumnStretch(i, 1)
+
+    def show_only(self, keys) -> None:
+        """Esconde os tiles que essa maquina nao tem como preencher.
+
+        Travessao em metade da faixa nao informa nada e ainda faz o app parecer
+        quebrado — numa maquina sem sensor de temperatura, ou sem GPU dedicada,
+        e' melhor a faixa ficar menor e inteira do que grande e furada.
+        """
+        alvo = set(keys)
+        mudou = False
+        for chave, tile in self.tiles.items():
+            deveria = chave in alvo
+            if tile.isHidden() == deveria:
+                tile.setVisible(deveria)
+                mudou = True
+        if mudou:
+            self._relayout(self._columns, forcar=True)
 
     def resizeEvent(self, event) -> None:
         gap = theme.scaled(theme.GAP)

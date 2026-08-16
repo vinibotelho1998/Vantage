@@ -43,14 +43,28 @@ class DashboardView(View):
         middle.addWidget(self._cards["fps"], 3)
         root.addLayout(middle, 5)
 
-        grid = QGridLayout()
-        grid.setSpacing(theme.scaled(theme.GAP))
-        for i, key in enumerate(("cpu", "gpu", "ram", "disk", "net")):
-            card = getattr(self, f"_build_{key}")()
-            self._cards[key] = card
-            grid.addWidget(card, 0, i)
-            grid.setColumnStretch(i, 1)
-        root.addLayout(grid, 4)
+        self._grid = QGridLayout()
+        self._grid.setSpacing(theme.scaled(theme.GAP))
+        self._grid_keys = ("cpu", "gpu", "ram", "disk", "net")
+        for key in self._grid_keys:
+            self._cards[key] = getattr(self, f"_build_{key}")()
+        self._relayout_cards()
+        root.addLayout(self._grid, 4)
+
+    def _relayout_cards(self) -> None:
+        """Reencaixa a linha de cards contando so' os visiveis.
+
+        Esconder um card sem refazer o grid deixa a coluna vazia no lugar — um
+        buraco no meio do painel, que e' pior do que o card inutil que saiu.
+        """
+        while self._grid.count():
+            self._grid.takeAt(0)
+        for i in range(self._grid.columnCount()):
+            self._grid.setColumnStretch(i, 0)
+        visiveis = [self._cards[k] for k in self._grid_keys if not self._cards[k].isHidden()]
+        for i, card in enumerate(visiveis):
+            self._grid.addWidget(card, 0, i)
+            self._grid.setColumnStretch(i, 1)
 
     # ── construcao ───────────────────────────────────────────────────────────
     def _build_timeline(self) -> Card:
@@ -189,6 +203,7 @@ class DashboardView(View):
         wanted = set(self.cfg.dash_cards)
         for key, card in self._cards.items():
             card.setVisible(key in wanted)
+        self._relayout_cards()
         self.ft_chart.setVisible("frametime" in wanted)
         self.chart.configure(legend=False, **self.chart_config())
         self.chart.set_span(self.cfg.history_window)
@@ -197,11 +212,39 @@ class DashboardView(View):
                       self.disk_spark, self.net_spark):
             spark.configure(self.cfg.smooth_lines)
 
+    def _ajustar_disponivel(self, d: dict, gpu: dict) -> None:
+        """Mostra so' o que essa maquina tem como medir.
+
+        Sem LibreHardwareMonitor nao ha' temperatura nem potencia; sem GPU
+        dedicada nao ha' VRAM. Deixar esses tiles no lugar, eternamente com
+        travessao, e' informacao que nao informa — e' o que faz o app parecer
+        quebrado em quem so' nao tem o sensor.
+        """
+        tem_sensores = bool(d.get("lhm_ok"))
+        tem_gpu = bool(gpu)
+        visiveis = ["cpu", "ram", "fps"]
+        if tem_sensores:
+            visiveis.append("cpu_temp")
+        if tem_gpu:
+            visiveis.append("gpu")
+            if gpu.get("temp") is not None or gpu.get("temp_hotspot") is not None:
+                visiveis.append("gpu_temp")
+            if gpu.get("vram_total"):
+                visiveis.append("vram")
+        if tem_sensores or gpu.get("watts") is not None:
+            visiveis.append("power")
+        self.kpi.show_only(visiveis)
+        mostrar_gpu = tem_gpu and "gpu" in self.cfg.dash_cards
+        if self._cards["gpu"].isHidden() == mostrar_gpu:
+            self._cards["gpu"].setVisible(mostrar_gpu)
+            self._relayout_cards()
+
     def on_system(self, d: dict) -> None:
         if not d:
             return
         h = self.history
         gpu = d.get("gpu") or {}
+        self._ajustar_disponivel(d, gpu)
 
         for key, values in (("cpu", h.values("cpu_pct")), ("gpu", h.values("gpu_pct")),
                             ("ram", h.values("ram_pct")), ("vram", h.values("vram_pct"))):
