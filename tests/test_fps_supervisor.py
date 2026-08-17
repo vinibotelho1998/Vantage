@@ -71,3 +71,39 @@ def test_comando_auxiliar_respeita_o_prazo():
     inicio = time.monotonic()
     fpsmod._run_bounded(["ping", "-n", "30", "127.0.0.1"], 1.0, "ping de teste")
     assert time.monotonic() - inicio < 4.0
+
+
+def test_sessao_legada_conta_como_orfa():
+    """A sessao de nome fixo que sobrou foi o que travou a captura por meia hora."""
+    assert fpsmod._orfa(fpsmod.SESSION_PREFIX)
+    assert fpsmod._orfa(fpsmod.SESSION_PREFIX + "_999999")
+    assert not fpsmod._orfa(fpsmod.SESSION)
+    assert not fpsmod._orfa("OutroApp")
+    assert not fpsmod._orfa("")
+
+
+def test_sessao_bloqueada_varre_em_vez_de_degradar_metricas():
+    """"access denied" nao diz nada sobre --v2_metrics."""
+    eng = FpsEngine()
+    varridas: list[int] = []
+    fpsmod_sweep = fpsmod.sweep_stale_sessions
+    fpsmod.sweep_stale_sessions = lambda: varridas.append(1)
+    try:
+        eng._note_failure("error: failed to start trace session: access denied.")
+    finally:
+        fpsmod.sweep_stale_sessions = fpsmod_sweep
+    assert varridas == [1]
+    assert eng._use_v1 is False
+
+
+def test_so_cai_para_v1_quando_a_opcao_e_recusada():
+    eng = FpsEngine()
+    eng._note_failure("error: unrecognized option '--v2_metrics'.")
+    assert eng._use_v1 is True
+
+
+def test_falha_generica_nao_muda_o_modo():
+    eng = FpsEngine()
+    eng._note_failure("(nada)")
+    eng._note_failure("(nada)")
+    assert eng._use_v1 is False

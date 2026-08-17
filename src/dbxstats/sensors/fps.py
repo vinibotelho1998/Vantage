@@ -368,9 +368,9 @@ class FpsEngine:
                 # antes de ler e' o que fecha o stderr — com ele vivo a leitura
                 # so' podia devolver "(ainda rodando)", que nao diz nada.
                 _terminate(proc)
-                _log.warning("PresentMon nao conectou (saida %s): %s",
-                             proc.poll(), _stderr_tail(proc))
-                self._note_failure()
+                erro = _stderr_tail(proc)
+                _log.warning("PresentMon nao conectou (saida %s): %s", proc.poll(), erro)
+                self._note_failure(erro)
                 return
             self._consecutive_failures = 0
             self._alive_at = time.monotonic()
@@ -395,9 +395,23 @@ class FpsEngine:
             cmd += ["--exclude", name]
         return cmd
 
-    def _note_failure(self) -> None:
+    def _note_failure(self, erro: str = "") -> None:
         self._consecutive_failures += 1
-        if self._consecutive_failures >= 2 and not self._use_v1:
+        queixa = erro.lower()
+
+        # Sessao ETW deixada para tras por uma execucao anterior faz todo
+        # StartTrace novo voltar "access denied", e a captura nunca mais sobe.
+        # Ja' aconteceu de valer meia hora sem FPS e sem overlay, resolvido na
+        # mao com `logman`. Agora o proprio motor limpa e tenta de novo.
+        if "access denied" in queixa or "in use" in queixa or "already" in queixa:
+            _log.warning("sessao de rastreamento bloqueada; varrendo sessoes orfas")
+            sweep_stale_sessions()
+            return
+
+        # Cair para v1 so' quando o PresentMon realmente recusa a opcao. Contar
+        # falha seguida como "ele nao aceita --v2_metrics" degradava as metricas
+        # de vez por causa de problema que nada tinha a ver com isso.
+        if not self._use_v1 and ("unrecognized option" in queixa or "invalid" in queixa):
             self._use_v1 = True
             _log.warning("PresentMon nao aceitou --v2_metrics; usando --v1_metrics")
 
@@ -750,10 +764,24 @@ def sweep_stale_sessions() -> None:
         return
     for linha in saida[0].splitlines():
         nome = linha.split()[0] if linha.split() else ""
-        if nome.startswith(SESSION_PREFIX + "_") and nome != SESSION:
-            _log.info("removendo sessao ETW orfa: %s", nome)
-            _run_bounded(["logman", "stop", nome, "-ets"], 8.0, f"logman stop {nome}")
-            _run_bounded(["logman", "delete", nome, "-ets"], 8.0, f"logman delete {nome}")
+        if not _orfa(nome):
+            continue
+        _log.info("removendo sessao ETW orfa: %s", nome)
+        _run_bounded(["logman", "stop", nome, "-ets"], 8.0, f"logman stop {nome}")
+        _run_bounded(["logman", "delete", nome, "-ets"], 8.0, f"logman delete {nome}")
+
+
+def _orfa(nome: str) -> bool:
+    """Sessao que sobrou de outra execucao e precisa sair da frente.
+
+    O nome exato SESSION_PREFIX entra na conta de proposito: e' como as versoes
+    antigas chamavam a sessao, e uma delas ficou para tras rodando. Enquanto
+    estava viva, todo StartTrace novo voltava "access denied" — meia hora sem
+    FPS e sem overlay. Varrer so' os nomes com pid deixaria justamente ela.
+    """
+    if nome == SESSION:
+        return False
+    return nome == SESSION_PREFIX or nome.startswith(SESSION_PREFIX + "_")
 
 
 # ── helpers win32 ─────────────────────────────────────────────────────────────
