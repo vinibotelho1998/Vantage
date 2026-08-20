@@ -31,6 +31,21 @@ def _require_admin_warning() -> None:
         0x10)
 
 
+def _identidade_na_barra() -> None:
+    """Da' ao processo uma identidade propria para o Windows.
+
+    Sem isso a barra de tarefas agrupa a janela sob o executavel que hospeda o
+    Python e mostra o icone DELE, nao o do app — e fixar na barra fixa a coisa
+    errada. O identificador tem de ser definido antes de qualquer janela nascer;
+    depois disso o Windows ja' decidiu.
+    """
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("DBX.DBXStats")
+    except Exception:                                    # noqa: BLE001
+        pass          # em Windows antigo simplesmente nao existe; nao e' fatal
+
+
 def main() -> int:
     log.setup()
     if not win.is_admin():
@@ -39,6 +54,7 @@ def main() -> int:
         _require_admin_warning()
         return 1
 
+    _identidade_na_barra()
     QGuiApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     qt = QApplication(sys.argv)
