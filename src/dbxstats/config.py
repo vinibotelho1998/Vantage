@@ -106,6 +106,19 @@ class Settings:
     # painel
     dash_cards: list[str] = field(default_factory=lambda: [k for k, _ in DASH_CARDS])
 
+    # sensores
+    sensor_favorites: list[str] = field(default_factory=list)
+    """Sensores fixados no topo da aba Sensores, pela chave de SensorNode.
+
+    Guardamos a chave "hardware/tipo/nome" (ver sensors/lhm.py) e nunca a
+    posicao na arvore: a ordem muda quando um sensor aparece ou some, e um
+    indice salvo apontaria o vizinho errado na abertura seguinte.
+
+    Chave de peca desligada continua guardada de proposito — a tela so' desenha
+    o que existe no ciclo atual, entao o favorito volta sozinho quando o
+    hardware voltar, em vez de o usuario ter que remarcar tudo.
+    """
+
     # benchmark
     bench_seconds: int = 60
     bench_autosave: bool = True
@@ -228,6 +241,14 @@ class Settings:
                                 if m in _OVERLAY_KEYS] or ["fps", "frametime"]
         self.dash_cards = [c for c in _as_list(self.dash_cards)
                            if c in _DASH_KEYS] or [k for k, _ in DASH_CARDS]
+
+        # Lista vazia e' estado legitimo (ninguem favoritou nada ainda), entao
+        # aqui nao existe fallback para "tudo": so' descartamos o que nao e'
+        # texto util e o repetido. O teto evita que um arquivo estragado vire
+        # uma secao de milhares de linhas no topo da aba.
+        self.sensor_favorites = list(dict.fromkeys(
+            k.strip() for k in _as_list(self.sensor_favorites)
+            if isinstance(k, str) and k.strip()))[:200]
 
         self._sanitize_diskbench()
 
