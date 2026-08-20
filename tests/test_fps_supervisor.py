@@ -107,3 +107,70 @@ def test_falha_generica_nao_muda_o_modo():
     eng._note_failure("(nada)")
     eng._note_failure("(nada)")
     assert eng._use_v1 is False
+
+
+# ── silencio nao e' falha ────────────────────────────────────────────────────
+class _ProcFalso:
+    """PresentMon que fica vivo e calado, como no desktop sem jogo."""
+
+    def __init__(self, morre_apos=None):
+        self.chamadas = 0
+        self._morre_apos = morre_apos
+
+    def poll(self):
+        self.chamadas += 1
+        if self._morre_apos is not None and self.chamadas >= self._morre_apos:
+            return 1
+        return None
+
+
+def test_processo_vivo_e_calado_nao_conta_como_falha():
+    """O PresentMon so' abre a saida quando tem o primeiro quadro a escrever.
+
+    A lista de exclusoes do app tira tudo o que apresenta quadros no desktop —
+    navegador, terminal, o proprio app. Sem jogo aberto, ficar calado e' o
+    comportamento certo dele. O prazo de 12 s transformava esse silencio em
+    "falhou", matando e ressuscitando o processo a cada quinze segundos.
+    """
+    import threading
+
+    stop, force = threading.Event(), threading.Event()
+    proc = _ProcFalso()
+    vidas = []
+
+    def parar_depois():
+        vidas.append(1)
+        if len(vidas) >= 3:
+            stop.set()
+
+    ok = fpsmod._esperar_conexao(threading.Event(), proc, stop, force, parar_depois)
+    assert ok is False              # nao conectou, mas...
+    assert len(vidas) >= 3          # ...ficou esperando, dando sinal de vida
+
+
+def test_processo_que_morre_de_verdade_e_falha():
+    import threading
+
+    stop, force = threading.Event(), threading.Event()
+    ok = fpsmod._esperar_conexao(threading.Event(), _ProcFalso(morre_apos=2),
+                                 stop, force, lambda: None)
+    assert ok is False
+
+
+def test_pedido_de_reinicio_interrompe_a_espera():
+    """Sem isso, reiniciar a captura na mao ficaria preso na espera."""
+    import threading
+
+    stop, force = threading.Event(), threading.Event()
+    force.set()
+    assert fpsmod._esperar_conexao(threading.Event(), _ProcFalso(),
+                                   stop, force, lambda: None) is False
+
+
+def test_espera_alimenta_o_watchdog():
+    """O watchdog mataria uma captura saudavel que so' esta' esperando jogo."""
+    eng = FpsEngine()
+    eng._alive_at = 0.0
+    eng._aguardando_jogo()
+    assert eng._alive_at > 0
+    assert "aguardando" in eng.status

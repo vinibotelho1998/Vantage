@@ -398,7 +398,8 @@ class FpsEngine:
             with self._proc_lock:
                 self._proc = proc
 
-            if not _wait_connect(handle, proc, timeout=12.0):
+            if not _wait_connect(handle, proc, self._stop, self._force_restart,
+                                 self._aguardando_jogo):
                 handle = None   # quem desiste do connect nao fecha; ver _wait_connect
                 self._status = "PresentMon nao conectou"
                 # A queixa do PresentMon e' a unica pista quando ele nao sobe:
@@ -433,6 +434,15 @@ class FpsEngine:
         for name in EXCLUDED:
             cmd += ["--exclude", name]
         return cmd
+
+    def _aguardando_jogo(self) -> None:
+        """Sinal de vida enquanto o PresentMon espera algo para reportar.
+
+        Sem isso o watchdog mataria uma captura perfeitamente saudavel: ficar
+        quieto no desktop e' o comportamento certo dele, nao travamento.
+        """
+        self._alive_at = time.monotonic()
+        self._status = "aguardando um jogo"
 
     def _note_failure(self, erro: str = "") -> None:
         self._consecutive_failures += 1
@@ -855,12 +865,40 @@ def _stderr_tail(proc: subprocess.Popen, limit: int = 300) -> str:
     return " ".join(texto.split())[-limit:] or "(nada)"
 
 
-def _wait_connect(handle: int, proc: subprocess.Popen, timeout: float) -> bool:
+def _esperar_conexao(done, proc, stop, force, esperando=None) -> bool:
+    """Espera a conexao chegar, enquanto o processo estiver vivo.
+
+    Separado do resto para poder ser exercitado sem um pipe de verdade: e' aqui
+    que mora a regra que estava errada — silencio com processo vivo nao e'
+    falha, e' o PresentMon esperando um jogo aparecer.
+    """
+    while True:
+        if done.wait(0.2):
+            return True
+        if proc.poll() is not None:      # morreu de verdade: ai' sim e' falha
+            return False
+        if stop.is_set() or force.is_set():
+            return False
+        if esperando is not None:
+            esperando()
+
+
+def _wait_connect(handle: int, proc: subprocess.Popen, stop, force, esperando=None) -> bool:
     """Espera o PresentMon abrir a outra ponta do pipe.
 
+    Espera o tempo que for preciso, enquanto o processo estiver vivo. Havia um
+    prazo de 12 segundos aqui, e ele estava errado: o PresentMon so' abre o
+    arquivo de saida quando tem o primeiro quadro para escrever, e a lista de
+    exclusoes do app tira justamente tudo o que apresenta quadros no desktop —
+    navegador, terminal, o proprio app. Sem jogo aberto ele fica calado, de
+    propria vontade, e o prazo transformava esse silencio saudavel em "falhou":
+    o processo era morto e ressuscitado a cada quinze segundos, para sempre.
+    Medido: com as 37 exclusoes, o arquivo nem chega a ser criado; sem elas,
+    1815 linhas em seis segundos.
+
     Quem desiste aqui NAO deve fechar o handle depois: ConnectNamedPipe e'
-    sincrono e, quando o prazo estoura, a thread auxiliar continua parada dentro
-    do kernel segurando esse mesmo handle. Fechar por fora um handle com I/O
+    sincrono e, quando desistimos, a thread auxiliar continua parada dentro do
+    kernel segurando esse mesmo handle. Fechar por fora um handle com I/O
     pendente de outra thread e' exatamente o tipo de coisa que congela o
     supervisor sem deixar rastro no log. Entao cancelamos a operacao e, dando ou
     nao certo, o fechamento fica com a thread presa — ela fecha quando acordar.
@@ -894,15 +932,7 @@ def _wait_connect(handle: int, proc: subprocess.Popen, timeout: float) -> bool:
                 _fechar_uma_vez()
 
     threading.Thread(target=_connect, name="fps-connect", daemon=True).start()
-    deadline = time.monotonic() + timeout
-    ligou = False
-    while time.monotonic() < deadline:
-        if done.wait(0.2):
-            ligou = True
-            break
-        if proc.poll() is not None:
-            break
-    if ligou:
+    if _esperar_conexao(done, proc, stop, force, esperando):
         return True
 
     abandonado.set()
