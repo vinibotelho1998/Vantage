@@ -7,11 +7,11 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication                          # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from dbxstats.config import Settings                                # noqa: E402
-from dbxstats.sensors.procs import ProcInfo, ProcessMonitor         # noqa: E402
-from dbxstats.ui.views.processes import _ORDENS, _chave_ordem       # noqa: E402
+from dbxstats.config import Settings  # noqa: E402
+from dbxstats.sensors.procs import ProcessMonitor, ProcInfo  # noqa: E402
+from dbxstats.ui.views.processes import _ORDENS, _chave_ordem  # noqa: E402
 
 _app = QApplication.instance() or QApplication([])
 

@@ -8,10 +8,10 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QPoint, QPointF, QRect                      # noqa: E402
-from PySide6.QtWidgets import QApplication                             # noqa: E402
+from PySide6.QtCore import QPoint, QPointF, QRect  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from dbxstats.ui.views.displays import ArrangeCanvas                    # noqa: E402
+from dbxstats.ui.views.displays import ArrangeCanvas  # noqa: E402
 
 _app = QApplication.instance() or QApplication([])
 
@@ -112,7 +112,6 @@ def test_indice_por_valor_e_nao_por_identidade():
 
 
 def test_seletor_nasce_no_modo_atual_e_nao_no_maior():
-    from PySide6.QtWidgets import QComboBox
 
     from dbxstats.ui.views.displays import _combo, _index_of
 

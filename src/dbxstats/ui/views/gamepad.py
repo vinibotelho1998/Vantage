@@ -8,8 +8,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QSlider, QVBoxLayout,
-                               QWidget)
+from PySide6.QtWidgets import QComboBox, QHBoxLayout, QSlider, QVBoxLayout, QWidget
 
 from ... import theme
 from ...platform import gamepad as G

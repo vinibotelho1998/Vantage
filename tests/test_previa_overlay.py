@@ -8,10 +8,10 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("DBXSTATS_NO_FILE_LOG", "1")
 
-from PySide6.QtWidgets import QApplication                     # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from dbxstats.config import Settings                           # noqa: E402
-from dbxstats.ui.settings import _CfgPrevia, _CtlPrevia        # noqa: E402
+from dbxstats.config import Settings  # noqa: E402
+from dbxstats.ui.settings import _CfgPrevia, _CtlPrevia  # noqa: E402
 
 _app = QApplication.instance() or QApplication([])
 
@@ -52,9 +52,10 @@ def test_a_previa_usa_a_classe_de_verdade():
     O risco concreto: mexer no overlay e a previa continuar mostrando o desenho
     antigo, dando confianca falsa sobre uma configuracao.
     """
+    import inspect
+
     from dbxstats.ui.overlay import GameOverlay
     from dbxstats.ui.settings import SettingsDialog
-    import inspect
 
     fonte = inspect.getsource(SettingsDialog._atualizar_previa)
     assert "GameOverlay" in fonte

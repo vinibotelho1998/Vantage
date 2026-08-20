@@ -7,9 +7,9 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication                    # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from dbxstats.ui.components import KpiStrip                   # noqa: E402
+from dbxstats.ui.components import KpiStrip  # noqa: E402
 
 _app = QApplication.instance() or QApplication([])
 
