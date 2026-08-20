@@ -71,12 +71,13 @@ def test_bottleneck_cpu():
 
 def test_bottleneck_capped():
     m = fr.compute(make([10.0] * 300, cpu=3.0, gpu=4.0))
-    assert "Limitado" in m.bottleneck
+    assert m.bottleneck == fr.BOTTLENECK_CAP
 
 
 def test_bottleneck_unknown_without_columns():
+    """Sem CPUBusy/GPUBusy o veredito e' 'indisponivel' — travessao parecia falta de dado."""
     m = fr.compute(make([10.0, 11.0, 9.0] * 50))
-    assert m.bottleneck == "—"
+    assert m.bottleneck == fr.BOTTLENECK_NA
 
 
 def test_window_slices_by_time():

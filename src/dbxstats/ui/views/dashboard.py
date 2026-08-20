@@ -6,6 +6,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout
 
 from ... import theme
+from ...core import frames as fr
 from ...core import units
 from ..charts import BarMeter, Gauge, Plot, Sparkline, TimeSeriesChart
 from ..components import Badge, Card, KpiStrip, MetricList, label
@@ -354,11 +355,17 @@ class DashboardView(View):
         self.lows.set("ft", units.ms(m.ft_avg, 2), theme.frametime_color(m.ft_avg))
         self.bottleneck.update_badge(
             f"gargalo: {m.bottleneck}",
-            theme.CPU if m.bottleneck == "CPU" else
-            (theme.GPU if m.bottleneck == "GPU" else theme.MUTE))
+            theme.CPU if m.bottleneck == fr.BOTTLENECK_CPU else
+            (theme.GPU if m.bottleneck == fr.BOTTLENECK_GPU else theme.MUTE))
+        # O rotulo cabe em duas palavras; o porque (quantos por cento dos quadros,
+        # ou que a captura nao traz as colunas) fica no tooltip.
+        self.bottleneck.setToolTip(m.bottleneck_detail)
         self.smooth_badge.update_badge(
             f"fluidez {m.smoothness:.0f}" if m.smoothness is not None else "fluidez —",
             theme.score_color(m.smoothness))
+        self.smooth_badge.setToolTip(
+            f"variação típica entre quadros vizinhos: {m.ft_jitter:.2f} ms"
+            if m.ft_jitter is not None else "")
         self.sync_badge.update_badge(
             "VSync ligado" if stream.vsync else "VSync desligado",
             theme.WARN if stream.vsync else theme.OK)
