@@ -31,6 +31,7 @@ from .sensors.gpu import GpuReader
 from .sensors.lhm import LhmReader
 from .sensors.net import PingMonitor
 from .sensors.peer import PeerFinder
+from .sensors import procs
 from .sensors.procs import ProcessMonitor
 from .ui import style
 from .ui.main_window import MainWindow
@@ -120,6 +121,7 @@ class App:
         self._session_name = ""
         self._session_bench_pid = 0
         """Processo que o gravador da partida esta' seguindo agora."""
+        self._session_priority = ""
         self.session_history: list[dict] = _load_session_history()
         self._game_pid = 0
         self._game_name = ""
@@ -291,6 +293,7 @@ class App:
         # solto e passa a seguir o processo assim que ele aparece.
         self.fps.session_start(0)
         self._session_bench_pid = 0
+        self._session_priority = str(item.get("priority", ""))
         aviso = f"{self._session_name} abrindo"
         return True, f"{aviso} — {msg}" if msg else aviso
 
@@ -472,6 +475,22 @@ class App:
             return ""
         _log.info("principal devolvida para %s", alvo.name)
         return alvo.name
+
+    def _apply_launch_priority(self, pid: int) -> None:
+        """Promove o jogo assim que descobrimos qual processo e' ele.
+
+        Nao da' para fazer isso na hora de abrir: atalho de loja sobe o cliente,
+        e o jogo aparece depois com outro nome. Quem sabe a resposta e' o motor
+        de FPS, que ve' quem esta' desenhando — entao a promocao espera por ele.
+        """
+        chave = self._session_priority
+        if not chave:
+            return
+        self._session_priority = ""      # uma vez por sessao, nao a cada tique
+        ok, msg = procs.mudar_prioridade(pid, self._session_name or "jogo", chave)
+        _log.info("prioridade do jogo: %s", msg)
+        if not ok:
+            self.notify("DBX Stats", msg)
 
     def _close_session_bench(self) -> None:
         """Fecha a gravacao da partida e guarda o resumo.
@@ -714,6 +733,7 @@ class App:
             if pid != self._session_bench_pid:
                 self._session_bench_pid = pid
                 self.fps.session_follow(pid)
+                self._apply_launch_priority(pid)
         if self.window.isVisible():
             self.window.tick_fps()
         if self._overlay is not None:

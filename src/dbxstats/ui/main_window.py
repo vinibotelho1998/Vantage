@@ -24,7 +24,6 @@ from .views.cpu import CpuView
 from .views.dashboard import DashboardView
 from .views.displays import DisplaysView
 from .views.gamepad import GamepadView
-from .views.gaming import GamingView
 from .views.gpu import GpuView
 from .views.launcher import LauncherView
 from .views.memory import MemoryView
@@ -34,14 +33,15 @@ from .views.sensors import SensorsView
 
 _log = log.get("ui")
 
-VIEW_CLASSES = (DashboardView, GamingView, CpuView, GpuView, MemoryView,
+VIEW_CLASSES = (DashboardView, CpuView, GpuView, MemoryView,
                 NetworkView, SensorsView, ProcessesView, BenchmarkView, LauncherView,
                 DisplaysView, GamepadView)
 
 # O painel ja' mostra FPS, lows e frametime do jogo em foco; a tela de Jogos
 # repetia isso na barra lateral. Ela continua existindo (e acessivel como tela
 # inicial nas configuracoes), so' saiu do menu.
-NAV_OCULTAS = ("gaming",)
+NAV_OCULTAS = ()
+"""Telas construidas mas fora da navegacao. Nenhuma hoje."""
 
 _EDGE = 6
 
@@ -264,14 +264,6 @@ class MainWindow(QWidget):
         view = self.current_view
         if view is not None:
             view.on_fps()
-        stream = self.app.active_stream()
-        badge = self.sidebar.buttons.get("gaming")
-        if badge is not None:
-            if stream is not None:
-                fps = stream.metrics.fps_now or stream.metrics.fps_avg
-                badge.set_badge(units.integer(fps), theme.fps_color(fps))
-            else:
-                badge.set_badge("")
 
     def tick_clock(self) -> None:
         self.titlebar.clock.setText(datetime.now().strftime("%H:%M:%S"))

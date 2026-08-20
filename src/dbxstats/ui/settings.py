@@ -32,7 +32,7 @@ from ..config import (
 )
 
 _VIEW_LABELS = {
-    "dashboard": "Painel", "gaming": "Jogos", "cpu": "CPU", "gpu": "GPU",
+    "dashboard": "Painel", "cpu": "CPU", "gpu": "GPU",
     "memory": "Memória & Disco", "network": "Rede", "sensors": "Sensores",
     "processes": "Processos", "benchmark": "Benchmark", "launcher": "Atalhos",
     "displays": "Telas", "gamepad": "Controle",

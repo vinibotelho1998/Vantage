@@ -15,7 +15,7 @@ FPS_WINDOWS = (10.0, 30.0, 60.0, 180.0, 300.0)
 FPS_NOW_WINDOWS = (0.5, 1.0, 2.0)
 ACCENTS = ("cyan", "blue", "green", "purple", "orange", "red", "pink")
 CORNERS = ("top-left", "top-right", "bottom-left", "bottom-right")
-VIEWS = ("dashboard", "gaming", "cpu", "gpu", "memory", "network", "sensors",
+VIEWS = ("dashboard", "cpu", "gpu", "memory", "network", "sensors",
          "processes", "benchmark", "launcher", "displays", "gamepad")
 
 GAMEPAD_BUTTONS = ("a", "b", "x", "y", "lb", "rb", "back", "start")
@@ -267,6 +267,17 @@ def _as_list(v) -> list:
     return list(v) if isinstance(v, (list, tuple)) else []
 
 
+def _prioridade_valida(bruto) -> str:
+    """So' aceita chave de prioridade que existe de verdade.
+
+    Um settings.json de outra versao nao pode fazer o app tentar promover um
+    jogo para uma classe inexistente na hora de abrir.
+    """
+    from .sensors.procs import prioridade_por_chave
+    chave = str(bruto or "").strip()
+    return chave if prioridade_por_chave(chave) else ""
+
+
 def _clean_launch_item(raw) -> dict | None:
     """Valida um atalho de jogo vindo do disco.
 
@@ -287,6 +298,7 @@ def _clean_launch_item(raw) -> dict | None:
         "path": path,
         "args": str(raw.get("args", "")),
         "target": target,
+        "priority": _prioridade_valida(raw.get("priority", "")),
         "restore": bool(raw.get("restore", True)),
     }
 

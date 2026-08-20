@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
 from .. import theme
 
-_VIEWS = [("dashboard", "Painel"), ("gaming", "Jogos"), ("cpu", "CPU"),
+_VIEWS = [("dashboard", "Painel"), ("cpu", "CPU"),
           ("gpu", "GPU"), ("sensors", "Sensores"), ("benchmark", "Benchmark"),
           ("displays", "Telas"), ("gamepad", "Controle")]
 

@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from ... import theme
 from ...core.session import resolve_shortcut
+from ...sensors import procs as P
 from ...platform import displays as D
 from ..components import Badge, Card, PillButton, divider, label
 from .base import View, scroll_page
@@ -236,6 +237,21 @@ class LauncherView(View):
         combo.currentIndexChanged.connect(
             lambda _i, idx=index, w=combo: self._set(idx, "target", w.currentData()))
         meio.addWidget(combo, 1)
+
+        prio = QComboBox()
+        prio.addItem("Prioridade normal", "")
+        for opcao in P.PRIORIDADES:
+            if opcao.chave == "normal":
+                continue
+            marca = " ⚠" if opcao.perigosa else ""
+            prio.addItem(f"Prioridade {opcao.rotulo.lower()}{marca}", opcao.chave)
+        prio.setCurrentIndex(max(0, prio.findData(item.get("priority", ""))))
+        prio.setToolTip("Aplicada ao processo do jogo assim que ele é reconhecido. "
+                        "Tempo real coloca o jogo à frente do próprio Windows e pode "
+                        "travar a máquina — use com cuidado.")
+        prio.currentIndexChanged.connect(
+            lambda _i, idx=index, w=prio: self._set(idx, "priority", w.currentData()))
+        meio.addWidget(prio)
 
         voltar = QCheckBox("voltar ao normal quando o jogo fechar")
         voltar.setToolTip("O app acompanha o processo do jogo e desfaz a troca "
