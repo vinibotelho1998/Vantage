@@ -106,6 +106,8 @@ class App:
         self._session_restore: list[dict] | None = None
         self._session_primary = ""
         """monitor_id da primaria de antes, quando so' a primaria mudou."""
+        self._session_off = ""
+        """monitor_id da tela que ligamos para o jogo e voltara a desligar."""
         self._session_name = ""
         self._game_pid = 0
         self._game_name = ""
@@ -249,9 +251,10 @@ class App:
         if not started:
             if trocou and item.get("restore", True):
                 if so_primaria and antes_primaria:
-                    self._restore_primary(antes_primaria)
+                    self._restore_primary(antes_primaria, self._session_off)
                 else:
                     dsp.apply_profile(antes)
+            self._session_off = ""
             return False, f"não consegui abrir: {err}"
 
         self._session = session
@@ -261,6 +264,8 @@ class App:
         devolver = trocou and item.get("restore", True)
         self._session_primary = antes_primaria if (devolver and so_primaria) else ""
         self._session_restore = antes if (devolver and not so_primaria) else None
+        if not devolver:
+            self._session_off = ""
         self._session_name = item.get("name") or Path(item["path"]).stem
         aviso = f"{self._session_name} abrindo"
         return True, f"{aviso} — {msg}" if msg else aviso
@@ -272,6 +277,7 @@ class App:
         deu errado vira aviso, e o primeiro item do retorno diz se alguma coisa
         mudou de fato — so' isso e' que gera promessa de devolver depois.
         """
+        self._session_off = ""
         if not target:
             return False, ""
         tipo, _, valor = target.partition(":")
@@ -280,8 +286,21 @@ class App:
                          if d.monitor_id == valor), None)
             if alvo is None:
                 return False, "a tela desse atalho não está conectada, abri assim mesmo"
+            aviso = ""
+            if not alvo.active:
+                # A TV vive desligada e so' acorda para jogar. Ligar aqui e' o
+                # que permite manter esse arranjo como o normal da casa, em vez
+                # de deixar uma tela preta ocupando area de trabalho o dia todo.
+                ok, err = dsp.set_enabled(alvo.device, True)
+                if not ok:
+                    return False, f"não consegui ligar a {alvo.name}: {err}"
+                self._session_off = alvo.monitor_id
+                aviso = f"{alvo.name} ligada e "
             ok, err = dsp.set_primary(alvo.device)
-            return (True, f"{alvo.name} virou a primária") if ok else (False, err)
+            if not ok and self._session_off:
+                dsp.set_enabled(alvo.device, False)
+                self._session_off = ""
+            return (True, f"{aviso}virou a primária") if ok else (False, err)
         if tipo == "profile":
             profile = next((p for p in self.settings.display_profiles
                             if p["name"] == valor), None)
@@ -305,8 +324,10 @@ class App:
         self._session = None
         restore = self._session_restore
         primaria = self._session_primary
+        desligar = self._session_off
         self._session_restore = None
         self._session_primary = ""
+        self._session_off = ""
         if restore is None and not primaria:
             return
         if not session.ever_started:
@@ -319,7 +340,7 @@ class App:
                         "As telas ficam como estão — use a aba Telas quando terminar.")
             return
         if primaria:
-            self._restore_primary(primaria)
+            self._restore_primary(primaria, desligar)
             return
         restore = self._normal_layout() or restore
         try:
@@ -329,26 +350,41 @@ class App:
         except Exception:
             _log.exception("falha devolvendo as telas depois do jogo")
 
-    def _restore_primary(self, monitor_id: str) -> None:
-        """Devolve so' a primaria, sem tocar no resto do arranjo.
+    def _restore_primary(self, monitor_id: str, desligar: str = "") -> None:
+        """Devolve a primaria e, se ligamos alguma tela para o jogo, apaga de novo.
 
         Reaplicar o perfil inteiro para desfazer uma troca de primaria e' o que
         fazia as tres telas apagarem por varios segundos toda vez que um jogo
-        fechava. Aqui e' uma chamada so', e as telas que nunca mudaram nem
+        fechava. Aqui sao uma ou duas chamadas, e as telas que nunca mudaram nem
         piscam.
+
+        A ordem importa: a primaria volta antes de a TV se apagar, porque o
+        Windows nao desliga a tela que esta' mandando.
         """
-        alvo = next((d for d in dsp.list_displays(with_modes=False)
-                     if d.monitor_id == monitor_id and d.active), None)
+        telas = dsp.list_displays(with_modes=False)
+        alvo = next((d for d in telas if d.monitor_id == monitor_id and d.active), None)
         if alvo is None:
             _log.warning("a tela primaria de antes (%s) nao esta mais ligada", monitor_id)
-            return
-        if alvo.primary:
-            return
-        ok, err = dsp.set_primary(alvo.device)
-        if ok:
-            self.notify("DBX Stats", f"{self._session_name} fechou — {alvo.name} de volta")
+        elif alvo.primary:
+            pass
         else:
-            _log.warning("nao consegui devolver a primaria: %s", err)
+            ok, err = dsp.set_primary(alvo.device)
+            if ok:
+                self.notify("DBX Stats",
+                            f"{self._session_name} fechou — {alvo.name} de volta")
+            else:
+                _log.warning("nao consegui devolver a primaria: %s", err)
+                return
+
+        if not desligar:
+            return
+        tv = next((d for d in dsp.list_displays(with_modes=False)
+                   if d.monitor_id == desligar and d.active), None)
+        if tv is None:
+            return
+        ok, err = dsp.set_enabled(tv.device, False)
+        if not ok:
+            _log.warning("nao consegui desligar a %s de volta: %s", tv.name, err)
 
     def _follow_game_server(self) -> None:
         """Aponta o ping para o servidor do jogo em foco.

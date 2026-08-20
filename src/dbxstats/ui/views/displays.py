@@ -72,6 +72,8 @@ class ArrangeCanvas(QWidget):
         self.primary: str = ""
         self._drag: str | None = None
         self._grab = QPoint()
+        self._proj: tuple[QRect, float, float, float] | None = None
+        """Projecao congelada durante o arraste; ver _projection."""
 
     def load(self, displays: list[D.Display]) -> None:
         self.rects.clear()
@@ -103,35 +105,62 @@ class ArrangeCanvas(QWidget):
         return min((self.width() - margem * 2) / max(1, b.width()),
                    (self.height() - margem * 2) / max(1, b.height()))
 
-    def _to_screen(self, r: QRect) -> QRect:
+    def _projection(self) -> tuple[QRect, float, float, float]:
+        """Limites, escala e deslocamento usados para desenhar.
+
+        Durante o arraste devolve o que foi congelado no clique. Recalcular a
+        cada movimento criava um laco: afastar uma tela aumentava os limites, a
+        escala encolhia, tudo era redesenhado menor e o retangulo fugia do
+        cursor encolhendo, ate' parecer que tinha sumido.
+        """
+        if self._proj is not None:
+            return self._proj
         b, s = self._bounds(), self._scale()
-        ox = (self.width() - b.width() * s) / 2
-        oy = (self.height() - b.height() * s) / 2
+        return b, s, (self.width() - b.width() * s) / 2, (self.height() - b.height() * s) / 2
+
+    def _to_screen(self, r: QRect) -> QRect:
+        b, s, ox, oy = self._projection()
         return QRect(int(ox + (r.left() - b.left()) * s), int(oy + (r.top() - b.top()) * s),
                      max(2, int(r.width() * s)), max(2, int(r.height() * s)))
 
+    def _to_desktop(self, ponto: QPoint) -> QPoint:
+        """Ponto do widget de volta em coordenadas de area de trabalho."""
+        b, s, ox, oy = self._projection()
+        s = s or 1
+        return QPoint(int(b.left() + (ponto.x() - ox) / s),
+                      int(b.top() + (ponto.y() - oy) / s))
+
     # ── arraste ──────────────────────────────────────────────────────────────
     def mousePressEvent(self, event) -> None:
+        ponto = event.position().toPoint()
         for key, rect in reversed(list(self.rects.items())):
-            if self._to_screen(rect).contains(event.position().toPoint()):
-                self._drag = key
-                self._grab = event.position().toPoint()
-                return
+            if not self._to_screen(rect).contains(ponto):
+                continue
+            self._drag = key
+            # Congela a projecao pelo arraste inteiro: e' o que mantem a tela
+            # embaixo do cursor enquanto ela se afasta das outras.
+            b, s = self._bounds(), self._scale()
+            self._proj = (b, s, (self.width() - b.width() * s) / 2,
+                          (self.height() - b.height() * s) / 2)
+            # Guarda onde dentro da tela o clique caiu. Somar deltas a cada
+            # movimento acumulava o erro do arredondamento e a tela ia escapando
+            # do ponteiro aos poucos.
+            self._grab = self._to_desktop(ponto) - rect.topLeft()
+            return
 
     def mouseMoveEvent(self, event) -> None:
         if self._drag is None:
             return
-        s = self._scale() or 1
-        delta = event.position().toPoint() - self._grab
-        self._grab = event.position().toPoint()
         rect = self.rects[self._drag]
-        rect.translate(int(delta.x() / s), int(delta.y() / s))
+        destino = self._to_desktop(event.position().toPoint()) - self._grab
+        rect.moveTo(destino)
         self._snap(self._drag)
         self.update()
 
     def mouseReleaseEvent(self, event) -> None:
         if self._drag is not None:
             self._drag = None
+            self._proj = None
             self._normalize()
             self.moved.emit()
             self.update()

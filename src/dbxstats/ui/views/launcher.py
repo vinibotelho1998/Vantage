@@ -132,9 +132,16 @@ class LauncherView(View):
         """
         opcoes = [("Não mexer nas telas", "")]
         for disp in D.list_displays(with_modes=False):
-            if not disp.monitor_id or not disp.active:
+            if not disp.monitor_id:
                 continue
-            marca = " (já é a principal)" if disp.primary else ""
+            # Tela apagada continua na lista: a TV vive desligada e so' acorda
+            # para jogar, entao ela e' justamente a escolha mais provavel aqui.
+            if not disp.active:
+                marca = " (desligada — liga ao abrir)"
+            elif disp.primary:
+                marca = " (já é a principal)"
+            else:
+                marca = ""
             opcoes.append((f"Abrir na {disp.name}{marca}", f"primary:{disp.monitor_id}"))
         for profile in self.cfg.display_profiles:
             opcoes.append((f"Aplicar o perfil '{profile['name']}'",
