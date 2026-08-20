@@ -281,3 +281,110 @@ def verdict(m: FrameMetrics) -> str:
     if m.smoothness >= 50:
         return "Irregular — o 1% low esta longe da media; da pra sentir."
     return "Ruim — stutter frequente. Vale investigar limites de energia, VRAM ou CPU."
+
+# ── partida inteira ───────────────────────────────────────────────────────────
+SESSION_BIN_MS = 0.1
+"""Largura do balde do histograma. Define a precisao dos percentis."""
+SESSION_MAX_MS = 250.0
+"""Acima disso o frame vai para o balde de estouro: e' travada, nao cadencia."""
+
+
+class SessionRecorder:
+    """Estatistica de uma partida inteira, em memoria constante.
+
+    Guardar frame a frame nao serve aqui. Uma sessao de tres horas a 144 fps
+    passa de um milhao e meio de amostras, cada uma com oito numeros — centenas
+    de megabytes presos no processo enquanto o jogo roda, que e' justamente
+    quando a maquina precisa da memoria. Entao nada de lista: cada frame entra
+    num histograma de baldes fixos e em quatro acumuladores.
+
+    O custo por frame e' uma divisao, um indice e tres comparacoes, e o tamanho
+    nao cresce com a duracao — 2500 inteiros do primeiro ao ultimo minuto. Em
+    troca, os percentis saem com a precisao do balde (0,1 ms), o que num frame
+    de 7 ms da' menos de 1,5% de erro.
+    """
+
+    __slots__ = ("count", "total_ms", "min_ms", "max_ms", "bins", "over",
+                 "hitches", "stutters", "_prev_ms", "started_at", "ended_at")
+
+    def __init__(self) -> None:
+        self.count = 0
+        self.total_ms = 0.0
+        self.min_ms = 0.0
+        self.max_ms = 0.0
+        self.bins = [0] * (int(SESSION_MAX_MS / SESSION_BIN_MS) + 1)
+        self.over = 0
+        self.hitches = 0
+        self.stutters = 0
+        self._prev_ms = 0.0
+        self.started_at = 0.0
+        self.ended_at = 0.0
+
+    def add(self, ft_ms: float) -> None:
+        if ft_ms <= 0.0 or ft_ms != ft_ms:      # descarta zero, negativo e NaN
+            return
+        self.count += 1
+        self.total_ms += ft_ms
+        if self.min_ms == 0.0 or ft_ms < self.min_ms:
+            self.min_ms = ft_ms
+        if ft_ms > self.max_ms:
+            self.max_ms = ft_ms
+        if ft_ms >= SESSION_MAX_MS:
+            self.over += 1
+        else:
+            self.bins[int(ft_ms / SESSION_BIN_MS)] += 1
+        if ft_ms >= HITCH_MS:
+            self.hitches += 1
+        # Engasgo e' frame muito mais lento que o anterior: e' o que se sente
+        # como solavanco, mesmo quando a media continua boa.
+        if self._prev_ms and ft_ms > self._prev_ms * STUTTER_FACTOR:
+            self.stutters += 1
+        self._prev_ms = ft_ms
+
+    def worst_avg(self, fraction: float) -> float:
+        """Media dos piores `fraction` frames, lida do histograma.
+
+        Percorre os baldes do mais lento para o mais rapido acumulando ate'
+        fechar a fatia, usando o meio do balde como valor. O balde de estouro
+        entra com o pior frame visto, que e' o unico numero exato que sobrou
+        dele.
+        """
+        if self.count <= 0:
+            return 0.0
+        alvo = max(1, int(self.count * fraction))
+        faltam, soma = alvo, 0.0
+        if self.over:
+            usar = min(self.over, faltam)
+            soma += usar * self.max_ms
+            faltam -= usar
+        i = len(self.bins) - 1
+        while faltam > 0 and i >= 0:
+            n = self.bins[i]
+            if n:
+                usar = min(n, faltam)
+                soma += usar * ((i + 0.5) * SESSION_BIN_MS)
+                faltam -= usar
+            i -= 1
+        usados = alvo - faltam
+        return (soma / usados) if usados else 0.0
+
+    def result(self) -> dict:
+        """Resumo pronto para a interface e para o disco."""
+        if self.count <= 0:
+            return {"frames": 0}
+        medio = self.total_ms / self.count
+        pior_1 = self.worst_avg(0.01)
+        return {
+            "frames": self.count,
+            "duracao_s": round(self.ended_at - self.started_at, 1)
+                         if self.ended_at else 0.0,
+            "fps_avg": round(1000.0 / medio, 1),
+            "fps_max": round(1000.0 / self.min_ms, 1) if self.min_ms else 0.0,
+            "fps_min": round(1000.0 / self.max_ms, 1) if self.max_ms else 0.0,
+            "low_1": round(1000.0 / pior_1, 1) if pior_1 else 0.0,
+            "ft_avg": round(medio, 2),
+            "ft_max": round(self.max_ms, 2),
+            "hitches": self.hitches,
+            "stutters": self.stutters,
+            "stutter_pct": round(100.0 * self.stutters / self.count, 2),
+        }

@@ -133,7 +133,38 @@ class BenchmarkView(View):
         linha.addStretch(1)
         card_rel.add_layout(linha)
         lay.addWidget(card_rel, 2)
+
+        # Partidas inteiras, gravadas sozinhas quando o jogo abre pelo atalho.
+        # E' o numero que interessa de verdade: uma corrida de 60 s pega um
+        # trecho escolhido a dedo, a partida pega o jogo como ele e'.
+        self.card_sessoes = Card("Sessões de jogo", theme.FPS,
+                                 "gravadas do início ao fim, ao abrir pelos Atalhos")
+        self.sessoes = MetricList([(f"s{i}", "—") for i in range(10)])
+        self.card_sessoes.add(self.sessoes)
+        self.card_sessoes.body.addStretch(1)
+        lay.addWidget(self.card_sessoes, 1)
         lay.addStretch(0)
+        self._fill_sessoes()
+
+    def _fill_sessoes(self) -> None:
+        historico = list(getattr(self.app, "session_history", []))[-10:]
+        historico.reverse()
+        for i in range(10):
+            chave = f"s{i}"
+            if i >= len(historico):
+                self.sessoes.set_label(chave, "—")
+                self.sessoes.set(chave, "")
+                continue
+            s = historico[i]
+            minutos = (s.get("duracao_s") or 0) / 60.0
+            self.sessoes.set_label(chave, f"{s.get('quando', '')}  {s.get('game', '')}")
+            self.sessoes.set(
+                chave,
+                f"{minutos:.0f} min · {s.get('fps_avg', 0):.0f} fps · "
+                f"1% {s.get('low_1', 0):.0f} · {s.get('hitches', 0)} travadas")
+
+    def on_activate(self) -> None:
+        self._fill_sessoes()
 
     def _copiar(self) -> None:
         from PySide6.QtWidgets import QApplication

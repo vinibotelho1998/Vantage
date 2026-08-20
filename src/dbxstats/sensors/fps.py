@@ -178,6 +178,8 @@ class FpsEngine:
         """
 
         self._capture_pid: int | None = None
+        self._session_rec = None
+        self._session_pid: int | None = None
         self._capture: list[tuple] = []
         self._capture_active = False
 
@@ -287,6 +289,43 @@ class FpsEngine:
         with self._pub_lock:
             self._streams.clear()
             self._windows.clear()
+
+    # ── partida inteira ──────────────────────────────────────────────────────
+    def session_start(self, pid: int) -> None:
+        """Comeca a acompanhar uma partida do inicio ao fim.
+
+        Roda junto com o resto sem atrapalhar: o custo por frame e' constante e
+        o tamanho nao cresce com a duracao, entao pode ficar ligado a partida
+        toda sem virar peso na maquina que esta' jogando.
+        """
+        rec = fr.SessionRecorder()
+        rec.started_at = time.monotonic()
+        with self._raw_lock:
+            self._session_pid = pid
+            self._session_rec = rec
+
+    def session_follow(self, pid: int) -> None:
+        """Passa a seguir outro processo, mantendo o que ja' foi medido.
+
+        Atalho de loja abre o cliente, e o jogo sobe depois com outro nome —
+        quando descobrimos quem e' de verdade, a gravacao continua nele.
+        """
+        with self._raw_lock:
+            if self._session_rec is not None:
+                self._session_pid = pid
+
+    def session_stop(self) -> dict | None:
+        with self._raw_lock:
+            rec, self._session_rec = self._session_rec, None
+            self._session_pid = None
+        if rec is None:
+            return None
+        rec.ended_at = time.monotonic()
+        return rec.result()
+
+    def session_peek(self) -> int:
+        with self._raw_lock:
+            return self._session_rec.count if self._session_rec is not None else 0
 
     # ── captura de benchmark ─────────────────────────────────────────────────
     def capture_start(self, pid: int) -> None:
@@ -526,6 +565,10 @@ class FpsEngine:
                                    "sync": sync, "seen": now}
                 if self._capture_active and key[0] == self._capture_pid:
                     self._capture.append(sample)
+                # Gravador da partida inteira: uma soma e um indice por frame,
+                # sem guardar amostra nenhuma. Ver frames.SessionRecorder.
+                if self._session_rec is not None and key[0] == self._session_pid:
+                    self._session_rec.add(sample[1])
         self._last_frame_at = now
 
     # ── unidade da coluna de tempo ───────────────────────────────────────────

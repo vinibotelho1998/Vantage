@@ -47,6 +47,11 @@ GAME_EXIT_GRACE_S = 5.0
 SERVER_SCAN_TICKS = 5
 """Ticks de sessao (1 s cada) entre buscas do servidor do jogo."""
 BENCH_HISTORY_MAX = 40
+SESSION_HISTORY_MAX = 60
+BACKGROUND_INTERVAL_S = 3.0
+"""Passo de coleta sem ninguem olhando."""
+MIN_SESSION_FRAMES = 3000
+"""Menos que isso e' carregamento, nao partida."""
 
 # metricas do snapshot que alimentam graficos e acumulador da sessao
 _SERIES = (
@@ -113,12 +118,17 @@ class App:
         self._session_off = ""
         """monitor_id da tela que ligamos para o jogo e voltara a desligar."""
         self._session_name = ""
+        self._session_bench_pid = 0
+        """Processo que o gravador da partida esta' seguindo agora."""
+        self.session_history: list[dict] = _load_session_history()
         self._game_pid = 0
         self._game_name = ""
         self._game_seen_at = 0.0
         self._server_countdown = 1
         self._alerted: dict[str, bool] = {}
         self._tray_hinted = False
+        self._load_now = ""
+        """Perfil de esforco em uso; ver _apply_load_profile."""
 
         self._bench_active = False
         self._bench_started = 0.0
@@ -276,6 +286,11 @@ class App:
         if not devolver:
             self._session_off = ""
         self._session_name = item.get("name") or Path(item["path"]).stem
+        # Grava a partida inteira desde ja'. O pid do jogo ainda nao existe —
+        # quem descobre e' o proprio motor de FPS — entao o gravador comeca
+        # solto e passa a seguir o processo assim que ele aparece.
+        self.fps.session_start(0)
+        self._session_bench_pid = 0
         aviso = f"{self._session_name} abrindo"
         return True, f"{aviso} — {msg}" if msg else aviso
 
@@ -332,6 +347,7 @@ class App:
             return
 
         self._session = None
+        self._close_session_bench()
         restore = self._session_restore
         primaria = self._session_primary
         desligar = self._session_off
@@ -456,6 +472,36 @@ class App:
             return ""
         _log.info("principal devolvida para %s", alvo.name)
         return alvo.name
+
+    def _close_session_bench(self) -> None:
+        """Fecha a gravacao da partida e guarda o resumo.
+
+        Sessao curta demais nao vira registro: alguns segundos de jogo dizem
+        mais sobre o carregamento do que sobre o desempenho, e encheriam a
+        lista de linhas inuteis.
+        """
+        self._session_bench_pid = 0
+        resumo = self.fps.session_stop()
+        if not resumo or resumo.get("frames", 0) < MIN_SESSION_FRAMES:
+            return
+        registro = {
+            "quando": datetime.now().strftime("%d/%m %H:%M"),
+            "game": self._session_name or resumo.get("game", "jogo"),
+            **resumo,
+        }
+        for chave, fonte in _SYSTEM_KEYS:
+            agg = self.stats.get(fonte)
+            if agg:
+                registro[chave] = round(agg[1], 1)
+        self.session_history.append(registro)
+        del self.session_history[:-SESSION_HISTORY_MAX]
+        _save_session_history(self.session_history)
+        minutos = registro.get("duracao_s", 0) / 60.0
+        self.notify("DBX Stats",
+                    f"{registro['game']}: {minutos:.0f} min, "
+                    f"{registro.get('fps_avg', 0):.0f} fps médio, "
+                    f"1% low {registro.get('low_1', 0):.0f}")
+        self.show_view("benchmark")
 
     def _restore_primary(self, monitor_id: str, desligar: str = "") -> None:
         """Devolve a primaria e, se ligamos alguma tela para o jogo, apaga de novo.
@@ -663,6 +709,11 @@ class App:
 
     def _tick_fast(self) -> None:
         self._stream = self._select_stream()
+        if self._session is not None and self._stream is not None:
+            pid = self._stream.pid
+            if pid != self._session_bench_pid:
+                self._session_bench_pid = pid
+                self.fps.session_follow(pid)
         if self.window.isVisible():
             self.window.tick_fps()
         if self._overlay is not None:
@@ -670,6 +721,41 @@ class App:
             win.keep_topmost(int(self._overlay.winId()))
         if self._bench_active and time.monotonic() - self._bench_started >= self._bench_total:
             self.benchmark_stop()
+
+    def _load_profile(self) -> str:
+        """Quanto esforco vale a pena agora: "painel", "overlay" ou "fundo".
+
+        Ler todos os sensores custa ~17 ms, e a 1 Hz isso e' quase 2% de um
+        nucleo o tempo todo. Com um jogo na frente, esse nucleo faz falta — e
+        ninguem esta' vendo o painel. Entao o ritmo passa a seguir quem esta'
+        de fato olhando: a janela aberta, o overlay, ou ninguem.
+        """
+        if self.window.isVisible() and not self._fg_fullscreen:
+            return "painel"
+        if self._overlay is not None and self._overlay.isVisible():
+            return "overlay"
+        return "fundo"
+
+    def _apply_load_profile(self) -> None:
+        perfil = self._load_profile()
+        if perfil == self._load_now:
+            return
+        self._load_now = perfil
+        base = self.settings.update_interval
+        if perfil == "painel":
+            intervalo = base
+        elif perfil == "overlay":
+            # Nada de medir mais rapido do que o overlay desenha: seria trabalho
+            # que ninguem chega a ver.
+            intervalo = max(base, 1.0 / max(0.5, self.settings.overlay_refresh_hz))
+        else:
+            # Sem janela e sem overlay so' restam a bandeja e o historico, que
+            # aguentam bem um passo mais largo.
+            intervalo = max(base, BACKGROUND_INTERVAL_S)
+        self.collector.set_interval(intervalo)
+        if self._t_sys is not None:
+            self._t_sys.setInterval(int(intervalo * 1000))
+        _log.info("ritmo de coleta: %s (%.1f s por leitura)", perfil, intervalo)
 
     def _tick_focus(self) -> None:
         fullscreen, hwnd = win.is_foreground_fullscreen()
@@ -682,6 +768,7 @@ class App:
         self.procs.set_game_pids(self.fps.snapshot().keys())
         if self.settings.overlay_enabled and self.settings.overlay_auto_game:
             self._sync_overlay_visibility()
+        self._apply_load_profile()
 
     # ── selecao do jogo ──────────────────────────────────────────────────────
     def _select_stream(self):
@@ -1027,6 +1114,25 @@ def _only_primary_differs(alvo: list[dict], atual: list[dict]) -> str:
 
 def _summary_row(m: fr.FrameMetrics) -> dict:
     return {k: v for k, v in m.as_dict().items() if isinstance(v, (int, float))}
+
+
+def _session_file():
+    return paths.data_dir() / "sessoes.json"
+
+
+def _load_session_history() -> list[dict]:
+    try:
+        return json.loads(_session_file().read_text(encoding="utf-8"))[-SESSION_HISTORY_MAX:]
+    except Exception:
+        return []
+
+
+def _save_session_history(history: list[dict]) -> None:
+    try:
+        _session_file().write_text(json.dumps(history, ensure_ascii=False),
+                                   encoding="utf-8")
+    except OSError:
+        _log.warning("nao consegui guardar o historico de sessoes")
 
 
 def _bench_file():

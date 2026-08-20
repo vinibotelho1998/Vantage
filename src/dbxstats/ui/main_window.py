@@ -154,34 +154,16 @@ class Sidebar(QWidget):
             lay.addWidget(btn)
         lay.addStretch(1)
 
-        self.status = QVBoxLayout()
-        self.status.setSpacing(theme.scaled(3))
-        self._lines: dict[str, QLabel] = {}
-        for key, text in (("sensors", "Sensores"), ("capture", "Captura"),
-                          ("uptime", "Ligado há")):
-            row = QHBoxLayout()
-            row.setContentsMargins(theme.scaled(6), 0, theme.scaled(4), 0)
-            cap = label(text, 7.5, QFont.Weight.Normal, theme.FAINT)
-            val = label("—", 7.5, QFont.Weight.DemiBold, theme.MUTE)
-            val.setAlignment(Qt.AlignmentFlag.AlignRight)
-            row.addWidget(cap)
-            row.addStretch(1)
-            row.addWidget(val)
-            self._lines[key] = val
-            self.status.addLayout(row)
-        lay.addLayout(self.status)
+        # O rodape com "Sensores / Captura / Ligado ha" saiu daqui: era ruido
+        # fixo num canto que ninguem olha. O estado dos sensores tem lugar
+        # proprio na aba Sensores, o da captura aparece no painel quando falta
+        # jogo, e o tempo ligado esta' nas abas CPU e Memoria.
 
     def set_active(self, key: str) -> None:
         accent = theme.accent_color(self._win.app.settings.accent)
         self._brand.setStyleSheet(f"color: {accent}; background: transparent;")
         for btn_key, btn in self.buttons.items():
             btn.set_active(btn_key == key, accent)
-
-    def set_status(self, key: str, text: str, color: str = theme.MUTE) -> None:
-        line = self._lines.get(key)
-        if line is not None:
-            line.setText(text)
-            line.setStyleSheet(f"color: {color}; background: transparent;")
 
 
 class MainWindow(QWidget):
@@ -277,19 +259,11 @@ class MainWindow(QWidget):
         if view is not None:
             view.on_system(data)
         self._update_chips(data)
-        self.sidebar.set_status(
-            "sensors", "ativos" if data.get("lhm_ok") else "carregando",
-            theme.OK if data.get("lhm_ok") else theme.WARN)
-        self.sidebar.set_status("uptime", units.duration(data.get("uptime")))
 
     def tick_fps(self) -> None:
         view = self.current_view
         if view is not None:
             view.on_fps()
-        engine = self.app.fps
-        color = theme.OK if engine.status == "capturando" else theme.WARN
-        text = engine.status if len(engine.status) < 18 else engine.status[:17] + "…"
-        self.sidebar.set_status("capture", text, color)
         stream = self.app.active_stream()
         badge = self.sidebar.buttons.get("gaming")
         if badge is not None:
