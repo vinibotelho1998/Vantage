@@ -26,6 +26,16 @@ THROTTLE_REASONS = (
     (0x0000000000000200, "Display ativo"),
 )
 
+# NVML_FI_DEV_MEMORY_TEMP: a temperatura da VRAM nao tem funcao propria na NVML,
+# so' existe pela tabela de campos. Nas placas que nao expoem o campo a chamada
+# volta com erro por campo — dai' o desligamento apos a primeira recusa, para nao
+# pagar uma ida ao driver por segundo por um numero que nunca vem.
+_FI_MEMORY_TEMP = 82
+
+# nvmlValueType -> membro da union que carrega o numero
+_FIELD_MEMBERS = {0: "dVal", 1: "uiVal", 2: "ulVal", 3: "ullVal", 4: "sllVal",
+                  5: "siVal", 6: "usVal"}
+
 
 class GpuReader:
     def __init__(self) -> None:
@@ -39,6 +49,7 @@ class GpuReader:
         self._smi_lock = threading.Lock()
         self._smi_thread: threading.Thread | None = None
         self._stop = threading.Event()
+        self._mem_temp_ok = True
         self._init_nvml()
 
     # ── ciclo de vida ────────────────────────────────────────────────────────
@@ -111,6 +122,7 @@ class GpuReader:
                 "usage": util.gpu,
                 "mem_ctrl": util.memory,
                 "temp": p.nvmlDeviceGetTemperature(h, p.NVML_TEMPERATURE_GPU),
+                "temp_vram": self.mem_temp(),
                 "vram_used": mem.used // 1024 ** 2,
                 "vram_total": mem.total // 1024 ** 2,
                 "freq": p.nvmlDeviceGetClockInfo(h, p.NVML_CLOCK_GRAPHICS),
@@ -137,6 +149,21 @@ class GpuReader:
         except Exception:
             return []
         return [label for bit, label in THROTTLE_REASONS if mask & bit]
+
+    def mem_temp(self) -> int | None:
+        """Temperatura da VRAM, quando a placa publica o campo."""
+        if not self._ok or not self._mem_temp_ok:
+            return None
+        try:
+            campos = self._pynvml.nvmlDeviceGetFieldValues(self._hdl, [_FI_MEMORY_TEMP])
+            valor = _field_number(campos[0]) if campos else None
+        except Exception as e:
+            _log.debug("temperatura da VRAM via NVML: %s", e)
+            valor = None
+        if valor is None:
+            self._mem_temp_ok = False
+            return None
+        return int(valor)
 
     def vram(self) -> tuple[int, int] | None:
         if not self._ok:
@@ -211,6 +238,22 @@ class GpuReader:
             except Exception as e:
                 _log.debug("nvidia-smi: %s", e)
             self._stop.wait(2.0)
+
+
+def _field_number(campo) -> float | None:
+    """Le o numero de um nvmlFieldValue_t.
+
+    O valor chega numa union: ler o membro errado nao levanta erro nenhum, so'
+    devolve outro numero — 45 °C viraria algo como 1,1e-43. Por isso o tipo
+    declarado no proprio campo e' quem escolhe o membro, e campo que voltou com
+    erro (placa que nao publica aquilo) nao vira leitura.
+    """
+    if getattr(campo, "nvmlReturn", 1) != 0:
+        return None
+    membro = _FIELD_MEMBERS.get(int(campo.valueType))
+    if membro is None:
+        return None
+    return float(getattr(campo.value, membro))
 
 
 def _parse_smi_watts(text: str) -> float | None:

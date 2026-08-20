@@ -36,6 +36,35 @@ def label(text: str = "", pt: float = 9, weight: int = QFont.Weight.Normal,
     return lb
 
 
+def dimm_color(snapshot: dict) -> str:
+    """Cor da temperatura da RAM na faixa que o proprio pente publica.
+
+    Os limites vem de fabrica no SPD (High Limit e Critical High) e mudam de
+    modulo para modulo. Usar a escala geral do app aqui erra nas duas pontas: 55
+    graus num pente ja' e' aviso do fabricante e no processador seria ociosidade.
+    Sem modulo nenhum a funcao cai nos valores tipicos de DDR5.
+    """
+    modulos = [m for m in (snapshot.get("ram_modules") or []) if isinstance(m, dict)]
+    alto = min((m["high"] for m in modulos if m.get("high")), default=None)
+    critico = min((m["critical"] for m in modulos if m.get("critical")), default=None)
+    return theme.dimm_temp_color(snapshot.get("ram_temp"), alto, critico)
+
+
+def linha_opcional(lista, chave: str, valor, texto, cor) -> None:
+    """Preenche uma linha de MetricList, ou faz a linha sumir se nao ha' leitura.
+
+    Travessao fixo numa linha diz "isto quebrou"; linha ausente diz "esta maquina
+    nao mede isso", que e' a verdade quando falta o sensor — e e' o que mantem o
+    card honesto numa maquina sem NVML, sem sensor de pente ou sem elevacao.
+    """
+    row = lista.row(chave)
+    if row is None:
+        return
+    row.setVisible(valor is not None)
+    if valor is not None:
+        row.set(texto(valor), cor(valor) if callable(cor) else cor)
+
+
 def divider(vertical: bool = False) -> QFrame:
     f = QFrame()
     f.setObjectName("Divider")

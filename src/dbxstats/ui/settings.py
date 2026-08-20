@@ -31,6 +31,7 @@ from ..config import (
     UPDATE_INTERVALS,
     VIEWS,
 )
+from ..core import frames as fr
 
 _VIEW_LABELS = {
     "dashboard": "Painel", "cpu": "CPU", "gpu": "GPU",
@@ -102,7 +103,9 @@ class _CfgPrevia:
 
 
 class _PingPrevia:
-    target_label = "servidor"
+    # "servidor" se lia como medicao de verdade. Na previa tudo e' exemplo, e o
+    # rotulo precisa dizer isso — senao a pessoa procura que servidor e' esse.
+    target_label = "exemplo"
 
 
 class _HistPrevia:
@@ -117,11 +120,19 @@ class _StreamPrevia:
     pid = 4242
 
     class metrics:
+        frames = 4200
         fps_now = 144.0
         fps_avg = 141.7
         low_1 = 96.0
         low_01 = 88.0
         ft_avg = 6.94
+        stutter_pct = 1.4
+        # O veredito de gargalo e' a linha mais assertiva do overlay; sem ele a
+        # previa mostraria um painel com um bloco a menos que o de verdade.
+        bottleneck = fr.BOTTLENECK_GPU
+        cpu_bound_pct = 3.0
+        gpu_bound_pct = 92.0
+        capped_pct = 1.0
 
 
 class _CtlPrevia:
@@ -136,11 +147,17 @@ class _CtlPrevia:
         return {
             "cpu_pct": 42.0, "cpu_temp": 78.0, "cpu_temp_package": 78.0,
             "cpu_temp_cores": 61.0, "cpu_mhz": 4900, "cpu_watts": 95.0,
-            "cpu_volts": 1.18,
+            "cpu_volts": 1.118, "cpu_volts_src": "rail", "cpu_vid": 1.05,
             "ram_used": 18.2, "ram_total": 32.0, "ram_pct": 57.0, "ram_freq": 6000,
+            "ram_temp": 44.0,
+            "ram_modules": [{"slot": "DIMM #1", "temp": 44.0, "high": 55.0,
+                             "critical": 85.0, "model": "A-DATA AX5U6000"}],
+            "game_pid": 4242, "game_name": "jogo.exe",
+            "game_ram_private": 9400.0, "game_ram_wset": 8100.0,
             "ping_ms": 15.0, "packet_loss": 0.0,
             "gpu": {"usage": 98.0, "temp": 64, "temp_hotspot": 81, "temp_vram": 70,
                     "freq": 2900, "mem_freq": 2500, "watts": 290.0, "volts": 1.05,
+                    "mem_ctrl": 61.0, "power_limit": 330.0,
                     "vram_used": 9000, "vram_total": 16384, "vram_pct": 55.0},
         }
 
@@ -332,7 +349,10 @@ class SettingsDialog(QDialog):
         sc_row, self.w_oscale = _slider(70, 250, int(self._cfg.overlay_scale * 100), "%")
         hz_row, self.w_ohz = _slider(10, 100, int(self._cfg.overlay_refresh_hz * 10), "")
         gr_row, self.w_ograph = _slider(10, 300, int(self._cfg.overlay_graph_seconds), " s")
-        self.w_ocols = _combo([("Automático", 0), ("Uma coluna", 1), ("Duas colunas", 2)],
+        # Duas opcoes, e nao tres: "automatico" prometia uma escolha que o arranjo
+        # de coluna unica nao faz mais. Settings antigo com 1 cai na primeira
+        # entrada, que e' exatamente o mesmo desenho que ele ja' tinha.
+        self.w_ocols = _combo([("Uma coluna", 0), ("Duas colunas", 2)],
                               self._cfg.overlay_columns)
         form.addRow("Canto da tela", self.w_corner)
         form.addRow("Opacidade", op_row)

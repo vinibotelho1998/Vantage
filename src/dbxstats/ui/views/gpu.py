@@ -70,6 +70,10 @@ class GpuView(View):
             ("used", "Em uso"), ("free", "Livre"), ("ctrl", "Controlador"),
             ("temp", "Temp VRAM"), ("clock", "Clock"),
         ])
+        # A faixa geral do app comeca a avisar em 65 graus, e GDDR parada vive
+        # nos 68: sem a faixa propria a linha nasceria laranja numa placa sadia.
+        self.vram_rows.row("temp").setToolTip(
+            "GDDR trabalha quente. Aviso a partir de 95 °C, crítico em 105 °C.")
         card_vram.add(self.vram_rows)
         card_vram.body.addStretch(1)
         bottom.addWidget(card_vram, 1)
@@ -77,7 +81,7 @@ class GpuView(View):
         card_info = Card("Adaptador", theme.GPU)
         self.info = MetricList([
             ("name", "Modelo"), ("driver", "Driver"), ("vbios", "VBIOS"),
-            ("mode", "Modo de vídeo"), ("pcie", "PCIe"),
+            ("mode", "Modo de vídeo"), ("pcie", "PCIe"), ("volts", "Tensão do núcleo"),
             ("limit", "Limite de potência"), ("slowdown", "Limite térmico"),
             ("engine", "Encoder / Decoder"), ("pcie_io", "Tráfego PCIe"),
         ])
@@ -154,8 +158,11 @@ class GpuView(View):
         self.vram_rows.set("used", f"{used} MB")
         self.vram_rows.set("free", f"{total - used} MB")
         self.vram_rows.set("ctrl", units.percent(g.get("mem_ctrl")))
-        self.vram_rows.set("temp", units.temp(g.get("temp_vram")),
-                           theme.temp_color(g.get("temp_vram")))
+        # Linha some sem sensor: nesta maquina AMD nao ha NVML, e a temperatura da
+        # VRAM so' existe em parte das placas. Travessao fixo faz parecer defeito.
+        vt = g.get("temp_vram")
+        self.vram_rows.row("temp").setVisible(vt is not None)
+        self.vram_rows.set("temp", units.temp(vt), theme.vram_temp_color(vt))
         self.vram_rows.set("clock", units.mhz(g.get("mem_freq")))
 
         static = g.get("static", {})
@@ -167,6 +174,9 @@ class GpuView(View):
                       else (mode or units.DASH))
         gen, width = static.get("pcie_gen"), static.get("pcie_width")
         self.info.set("pcie", f"Gen {gen} x{width}" if gen else units.DASH)
+        volts = g.get("volts")
+        self.info.row("volts").setVisible(volts is not None)
+        self.info.set("volts", f"{volts:.3f} V" if volts is not None else units.DASH)
         self.info.set("limit", units.watts(static.get("power_limit"), 0))
         self.info.set("slowdown", units.temp(static.get("temp_slowdown")))
         self.info.set("engine", f"{units.percent(g.get('encoder'))} / "

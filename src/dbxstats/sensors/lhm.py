@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import sys
 import threading
+import time
 from dataclasses import dataclass
 
 from .. import log, paths
@@ -25,6 +26,29 @@ _CPU_TEMP_PRIORITY = (
 _GPU_DISCRETE_KW = ("rtx", "gtx", "rx ", " arc", "radeon pro", "quadro", "tesla", "geforce")
 _GPU_INTEGRATED_KW = ("uhd graphics", "iris", "radeon(tm) graphics", "radeon graphics",
                       "hd graphics", "vega")
+
+# Vcore de verdade x VID. No Ryzen 9800X3D o "Core #N VID" marcou 0,463 V com o
+# pacote em 98 W e os oito nucleos a 5225 MHz — fisicamente impossivel — e mal se
+# moveu (0,469→0,531 V) enquanto o pacote ia de 39 para 63 W. Aquilo e' o pedido
+# de tensao codificado, nao a tensao entregue, e sem elevacao trava em 1,550 V.
+# Publicar VID como "voltagem da CPU" e' um numero errado com cara de certo,
+# entao ele sai numa chave propria e o Vcore vem do rail da placa.
+_VCORE_NOMES = ("vcore", "cpu core", "cpu vcore", "core voltage", "cpu voltage")
+# Faixa plausivel de Vcore em desktop atual: abaixo e' sensor morto, acima sao os
+# rails de 1,8 V / 2,5 V / 3,3 V / 5 V / 12 V.
+_VCORE_FAIXA = (0.40, 1.70)
+# Movimento minimo para adotar um rail anonimo como Vcore. Medido nesta X870M:
+# numa janela de 15 s o Vcore andou 0,060 V e todos os outros rails da faixa
+# ficaram cravados em 0,000 — 0,020 V passa longe do ruido e longe do sinal.
+_VCORE_MOVIMENTO = 0.02
+# Ordem de confianca da tensao publicada; ver _publicar_volts.
+_VOLTS_RANK = {"vcore": 3, "cpu": 2, "rail": 1}
+
+# Ler os dois pentes DDR5 custa ~2,2 ms por ciclo (mais que a CPU inteira, que
+# gasta 2,5 ms com 64 sensores) porque cada um e' uma conversa por SMBus. E' o
+# sensor mais lento da maquina em todo sentido: nao mudou nem 0,01 °C em 15 s.
+# Fora do ritmo do resto, ele deixa de pesar sem esconder nada.
+_SPD_INTERVALO_S = 10.0
 
 UNITS = {
     "Voltage": "V", "Current": "A", "Power": "W", "Clock": "MHz",
@@ -91,6 +115,9 @@ class LhmReader:
         self._lock = threading.Lock()
         self._tree: list[SensorNode] = []
         self._tree_lock = threading.Lock()
+        self._rails: dict[str, tuple[float, float]] = {}
+        """Minimo e maximo ja' vistos de cada voltagem da placa; ver _vcore."""
+        self._spd_at = 0.0
 
     @property
     def ready(self) -> bool:
@@ -149,8 +176,10 @@ class LhmReader:
                 if self._computer is None:
                     return {}
                 hw_list = list(self._computer.Hardware)
+            spd = self._spd_vencido()
             for hw in hw_list:
-                hw.Update()
+                if spd or not _e_modulo_spd(hw):
+                    hw.Update()
                 self._dispatch(hw, result, gpus)
                 self._collect_tree(hw, tree)
                 for sub in hw.SubHardware:
@@ -166,6 +195,19 @@ class LhmReader:
     def tree(self) -> list[SensorNode]:
         with self._tree_lock:
             return list(self._tree)
+
+    def _spd_vencido(self) -> bool:
+        """Diz se ja' passou tempo bastante para conversar com os pentes de novo.
+
+        O valor antigo continua na arvore entre uma leitura e outra: o LHM guarda
+        o ultimo numero lido, entao pular o Update() envelhece a temperatura em
+        segundos — e nao ha temperatura de RAM que ande nesse prazo.
+        """
+        agora = time.monotonic()
+        if agora - self._spd_at < _SPD_INTERVALO_S:
+            return False
+        self._spd_at = agora
+        return True
 
     def close(self) -> None:
         with self._lock:
@@ -212,6 +254,8 @@ class LhmReader:
         core_temps: list[float] = []
         core_clocks: list[float] = []
         core_loads: list[tuple[int, float]] = []
+        vids: list[float] = []
+        volts: list[float] = []
         for s in hw.Sensors:
             st = str(s.SensorType)
             name = str(s.Name)
@@ -241,8 +285,15 @@ class LhmReader:
                     result["cpu_watts_cores"] = round(f, 1)
             elif st == "Fan" and f > 0:
                 result.setdefault("cpu_fan", int(f))
-            elif st == "Voltage" and ("Core" in name or "VID" in name):
-                result.setdefault("cpu_volts", round(f, 3))
+            elif st == "Voltage" and "VID" in name:
+                vids.append(f)
+            elif st == "Voltage" and "Core" in name:
+                volts.append(f)
+
+        if vids:
+            result["cpu_vid"] = round(max(vids), 3)
+        if volts:
+            _publicar_volts(result, max(volts), "cpu")
 
         # Duas leituras contam historia diferente e o overlay mostra as duas:
         # Tctl/Tdie e' o ponto mais quente do encapsulamento, que e' quem dita
@@ -319,8 +370,16 @@ class LhmReader:
                 g["fan_rpm"] = int(f)
             elif st == "Control" and "GPU Fan" in name:
                 g["fan_pct"] = int(f)
-            elif st == "Voltage" and "GPU Core" in name:
+            elif st == "Voltage" and "GPU Core" in name and f > 0:
                 g["volts"] = round(f, 3)
+            elif st == "Voltage" and f > 0 and _e_volt_de_nucleo(name):
+                # Nem todo driver escreve exatamente "GPU Core", mas o rail do
+                # nucleo sempre se identifica pelo nome. Rail sem "core" no nome
+                # (SoC, VRAM) fica de fora: seria outra tensao com outro rotulo.
+                g.setdefault("volts_alt", round(f, 3))
+        alt = g.pop("volts_alt", None)
+        if "volts" not in g and alt is not None:
+            g["volts"] = alt
         gpus.append(g)
 
     def _pick_gpu(self, result: dict, gpus: list) -> None:
@@ -338,6 +397,7 @@ class LhmReader:
 
     def _read_memory(self, hw, result: dict) -> None:
         if str(hw.Name) != "Total Memory":
+            self._read_dimm(hw, result)
             return
         for s in hw.Sensors:
             st = str(s.SensorType)
@@ -357,16 +417,50 @@ class LhmReader:
             elif st == "Load" and "Memory" in name:
                 result["ram_pct_lhm"] = round(f, 1)
 
+    def _read_dimm(self, hw, result: dict) -> None:
+        """Temperatura de um pente de RAM, lida do proprio modulo pelo SPD.
+
+        So' existe com o app elevado: sem admin estes hardwares nem aparecem na
+        arvore do LHM — nao ha erro, eles simplesmente somem, que e' o jeito mais
+        facil de alguem concluir que a maquina nao tem o sensor.
+        """
+        modulo: dict = {}
+        for s in hw.Sensors:
+            if str(s.SensorType) != "Temperature" or s.Value is None:
+                continue
+            name = str(s.Name)
+            f = round(float(s.Value), 2)
+            # Os limites vem de fabrica no proprio pente: e' a faixa certa para
+            # colorir a leitura, em vez de um numero chutado no app.
+            if "Critical High" in name:
+                modulo["critical"] = f
+            elif "High Limit" in name:
+                modulo["high"] = f
+            elif "Resolution" in name or "Low" in name:
+                continue
+            elif f > 0:
+                modulo["slot"] = name
+                modulo["temp"] = f
+        if "temp" not in modulo:
+            return
+        modulo["model"] = _limpar_spd(str(hw.Name))
+        result.setdefault("ram_modules", []).append(modulo)
+        anterior = result.get("ram_temp")
+        result["ram_temp"] = (modulo["temp"] if anterior is None
+                              else max(anterior, modulo["temp"]))
+
     def _read_motherboard(self, hw, result: dict) -> None:
         result.setdefault("board_name", str(hw.Name))
         fans: list[int] = []
+        rails: list[tuple[str, str, float]] = []
         for sub in hw.SubHardware:
             sub.Update()
             for s in sub.Sensors:
                 if s.Value is None:
                     continue
                 st = str(s.SensorType)
-                nl = str(s.Name).lower()
+                nome = str(s.Name)
+                nl = nome.lower()
                 f = float(s.Value)
                 if st == "Fan" and f > 0:
                     fans.append(int(f))
@@ -374,9 +468,38 @@ class LhmReader:
                         result["cpu_fan"] = int(f)
                 elif st == "Temperature" and ("system" in nl or "motherboard" in nl) and f > 0:
                     result.setdefault("board_temp", round(f, 1))
+                elif st == "Voltage" and f > 0:
+                    rails.append((f"{sub.Name}/{nome}", nome, f))
+        self._vcore(rails, result)
         if fans:
             result["fans"] = fans
             result.setdefault("cpu_fan", fans[0])
+
+    def _vcore(self, rails: list[tuple[str, str, float]], result: dict) -> None:
+        """Acha a tensao real do processador entre as voltagens da placa.
+
+        Placa sem perfil no LHM entrega os rails como "Voltage #1"…"#7": sete
+        numeros anonimos, e um deles e' o Vcore. O que separa o Vcore dos outros
+        nao e' o nome, e' o comportamento — ele e' o unico que anda junto com a
+        carga. Por isso o rail so' e' adotado depois de se mexer de verdade;
+        enquanto nao se mexeu, o app prefere nao ter numero a ter um chute.
+        """
+        for _, nome, valor in rails:
+            if any(t in nome.lower() for t in _VCORE_NOMES):
+                _publicar_volts(result, valor, "vcore")
+                return
+        melhor: tuple[float, float, str] | None = None
+        for chave, nome, valor in rails:
+            if not _VCORE_FAIXA[0] <= valor <= _VCORE_FAIXA[1]:
+                continue
+            baixo, alto = self._rails.get(chave, (valor, valor))
+            baixo, alto = min(baixo, valor), max(alto, valor)
+            self._rails[chave] = (baixo, alto)
+            movimento = alto - baixo
+            if movimento >= _VCORE_MOVIMENTO and (melhor is None or movimento > melhor[0]):
+                melhor = (movimento, valor, nome)
+        if melhor is not None:
+            _publicar_volts(result, melhor[1], "rail", melhor[2])
 
     def _read_storage(self, hw, result: dict) -> None:
         disks = result.setdefault("disks_lhm", [])
@@ -412,3 +535,43 @@ def _core_index(name: str) -> int:
         return int(name.split("#")[1].split()[0])
     except (IndexError, ValueError):
         return 999
+
+
+def _e_modulo_spd(hw) -> bool:
+    """Pente fisico de RAM, e nao os totais que o LHM calcula sozinho."""
+    return (str(hw.HardwareType) == "Memory"
+            and str(hw.Name) not in ("Total Memory", "Virtual Memory"))
+
+
+def _e_volt_de_nucleo(name: str) -> bool:
+    return "core" in name.lower() or name.strip().lower() in ("gpu voltage", "voltage")
+
+
+def _limpar_spd(nome: str) -> str:
+    """Tira o lixo binario do nome que veio do SPD do pente.
+
+    Numa das leituras o modulo do slot #3 se apresentou como
+    'A-DATA … DCLARBK>\\x00} (#3)' e na seguinte veio limpo: a string do SPD nem
+    sempre termina onde deveria. Rotulo com byte nulo no meio parece app
+    quebrado, entao o que nao e' imprimivel cai fora antes de virar texto.
+    """
+    limpo = "".join(c for c in nome if c.isprintable() and c not in "<>{}|")
+    return " ".join(limpo.split())
+
+
+def _publicar_volts(result: dict, valor: float, origem: str, rail: str = "") -> None:
+    """Guarda a melhor tensao de CPU disponivel, com a procedencia junto.
+
+    Ordem de confianca: rail que a placa nomeia como Vcore > sensor de nucleo do
+    proprio processador > rail generico identificado por movimento. A ordem tem
+    de valer independente de qual hardware o LHM entregou primeiro, e a tela
+    precisa da procedencia para nao apresentar palpite como medida.
+    """
+    if _VOLTS_RANK[origem] <= _VOLTS_RANK.get(result.get("cpu_volts_src", ""), 0):
+        return
+    result["cpu_volts"] = round(valor, 3)
+    result["cpu_volts_src"] = origem
+    if rail:
+        result["cpu_volts_rail"] = rail
+    else:
+        result.pop("cpu_volts_rail", None)

@@ -14,6 +14,15 @@ _KPIS = [
     ("power", "Potência", "W"), ("fan", "Cooler", "RPM"), ("procs", "Processos", ""),
 ]
 
+_FONTE_VOLTS = {
+    "vcore": "rail nomeado pela placa",
+    "cpu": "sensor do próprio processador",
+    "rail": "rail anônimo, identificado por variação",
+}
+"""De onde saiu o Vcore. A procedencia importa porque o valor anonimo foi
+escolhido por correlacao com a potencia, e nao por nome — em outra placa o mesmo
+indice poderia ser outro trilho."""
+
 
 class CpuView(View):
     key = "cpu"
@@ -65,7 +74,8 @@ class CpuView(View):
         card_info = Card("Processador", theme.CPU)
         self.info = MetricList([
             ("name", "Modelo"), ("cores", "Núcleos / Threads"), ("base", "Clock base"),
-            ("board", "Placa-mãe"), ("volts", "Tensão"), ("uptime", "Ligado há"),
+            ("board", "Placa-mãe"), ("volts", "Tensão"), ("vid", "VID pedido"),
+            ("uptime", "Ligado há"),
         ])
         card_info.add(self.info)
         card_info.body.addStretch(1)
@@ -92,6 +102,34 @@ class CpuView(View):
         for chart in (self.chart, self.clock_chart, self.power_chart):
             chart.configure(**self.chart_config())
             chart.set_span(self.cfg.history_window)
+
+    def _mostrar_tensao(self, d: dict) -> None:
+        """Vcore e VID em linhas separadas, cada uma com a sua procedencia.
+
+        Sao coisas diferentes e por muito tempo esta tela mostrou uma no lugar da
+        outra: o VID e' o codigo que o nucleo PEDE, e nesta maquina ele marcava
+        0,46 V com o pacote a 98 W — fisicamente impossivel. Quando o rail ainda
+        nao foi identificado (precisa de carga variada) a linha some, porque um
+        travessao aqui e' mais honesto que o numero errado que havia antes.
+        """
+        volts = d.get("cpu_volts")
+        linha = self.info.row("volts")
+        if linha is not None:
+            linha.setVisible(volts is not None)
+            if volts is not None:
+                linha.set(f"{volts:.3f} V", theme.TXT)
+                linha.set_stat(_FONTE_VOLTS.get(d.get("cpu_volts_src") or "", ""))
+
+        vid = d.get("cpu_vid")
+        linha = self.info.row("vid")
+        if linha is not None:
+            # Sem elevacao o VID trava no topo da codificacao (1,550 V) e vira
+            # lixo com cara de medida; a faixa plausivel e' o filtro.
+            valido = vid is not None and 0.3 < vid < 1.55
+            linha.setVisible(valido)
+            if valido:
+                linha.set(f"{vid:.3f} V", theme.MUTE)
+                linha.set_stat("tensão pedida pelo núcleo")
 
     def on_system(self, d: dict) -> None:
         if not d:
@@ -133,7 +171,7 @@ class CpuView(View):
         self.info.set("cores", f"{static.get('cores', '?')} / {static.get('threads', '?')}")
         self.info.set("base", units.clock(static.get("cpu_base_mhz")))
         self.info.set("board", d.get("board_name") or units.DASH)
-        self.info.set("volts", f"{d['cpu_volts']:.3f} V" if d.get("cpu_volts") else units.DASH)
+        self._mostrar_tensao(d)
         self.info.set("uptime", units.duration(d.get("uptime")))
 
         st = self.app.stats

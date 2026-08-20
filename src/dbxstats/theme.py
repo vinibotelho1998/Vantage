@@ -127,6 +127,26 @@ def temp_color(t: float | None) -> str:
     return _band(t, 65, 82)
 
 
+def vram_temp_color(t: float | None) -> str:
+    """GDDR mora quente: 68 graus parada e' normal e 85 nao e' noticia.
+
+    A faixa geral (65/82/92) pintaria de vermelho uma placa que esta' bem, e um
+    trilho de temperaturas alinhadas perde o sentido se cada linha estiver medida
+    contra a regua errada.
+    """
+    return _band(t, 95, 105)
+
+
+def dimm_temp_color(t: float | None, high: float | None = None,
+                    critical: float | None = None) -> str:
+    """Faixa do proprio pente: High Limit e Critical High vem de fabrica no SPD.
+
+    Limiar chutado no app erra nas duas pontas — DDR5 a 55 ja' e' aviso do
+    fabricante, e a mesma temperatura num processador seria ociosidade.
+    """
+    return _band(t, high or 55.0, critical or 85.0)
+
+
 def load_color(pct: float | None) -> str:
     return _band(pct, 65, 88)
 

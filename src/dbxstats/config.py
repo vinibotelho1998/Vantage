@@ -20,13 +20,36 @@ VIEWS = ("dashboard", "cpu", "gpu", "memory", "network", "sensors",
 
 GAMEPAD_BUTTONS = ("a", "b", "x", "y", "lb", "rb", "back", "start")
 
+SETTINGS_VERSION = 2
+"""Sobe quando um padrao muda de um jeito que a lista salva precisa ser reescrita."""
+
 OVERLAY_METRICS = [
     ("fps", "FPS"), ("graph", "Gráfico de FPS"), ("low1", "1% Low"),
-    ("frametime", "Frametime"), ("cpu", "CPU (uso/temp)"),
-    ("gpu", "GPU (uso/temp)"), ("ram", "RAM"), ("vram", "VRAM"),
-    ("ping", "Ping"), ("watts", "Consumo"), ("clock", "Relógio"),
+    ("frametime", "Frametime"), ("limite", "Quem está no limite"),
+    ("cpu", "CPU (uso/clock/temp)"), ("gpu", "GPU (uso/clock/temp)"),
+    ("watts", "Consumo"), ("volts", "Tensão"),
+    ("vram", "VRAM"), ("ram", "RAM"),
+    ("temps_mem", "Temperatura das memórias"), ("mem_ctrl", "Controlador de VRAM"),
+    ("jogo_ram", "RAM do jogo"), ("jogo_ram_ws", "RAM do jogo (working set)"),
+    ("mem_clock", "Clock das memórias"), ("teto_watts", "Limite de potência"),
+    ("ping", "Ping"), ("clock", "Relógio"),
 ]
 _OVERLAY_KEYS = {k for k, _ in OVERLAY_METRICS}
+
+OVERLAY_OFF_BY_DEFAULT = frozenset({"jogo_ram_ws", "mem_clock", "teto_watts"})
+"""Fora do padrao por atrapalharem mais do que informam no meio de uma partida.
+
+O working set ao lado do private bytes poe dois numeros na mesma celula e pede
+explicacao; o clock das memorias fica cravado no topo o jogo inteiro e nao
+explica queda nenhuma; e o teto de potencia so' existe onde ha' sensor de limite
+real — inventar o teto seria pior que nao mostrar.
+"""
+
+OVERLAY_DEFAULT = [k for k, _ in OVERLAY_METRICS if k not in OVERLAY_OFF_BY_DEFAULT]
+
+_OVERLAY_LEGADO = frozenset({"fps", "graph", "low1", "frametime", "cpu", "gpu",
+                             "ram", "vram", "ping", "watts", "clock"})
+"""O padrao completo da versao 1. Ver Settings._migrar."""
 
 DASH_CARDS = [
     ("timeline", "Linha do tempo"), ("fps", "Jogo em foco"),
@@ -45,6 +68,10 @@ _DISKBENCH_KEYS = {k for k, _ in DISKBENCH_PHASES}
 
 @dataclass
 class Settings:
+    settings_version: int = SETTINGS_VERSION
+    """Versao do arquivo salvo. Ver _migrar: e' o que permite ligar metrica nova
+    para quem nunca mexeu na lista, sem passar por cima de quem escolheu."""
+
     # janela
     win_x: int = -1
     win_y: int = -1
@@ -85,16 +112,20 @@ class Settings:
     overlay_corner: str = "top-left"
     overlay_opacity: float = 0.88
     overlay_scale: float = 1.0
-    overlay_metrics: list[str] = field(
-        default_factory=lambda: [k for k, _ in OVERLAY_METRICS])
-    """Vem completo de proposito: overlay pela metade nao serve para diagnosticar nada."""
+    overlay_metrics: list[str] = field(default_factory=lambda: list(OVERLAY_DEFAULT))
+    """Vem quase completo de proposito: overlay pela metade nao diagnostica nada."""
     overlay_auto_game: bool = True
     overlay_refresh_hz: float = 3.0
     """Quantas vezes por segundo os numeros trocam. Alto demais nao da' para ler."""
     overlay_graph_seconds: int = 45
     """Janela do grafico de FPS. Menos segundos = tracado mais aberto e mais liso."""
     overlay_columns: int = 0
-    """0 decide sozinho pelo numero de metricas; 1 ou 2 forcam o formato."""
+    """0 e 1 sao a coluna unica do arranjo; 2 divide as pecas em dois blocos.
+
+    Coluna unica e' o padrao porque a leitura do painel depende de clock, tensao
+    e temperatura da mesma peca ficarem lado a lado. Duas colunas existem para
+    tela baixa, onde a torre alta rouba mais canto que um bloco largo.
+    """
 
     # alertas
     alert_cpu_temp: int = 90
@@ -198,15 +229,36 @@ class Settings:
 
     @classmethod
     def from_dict(cls, data: dict) -> Settings:
-        clean = {k: v for k, v in (data or {}).items() if k in cls._known()}
+        data = data or {}
+        clean = {k: v for k, v in data.items() if k in cls._known()}
         obj = cls(**clean)
+        # A versao vem do arquivo, e nao do objeto: o dataclass ja' nasce com a
+        # versao atual, entao perguntar a ele diria sempre "esta' em dia".
+        obj._migrar(int(_num(data.get("settings_version"), 1)))
         obj.sanitize()
         return obj
+
+    def _migrar(self, versao: int) -> None:
+        """Metrica nova nasce ligada para quem nunca mexeu na lista.
+
+        `sanitize()` filtra a lista salva contra as chaves conhecidas e nunca
+        acrescenta nada. Sem este passo, um redesenho do overlay estreia
+        invisivel justamente para quem ja' usa o app ha' tempo — o arquivo salvo
+        congela a lista da versao em que foi escrito. So' a lista intocada e'
+        substituida: quem escolheu o que ver continua com a escolha.
+        """
+        if versao >= SETTINGS_VERSION:
+            return
+        if set(_as_list(self.overlay_metrics)) == set(_OVERLAY_LEGADO):
+            self.overlay_metrics = list(OVERLAY_DEFAULT)
+        self.settings_version = SETTINGS_VERSION
 
     def as_dict(self) -> dict:
         return asdict(self)
 
     def sanitize(self) -> None:
+        self.settings_version = int(_clamp(_num(self.settings_version, SETTINGS_VERSION),
+                                           1, 999))
         self.win_w = int(_clamp(_num(self.win_w, 1360), 900, 6000))
         self.win_h = int(_clamp(_num(self.win_h, 860), 560, 4000))
         self.ui_scale = round(_clamp(_num(self.ui_scale, 1.0), 0.8, 1.8), 2)

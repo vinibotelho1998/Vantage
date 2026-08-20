@@ -9,7 +9,8 @@ from ... import theme
 from ...core import frames as fr
 from ...core import units
 from ..charts import BarMeter, Gauge, Plot, Sparkline, TimeSeriesChart
-from ..components import Badge, Card, KpiStrip, MetricList, label
+from ..components import Badge, Card, KpiStrip, MetricList, dimm_color, label
+from ..components import linha_opcional as _linha
 from .base import View
 
 _KPIS = [
@@ -158,7 +159,8 @@ class DashboardView(View):
         self.cpu_gauge = Gauge(theme.CPU, 96)
         row.addWidget(self.cpu_gauge)
         self.cpu_rows = MetricList([("temp", "Temp"), ("freq", "Clock"),
-                                    ("watts", "Potência"), ("fan", "Cooler")])
+                                    ("watts", "Potência"), ("volts", "Tensão"),
+                                    ("fan", "Cooler")])
         row.addWidget(self.cpu_rows, 1)
         card.add_layout(row)
         self.cpu_spark = Sparkline(theme.CPU, 30, fixed_max=100)
@@ -172,7 +174,8 @@ class DashboardView(View):
         self.gpu_gauge = Gauge(theme.GPU, 96)
         row.addWidget(self.gpu_gauge)
         self.gpu_rows = MetricList([("temp", "Temp"), ("freq", "Clock"),
-                                    ("watts", "Potência"), ("vram", "VRAM")])
+                                    ("watts", "Potência"), ("volts", "Tensão"),
+                                    ("vram", "VRAM"), ("vram_temp", "Temp VRAM")])
         row.addWidget(self.gpu_rows, 1)
         card.add_layout(row)
         self.gpu_spark = Sparkline(theme.GPU, 30, fixed_max=100)
@@ -186,6 +189,7 @@ class DashboardView(View):
         self.ram_gauge = Gauge(theme.RAM, 96)
         row.addWidget(self.ram_gauge)
         self.ram_rows = MetricList([("used", "Em uso"), ("avail", "Livre"),
+                                    ("jogo", "Jogo em foco"), ("temp", "Temp"),
                                     ("freq", "Frequência"), ("swap", "Swap")])
         row.addWidget(self.ram_rows, 1)
         card.add_layout(row)
@@ -299,6 +303,10 @@ class DashboardView(View):
         self.cpu_rows.set("temp", units.temp(ct), theme.temp_color(ct))
         self.cpu_rows.set("freq", units.clock(d.get("cpu_mhz")))
         self.cpu_rows.set("watts", units.watts(d.get("cpu_watts")))
+        # Linha sem sensor some em vez de virar travessao: o Vcore so' aparece
+        # depois de o rail ser identificado, e nem toda placa entrega um.
+        _linha(self.cpu_rows, "volts", d.get("cpu_volts"),
+               lambda v: f"{v:.3f} V", theme.TXT)
         self.cpu_rows.set("fan", units.rpm(d.get("cpu_fan")))
         self.cpu_spark.set_values(h.values("cpu_pct"))
 
@@ -308,13 +316,23 @@ class DashboardView(View):
         gw = gpu.get("watts")
         self.gpu_rows.set("watts", ("~" if gpu.get("watts_estimated") else "")
                           + units.watts(gw, 0))
+        _linha(self.gpu_rows, "volts", gpu.get("volts"), lambda v: f"{v:.3f} V", theme.TXT)
         self.gpu_rows.set("vram", units.mib_pair(gpu.get("vram_used"), gpu.get("vram_total")),
                           theme.load_color(gpu.get("vram_pct")))
+        _linha(self.gpu_rows, "vram_temp", gpu.get("temp_vram"), units.temp,
+               theme.vram_temp_color)
         self.gpu_spark.set_values(h.values("gpu_pct"))
 
         self.ram_gauge.set_value(rp, units.gib(d.get("ram_used")), theme.load_color(rp))
         self.ram_rows.set("used", f"{d.get('ram_used', 0):.1f} / {d.get('ram_total', 0):.0f} GB")
         self.ram_rows.set("avail", units.gib(d.get("ram_avail")))
+        # Private bytes, e nao o working set: o Windows poda o residente quando a
+        # janela perde o foco, e num alt-tab o numero afundaria sem o jogo ter
+        # liberado nada. A linha inteira some quando nao ha' jogo em foco.
+        _linha(self.ram_rows, "jogo", d.get("game_ram_private"),
+               lambda v: units.gib(v / 1024), theme.RAM)
+        self.ram_rows.set_label("jogo", d.get("game_name") or "Jogo em foco")
+        _linha(self.ram_rows, "temp", d.get("ram_temp"), units.temp, dimm_color(d))
         self.ram_rows.set("freq", units.mhz(d.get("ram_freq")))
         self.ram_rows.set("swap", f"{d.get('swap_used', 0):.1f} GB",
                           theme.load_color(d.get("swap_pct")))

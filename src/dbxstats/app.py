@@ -44,6 +44,8 @@ _log = log.get("app")
 FAST_TICK_MS = 120
 FOCUS_TICK_MS = 500
 GAME_EXIT_GRACE_S = 5.0
+ONLINE_GRACE_S = 25.0
+"""Tempo de busca antes de dar a partida como local."""
 """Confirma que o jogo fechou mesmo antes de mexer nas telas."""
 SERVER_SCAN_TICKS = 5
 """Ticks de sessao (1 s cada) entre buscas do servidor do jogo."""
@@ -1129,6 +1131,23 @@ class App:
         else:
             self._overlay.rebuild()
         self._sync_overlay_visibility()
+
+    def jogo_online(self) -> bool | None:
+        """A partida em curso fala com algum servidor?
+
+        True quando descobrimos o servidor do jogo ou medimos latencia no
+        trafego dele; False quando procuramos tempo suficiente e nao apareceu
+        nada — jogo local, treino contra bot, campanha. None enquanto ainda da'
+        para aparecer, porque a busca leva alguns segundos e chamar de "local"
+        cedo demais e' pior que ficar calado.
+        """
+        if not self._game_pid:
+            return None
+        if self.ping.following_game or self.ping.measuring_game:
+            return True
+        if time.monotonic() - self._game_seen_at < ONLINE_GRACE_S:
+            return None
+        return False
 
     def game_in_focus(self) -> bool:
         """Ha' um jogo de verdade na tela agora.

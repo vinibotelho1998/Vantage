@@ -20,13 +20,19 @@ from ...core import units
 from ...platform import memclean
 from ...sensors import diskbench, diskhealth
 from ..charts import BarMeter, Plot, Sparkline, TimeSeriesChart
-from ..components import Badge, Card, KpiStrip, MetricList, PillButton, label
+from ..components import Badge, Card, KpiStrip, MetricList, PillButton, dimm_color, label
+from ..components import linha_opcional as _linha
 from .base import View, scroll_page
 
 _KPIS = [
     ("used", "Em uso", "GB"), ("pct", "Ocupação", "%"), ("avail", "Disponível", "GB"),
-    ("freq", "Frequência", "MHz"), ("swap", "Swap", "GB"), ("disk", "Disco do sistema", "%"),
+    ("freq", "Frequência", "MHz"), ("temp", "Temperatura", "°C"), ("swap", "Swap", "GB"),
+    ("disk", "Disco do sistema", "%"),
 ]
+
+_MAX_DIMMS = 8
+"""Teto de linhas por pente. Placa de consumo tem 2 ou 4 slots; o dobro cobre HEDT
+sem transformar o card numa lista rolante se algum SPD vier repetido."""
 
 # Uma leitura por linha, e rotulo curto. Duas medidas na mesma linha (ou rotulo
 # comprido) viram largura minima do card, e ai' a coluna vizinha sai da tela numa
@@ -122,10 +128,18 @@ class MemoryView(View):
         card_ram.add(self.ram_chart, 1)
         self.ram_rows = MetricList([
             ("total", "Total"), ("used", "Em uso"), ("cached", "Cache do sistema"),
-            ("avail", "Disponível"), ("swap", "Arquivo de paginação"),
-            ("modules", "Módulos"),
+            ("avail", "Disponível"), ("jogo", "Jogo em foco"),
+            ("jogo_ws", "Residente do jogo"), ("swap", "Arquivo de paginação"),
+            ("modules", "Módulos"), ("temp", "Pente mais quente"),
         ])
         card_ram.add(self.ram_rows)
+        # Uma linha por pente, criada uma vez e escondida enquanto nao ha' leitura:
+        # a temperatura dos modulos so' existe com o app elevado, e o numero de
+        # pentes muda de maquina para maquina.
+        self.mod_rows = MetricList([(f"m{i}", "") for i in range(_MAX_DIMMS)])
+        card_ram.add(self.mod_rows)
+        for i in range(_MAX_DIMMS):
+            self.mod_rows.row(f"m{i}").setVisible(False)
         card_ram.add_layout(self._montar_limpeza())
         row.addWidget(card_ram, 1)
 
@@ -531,11 +545,16 @@ class MemoryView(View):
         info = d.get("ram_info") or {}
         self.kpi.set("freq", units.integer(d.get("ram_freq")), theme.TXT,
                      info.get("type", ""))
+        temp = d.get("ram_temp")
+        self.kpi.set("temp", units.integer(temp), dimm_color(d), "pente mais quente")
         self.kpi.set("swap", f"{d.get('swap_used', 0):.1f}", theme.TXT,
                      f"de {d.get('swap_total', 0):.0f} GB")
         dp = d.get("disk_pct")
         self.kpi.set("disk", units.integer(dp), theme.load_color(dp),
                      f"{d.get('disk_used', 0):.0f} / {d.get('disk_total', 0):.0f} GB")
+        # Sem elevacao os pentes nem aparecem na arvore do LHM. O tile some em vez
+        # de ficar com travessao fingindo que a maquina nao tem sensor nenhum.
+        self.kpi.show_only([k for k, _c, _u in _KPIS if k != "temp" or temp is not None])
 
         self.ram_chart.set_values("ram", h.values("ram_pct"))
         self.ram_chart.set_values("swap", h.values("swap_pct"))
@@ -548,10 +567,20 @@ class MemoryView(View):
         self.ram_rows.set("used", units.gib(d.get("ram_used")), theme.load_color(pct))
         self.ram_rows.set("cached", units.gib(d.get("ram_cached")))
         self.ram_rows.set("avail", units.gib(d.get("ram_avail")))
+        # Private bytes primeiro: e' o que o jogo pediu para si e nao colapsa
+        # quando o Windows poda o residente num alt-tab. O working set fica logo
+        # abaixo porque e' ele quem representa pressao real sobre a RAM fisica.
+        _linha(self.ram_rows, "jogo", d.get("game_ram_private"),
+               lambda v: units.gib(v / 1024), theme.RAM)
+        _linha(self.ram_rows, "jogo_ws", d.get("game_ram_wset"),
+               lambda v: units.gib(v / 1024), theme.MUTE)
+        self.ram_rows.set_label("jogo", d.get("game_name") or "Jogo em foco")
         self.ram_rows.set("swap", f"{d.get('swap_used', 0):.1f} / "
                                   f"{d.get('swap_total', 0):.0f} GB")
         self.ram_rows.set("modules", f"{info.get('modules', '?')}× {info.get('part', '')}".strip()
                           if info else units.DASH)
+        _linha(self.ram_rows, "temp", d.get("ram_temp"), units.temp, dimm_color(d))
+        self._sync_modulos(d.get("ram_modules") or [])
 
         self.io_rows.set("read", units.rate(d.get("disk_r")))
         self.io_rows.set("write", units.rate(d.get("disk_w")))
@@ -570,6 +599,31 @@ class MemoryView(View):
             self._sync_opcoes_bench()
         self._sync_drives(drives)
         self._sync_saude()
+
+    def _sync_modulos(self, modulos: list) -> None:
+        """Um pente por linha, com a faixa de cor que ele mesmo declara.
+
+        O rotulo vem do SPD e ja' voltou sujo de uma leitura real (byte nulo no
+        meio do nome), entao aqui ele e' cortado no tamanho e nunca concatenado
+        cru com o resto da tela.
+        """
+        uteis = [m for m in modulos
+                 if isinstance(m, dict) and m.get("temp") is not None][:_MAX_DIMMS]
+        for i in range(_MAX_DIMMS):
+            linha = self.mod_rows.row(f"m{i}")
+            if linha is None:
+                continue
+            linha.setVisible(i < len(uteis))
+            if i >= len(uteis):
+                continue
+            mod = uteis[i]
+            linha.set_label(str(mod.get("slot") or f"Pente {i + 1}")[:24])
+            linha.set(units.temp(mod["temp"]),
+                      theme.dimm_temp_color(mod["temp"], mod.get("high"),
+                                            mod.get("critical")))
+            limites = [x for x in (mod.get("high"), mod.get("critical")) if x]
+            linha.set_stat(f"limite {limites[0]:.0f} / crítico {limites[-1]:.0f} °C"
+                           if len(limites) == 2 else "")
 
     def _sync_drives(self, drives: list[dict]) -> None:
         while len(self._drive_widgets) < len(drives):

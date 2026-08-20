@@ -42,6 +42,7 @@ class Collector:
         self._disk_cache_at = 0.0
         self._gpu_watts_ema = Ema(0.35)
         self._gpu_wmi: dict | None = None
+        self._game_ram = _GameMemory()
         self._static = _static_info()
 
     # ── ciclo de vida ────────────────────────────────────────────────────────
@@ -58,6 +59,10 @@ class Collector:
 
     def set_interval(self, value: float) -> None:
         self._interval = max(0.2, float(value))
+
+    def set_game_pid(self, pid: int | None) -> None:
+        """Diz de qual processo medir a RAM. Zero (ou None) desliga a medida."""
+        self._game_ram.follow(pid)
 
     def snapshot(self) -> dict:
         with self._lock:
@@ -111,7 +116,7 @@ class Collector:
         gpu = self._collect_gpu(lhm)
         ping = self._ping.read()
 
-        return {
+        data = {
             "ts": time.time(),
             "lhm_ok": self._lhm.ready,
             "static": self._static,
@@ -125,9 +130,17 @@ class Collector:
             "cpu_core_temps": lhm.get("cpu_core_temps"),
             "cpu_core_loads": lhm.get("cpu_core_loads") or cores,
             "cpu_temp": lhm.get("cpu_temp"),
+            # As duas leituras que o overlay poe lado a lado. Elas eram lidas no
+            # LHM e nunca copiadas para ca': o painel caia no cpu_temp para os
+            # dois lados e a celula dupla nunca aparecia em maquina nenhuma.
+            "cpu_temp_cores": lhm.get("cpu_temp_cores"),
+            "cpu_temp_package": lhm.get("cpu_temp_package"),
             "cpu_watts": lhm.get("cpu_watts"),
             "cpu_watts_cores": lhm.get("cpu_watts_cores"),
             "cpu_volts": lhm.get("cpu_volts"),
+            "cpu_volts_src": lhm.get("cpu_volts_src"),
+            "cpu_volts_rail": lhm.get("cpu_volts_rail"),
+            "cpu_vid": lhm.get("cpu_vid"),
             "cpu_fan": lhm.get("cpu_fan"),
             "fans": lhm.get("fans"),
             "board_name": lhm.get("board_name"),
@@ -143,6 +156,8 @@ class Collector:
             "ram_cached": max(0.0, (ram.total - ram.used - ram.available)) / 1024 ** 3,
             "ram_freq": self._ram_freq_mhz(),
             "ram_info": self._ram_info,
+            "ram_temp": lhm.get("ram_temp"),
+            "ram_modules": lhm.get("ram_modules"),
             "swap_used": swap.used / 1024 ** 3,
             "swap_total": swap.total / 1024 ** 3,
             "swap_pct": swap.percent,
@@ -161,6 +176,10 @@ class Collector:
             "gpu": gpu,
             "battery": _battery(),
         }
+        # Sem jogo, as chaves nao existem — o card some inteiro em vez de mostrar
+        # um zero que se parece com "o jogo nao usa RAM".
+        data.update(self._game_ram.read() or {})
+        return data
 
     def _collect_gpu(self, lhm: dict) -> dict | None:
         nvml = self._gpu.read_nvml()
@@ -283,6 +302,61 @@ class Collector:
             _log.debug("ram freq via WMI falhou: %s", e)
             self._ram_freq = 0
         return self._ram_freq or None
+
+
+class _GameMemory:
+    """RAM do processo do jogo, com o handle preso entre os ciclos.
+
+    Duas medidas, porque uma so' mente: o working set e' o que esta' residente
+    AGORA, e o Windows o poda quando a janela perde o foco — medindo o
+    RadeonSoftware o working set marcou 50 MB enquanto o processo mantinha
+    1150 MB comprometidos, 23x de diferenca. Num jogo em alt-tab isso viraria um
+    grafico despencando sem que o jogo tivesse liberado nada. Private bytes e' o
+    que o processo pediu para si e nao colapsa com poda; e' o numero de manchete,
+    e o working set fica como pressao real sobre a RAM fisica.
+
+    O uss (memory_full_info) seria mais correto ainda em teoria e esta' fora de
+    proposito na pratica: exige elevacao, custa 1,7-2,8 ms por leitura e chegou a
+    140 ms num processo de 13,5 GB — inviavel num laco de 1 Hz. O handle fica
+    preso porque um process_iter completo custa 72,7 ms, contra 0,005 ms de um
+    memory_info() no objeto ja' aberto.
+    """
+
+    def __init__(self) -> None:
+        self._wanted = 0
+        """Escrito pela thread da UI, lido pela do coletor: so' um int."""
+        self._pid = 0
+        self._proc: psutil.Process | None = None
+        self._name = ""
+
+    def follow(self, pid: int | None) -> None:
+        self._wanted = int(pid or 0)
+
+    def read(self) -> dict | None:
+        pid = self._wanted
+        if pid != self._pid:
+            self._pid, self._proc, self._name = pid, None, ""
+        if not pid:
+            return None
+        try:
+            if self._proc is None:
+                self._proc = psutil.Process(pid)
+                self._name = self._proc.name()
+            mem = self._proc.memory_info()
+        except (psutil.Error, OSError):
+            # Jogo fechou (ou o Windows negou): descarta o handle e nao publica
+            # nada. A proxima leitura tenta de novo se o pid continuar de pe'.
+            self._proc = None
+            return None
+        dados = {
+            "game_pid": pid,
+            "game_name": self._name,
+            "game_ram_wset": round(mem.rss / 1024 ** 2, 1),
+        }
+        private = getattr(mem, "private", None)
+        if private:
+            dados["game_ram_private"] = round(private / 1024 ** 2, 1)
+        return dados
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
