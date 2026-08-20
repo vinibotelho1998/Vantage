@@ -120,3 +120,56 @@ def test_seletor_nasce_no_modo_atual_e_nao_no_maior():
     box = _combo(itens, (3840, 2160))
     assert box.currentData() == (3840, 2160)
     assert _index_of(box, box.currentData()) == 1
+
+
+# ── telas desligadas no mapa ─────────────────────────────────────────────────
+class _Disp:
+    def __init__(self, mid, nome, ativa, primaria=False, pos=(0, 0), modo=(1920, 1080)):
+        from dbxstats.platform.displays import Mode
+        self.monitor_id = mid
+        self.name = nome
+        self.active = ativa
+        self.primary = primaria
+        self.position = pos
+        self.native = modo
+        self.mode = Mode(modo[0], modo[1], 60, 32) if ativa else None
+
+
+def test_tela_desligada_aparece_no_mapa():
+    """Sumir e' ambiguo: desligada, desconectada, ou o app nao viu?"""
+    c = ArrangeCanvas()
+    c.resize(600, 300)
+    c.load([_Disp("uw", "ULTRAWIDE", True, True, (0, 0), (3440, 1440)),
+            _Disp("tv", "Beyond TV", False, modo=(3840, 2160))])
+    assert "tv" in c.rects
+    assert "tv" in c.apagadas
+    assert "uw" not in c.apagadas
+
+
+def test_desligada_nao_pode_ser_arrastada():
+    """Ela nao tem posicao no desktop; a do mapa e' so' de desenho."""
+    c = ArrangeCanvas()
+    c.resize(600, 300)
+    c.load([_Disp("uw", "ULTRAWIDE", True, True, (0, 0), (3440, 1440)),
+            _Disp("tv", "Beyond TV", False, modo=(3840, 2160))])
+    centro = c._to_screen(c.rects["tv"]).center()
+    c.mousePressEvent(_Evento(centro.x(), centro.y()))
+    assert c._drag != "tv"
+
+
+def test_posicao_inventada_nao_vai_para_o_windows():
+    """Mandar a posicao de desenho criaria um arranjo que ninguem pediu."""
+    c = ArrangeCanvas()
+    c.resize(600, 300)
+    c.load([_Disp("uw", "ULTRAWIDE", True, True, (0, 0), (3440, 1440)),
+            _Disp("tv", "Beyond TV", False, modo=(3840, 2160))])
+    assert "tv" not in c.positions()
+    assert "uw" in c.positions()
+
+
+def test_mapa_so_com_telas_desligadas_nao_quebra():
+    c = ArrangeCanvas()
+    c.resize(600, 300)
+    c.load([_Disp("tv", "Beyond TV", False, modo=(3840, 2160))])
+    c.repaint()
+    assert c.positions() == {}

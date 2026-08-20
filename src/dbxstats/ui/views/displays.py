@@ -88,20 +88,44 @@ class ArrangeCanvas(QWidget):
         self.primary: str = ""
         self._drag: str | None = None
         self._grab = QPoint()
+        self.apagadas: set[str] = set()
+        """Telas conectadas e fora da area de trabalho; ver load."""
         self._proj: tuple[QRect, float, float, float] | None = None
         """Projecao congelada durante o arraste; ver _projection."""
 
     def load(self, displays: list[D.Display]) -> None:
+        """Monta o mapa com TODAS as telas conectadas, ligadas ou nao.
+
+        Antes as apagadas simplesmente sumiam daqui, e sumir e' ambiguo: ninguem
+        sabe se a tela esta' desligada, desconectada ou se o app nao a viu. Elas
+        aparecem em posicao propria, com contorno tracejado e o rotulo dizendo
+        que estao desligadas.
+        """
         self.rects.clear()
         self.names.clear()
-        for disp in displays:
-            if not disp.active or not disp.mode:
-                continue
+        self.apagadas.clear()
+        ligadas = [d for d in displays if d.active and d.mode]
+        for disp in ligadas:
             self.rects[disp.monitor_id] = QRect(disp.position[0], disp.position[1],
                                                 disp.mode.width, disp.mode.height)
             self.names[disp.monitor_id] = disp.name
             if disp.primary:
                 self.primary = disp.monitor_id
+
+        # A apagada nao tem posicao no desktop — o Windows nao guarda uma para
+        # quem esta' fora dele. Entao ela e' encostada a direita do conjunto, so'
+        # para existir no mapa; arrastar continua valendo so' para as ligadas.
+        borda = max((r.right() for r in self.rects.values()), default=0)
+        topo = min((r.top() for r in self.rects.values()), default=0)
+        for disp in displays:
+            if disp.active or not disp.monitor_id:
+                continue
+            largura, altura = (disp.native or (1920, 1080))
+            borda += int(largura * 0.12)
+            self.rects[disp.monitor_id] = QRect(borda, topo, largura, altura)
+            self.names[disp.monitor_id] = disp.name
+            self.apagadas.add(disp.monitor_id)
+            borda += largura
         self.update()
 
     # ── conversao de coordenadas ─────────────────────────────────────────────
@@ -150,6 +174,8 @@ class ArrangeCanvas(QWidget):
     def mousePressEvent(self, event) -> None:
         ponto = event.position().toPoint()
         for key, rect in reversed(list(self.rects.items())):
+            if key in self.apagadas:
+                continue          # sem posicao real no desktop, nada a arrastar
             if not self._to_screen(rect).contains(ponto):
                 continue
             self._drag = key
@@ -209,7 +235,10 @@ class ArrangeCanvas(QWidget):
             rect.translate(-dx, -dy)
 
     def positions(self) -> dict[str, tuple[int, int]]:
-        return {k: (r.left(), r.top()) for k, r in self.rects.items()}
+        # A posicao das apagadas e' so' de desenho: mandar isso para o Windows
+        # inventaria um arranjo que ninguem pediu.
+        return {k: (r.left(), r.top()) for k, r in self.rects.items()
+                if k not in self.apagadas}
 
     # ── pintura ──────────────────────────────────────────────────────────────
     def paintEvent(self, event) -> None:
@@ -217,16 +246,24 @@ class ArrangeCanvas(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         for key, rect in self.rects.items():
             box = self._to_screen(rect)
-            principal = key == self.primary
+            apagada = key in self.apagadas
+            principal = key == self.primary and not apagada
             cor = QColor(theme.RAM if principal else theme.FPS)
-            p.setBrush(QBrush(QColor(theme.SURFACE)))
-            p.setPen(QPen(cor, 2))
+            if apagada:
+                # Tracejado e cor apagada: a tela existe, esta' conectada, e nao
+                # esta' na area de trabalho. As tres coisas de relance.
+                cor = QColor(theme.FAINT)
+            p.setBrush(QBrush(QColor(theme.BG if apagada else theme.SURFACE)))
+            caneta = QPen(cor, 2)
+            if apagada:
+                caneta.setStyle(Qt.PenStyle.DashLine)
+            p.setPen(caneta)
             p.drawRoundedRect(box, 6, 6)
             # Cada linha ganha faixa propria a partir do centro. Centralizar as
             # duas na mesma caixa imprimia uma por cima da outra.
             meio = box.center().y()
             linha = theme.scaled(15)
-            p.setPen(QPen(QColor(theme.TXT), 1))
+            p.setPen(QPen(QColor(theme.MUTE if apagada else theme.TXT), 1))
             p.setFont(QFont(theme.FONT_UI, 8, QFont.Weight.DemiBold))
             p.drawText(QRect(box.x(), meio - linha, box.width(), linha),
                        Qt.AlignmentFlag.AlignCenter, self.names.get(key, ""))
@@ -235,10 +272,15 @@ class ArrangeCanvas(QWidget):
             p.drawText(QRect(box.x(), meio + 1, box.width(), linha),
                        Qt.AlignmentFlag.AlignCenter,
                        f"{rect.width()} x {rect.height()}")
-            if principal:
-                p.setPen(QPen(QColor(theme.RAM), 1))
+            rodape, cor_rodape = "", theme.RAM
+            if apagada:
+                rodape, cor_rodape = "desligada", theme.FAINT
+            elif principal:
+                rodape = "primária"
+            if rodape:
+                p.setPen(QPen(QColor(cor_rodape), 1))
                 p.drawText(QRect(box.x(), box.bottom() - linha - 4, box.width(), linha),
-                           Qt.AlignmentFlag.AlignCenter, "primária")
+                           Qt.AlignmentFlag.AlignCenter, rodape)
         p.end()
 
 

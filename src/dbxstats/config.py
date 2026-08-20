@@ -20,7 +20,7 @@ VIEWS = ("dashboard", "cpu", "gpu", "memory", "network", "sensors",
 
 GAMEPAD_BUTTONS = ("a", "b", "x", "y", "lb", "rb", "back", "start")
 
-SETTINGS_VERSION = 2
+SETTINGS_VERSION = 3
 """Sobe quando um padrao muda de um jeito que a lista salva precisa ser reescrita."""
 
 OVERLAY_METRICS = [
@@ -252,8 +252,18 @@ class Settings:
         """
         if versao >= SETTINGS_VERSION:
             return
-        if set(_as_list(self.overlay_metrics)) == set(_OVERLAY_LEGADO):
+        if versao < 2 and set(_as_list(self.overlay_metrics)) == set(_OVERLAY_LEGADO):
             self.overlay_metrics = list(OVERLAY_DEFAULT)
+        if versao < 3:
+            # Estas tres estrearam ligadas e se mostraram ruim de conviver: a
+            # banda do controlador e' numero de perfilamento, o teto de potencia
+            # so' faz sentido onde ha' sensor de limite real, e o working set ao
+            # lado da memoria privada punha dois numeros sem rotulo na mesma
+            # celula. Mudar so' o padrao nao alcanca quem ja' tinha o arquivo
+            # salvo — por isso a remocao acontece aqui, uma vez.
+            fora = {"mem_ctrl", "teto_watts", "jogo_ram_ws"}
+            self.overlay_metrics = [m for m in _as_list(self.overlay_metrics)
+                                    if m not in fora]
         self.settings_version = SETTINGS_VERSION
 
     def as_dict(self) -> dict:

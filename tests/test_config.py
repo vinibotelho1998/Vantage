@@ -238,3 +238,29 @@ def test_canto_espiando_nao_conta_como_visivel():
     app = QApplication.instance() or QApplication([])
     tela = app.primaryScreen().availableGeometry()
     assert not _cabe_em_alguma_tela(tela.right() - 30, tela.y(), 1360, 860)
+
+
+def test_metrica_aposentada_sai_de_quem_ja_tinha_config():
+    """Mudar o padrao nao alcanca quem ja' tem arquivo salvo.
+
+    Banda do controlador, teto de potencia e working set estrearam ligados e se
+    mostraram ruins de conviver. Sem esta migracao eles continuariam na tela de
+    quem ja' usava o app, e trocar o padrao pareceria nao ter feito nada.
+    """
+    c = Settings.from_dict({
+        "settings_version": 2,
+        "overlay_metrics": ["fps", "cpu", "mem_ctrl", "teto_watts", "jogo_ram_ws"],
+    })
+    assert "mem_ctrl" not in c.overlay_metrics
+    assert "teto_watts" not in c.overlay_metrics
+    assert "jogo_ram_ws" not in c.overlay_metrics
+    assert "fps" in c.overlay_metrics and "cpu" in c.overlay_metrics
+
+
+def test_quem_religar_depois_nao_perde_de_novo():
+    """A remocao e' de uma vez so'; religar na mao tem de valer."""
+    c = Settings.from_dict({
+        "settings_version": 3,
+        "overlay_metrics": ["fps", "mem_ctrl"],
+    })
+    assert "mem_ctrl" in c.overlay_metrics
