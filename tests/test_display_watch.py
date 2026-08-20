@@ -39,10 +39,13 @@ def _app(monkeypatch, telas, padrao=None):
     monkeypatch.setattr(appmod, "dsp", fake)
     a = App.__new__(App)
     a._displays_seen = None
+    a._displays_pending = None
     a._session = None
     a.notify = lambda *args: None
     a._normal_layout = lambda: padrao
     a._normal_topology = lambda: ""
+    a.settings = type("S", (), {"display_primary_default": "", "display_off_by_default": []})()
+    a.window = type("W", (), {"reload_displays": lambda self: None})()
     return a, fake
 
 
@@ -52,8 +55,16 @@ _PADRAO = [{"monitor_id": "uw", "active": True, "primary": True,
             "position": [0, 0], "mode": None}]
 
 
+def _mudou(a, telas, novas):
+    """Duas passadas: o vigia so' age com o conjunto ja' acomodado."""
+    a._watch_displays()
+    telas[:] = novas
+    a._watch_displays()
+    a._watch_displays()
+
+
 def test_primeira_passada_so_memoriza():
-    """Reimpor logo na abertura mexeria nas telas sem o usuario ter pedido."""
+    """Agir na abertura mexeria nas telas sem o usuario ter pedido."""
     import pytest
     mp = pytest.MonkeyPatch()
     try:
@@ -65,55 +76,115 @@ def test_primeira_passada_so_memoriza():
         mp.undo()
 
 
-def test_monitor_novo_reimpoe_o_padrao(monkeypatch):
+def test_nunca_reaplica_perfil(monkeypatch):
+    """Perfil mexe em topologia, modos e posicoes.
+
+    Reaplica-lo porque um monitor foi plugado apagava o arranjo que a pessoa
+    tinha acabado de montar na mao — o relato foi "movo as telas, aplico, e
+    depois de um tempo volta sozinho".
+    """
+    telas = [_Tela("uw", True, True)]
+    a, fake = _app(monkeypatch, telas, _PADRAO)
+    _mudou(a, telas, [_Tela("uw", True, True), _Tela("tv", True, False)])
+    assert fake.aplicados == []
+
+
+def test_conjunto_instavel_nao_dispara(monkeypatch):
+    """Aplicar um arranjo faz o Windows soltar e reanexar caminhos por um
+    instante; agir nesse piscar desfazia a mudanca recem-aplicada."""
     telas = [_Tela("uw", True, True)]
     a, fake = _app(monkeypatch, telas, _PADRAO)
     a._watch_displays()
+    chamou = []
+    a._enforce_display_defaults = lambda: chamou.append(1)
 
-    telas.append(_Tela("tv", True, False))   # TV plugada, e o Windows a acendeu
+    telas.append(_Tela("tv", True, False))
+    a._watch_displays()          # viu diferente: so' anota
+    assert chamou == []
+    telas.pop()                  # voltou ao que era antes de confirmar
     a._watch_displays()
+    assert chamou == []
 
-    assert fake.aplicados == [_PADRAO]
 
-
-def test_sem_perfil_padrao_nao_inventa_arranjo(monkeypatch):
+def test_conjunto_estavel_reimpoe_os_padroes(monkeypatch):
     telas = [_Tela("uw", True, True)]
-    a, fake = _app(monkeypatch, telas, None)
-    a._watch_displays()
-    telas.append(_Tela("tv"))
-    a._watch_displays()
-    assert fake.aplicados == []
+    a, _fake = _app(monkeypatch, telas, _PADRAO)
+    chamou = []
+    a._enforce_display_defaults = lambda: chamou.append(1)
+    _mudou(a, telas, [_Tela("uw", True, True), _Tela("tv", True, False)])
+    assert chamou == [1]
+
+
+def test_aba_telas_se_redesenha(monkeypatch):
+    """Plugar um monitor com a aba Telas na frente nao mostrava nada."""
+    telas = [_Tela("uw", True, True)]
+    a, _fake = _app(monkeypatch, telas, None)
+    redesenhos = []
+    a.window = type("W", (), {"reload_displays": lambda self: redesenhos.append(1)})()
+    a._enforce_display_defaults = lambda: None
+    _mudou(a, telas, [_Tela("uw", True, True), _Tela("tv", True, False)])
+    assert redesenhos == [1]
 
 
 def test_nao_mexe_no_meio_de_um_jogo(monkeypatch):
     """Trocar de tela com o jogo aberto cai justamente em cima dele."""
     telas = [_Tela("uw", True, True)]
-    a, fake = _app(monkeypatch, telas, _PADRAO)
+    a, _fake = _app(monkeypatch, telas, _PADRAO)
+    chamou = []
+    a._enforce_display_defaults = lambda: chamou.append(1)
     a._watch_displays()
     a._session = object()
-    telas.append(_Tela("tv"))
-    a._watch_displays()
-    assert fake.aplicados == []
+    _mudou(a, telas, [_Tela("uw", True, True), _Tela("tv", True, False)])
+    assert chamou == []
 
 
-def test_ligar_ou_promover_tela_nao_conta_como_mudanca(monkeypatch):
-    """E' o que o proprio app faz; reagir viraria queda de braco."""
-    telas = [_Tela("uw", True, True), _Tela("tv", False, False)]
-    a, fake = _app(monkeypatch, telas, _PADRAO)
-    a._watch_displays()
+# ── principal padrao da casa ─────────────────────────────────────────────────
+def _com_padrao(monkeypatch, telas, alvo):
+    fake = _Displays(telas)
+    monkeypatch.setattr(appmod, "dsp", fake)
+    fake.primarias = []
+    fake.set_primary = lambda device: (fake.primarias.append(device), (True, ""))[1]
+    a = App.__new__(App)
+    a._session = None
+    a.settings = type("S", (), {"display_primary_default": alvo, "display_off_by_default": []})()
+    a.notify = lambda *args: None
+    return a, fake
 
-    telas[1].active = True
-    telas[1].primary = True
-    telas[0].primary = False
-    a._watch_displays()
 
-    assert fake.aplicados == []
+def test_principal_padrao_e_devolvida(monkeypatch):
+    """Plugar a TV entrega a primaria a ela; a barra de tarefas ia junto."""
+    telas = [_Tela("uw", True, False), _Tela("tv", True, True)]
+    a, fake = _com_padrao(monkeypatch, telas, "uw")
+    assert a._enforce_primary() == "uw"
+    assert fake.primarias == ["dev:uw"]
 
 
-def test_monitor_desconectado_tambem_reimpoe(monkeypatch):
+def test_nao_mexe_se_ja_esta_certa(monkeypatch):
     telas = [_Tela("uw", True, True), _Tela("tv", True, False)]
-    a, fake = _app(monkeypatch, telas, _PADRAO)
-    a._watch_displays()
-    telas.pop()
-    a._watch_displays()
-    assert fake.aplicados == [_PADRAO]
+    a, fake = _com_padrao(monkeypatch, telas, "uw")
+    assert a._enforce_primary() == ""
+    assert fake.primarias == []
+
+
+def test_tela_padrao_apagada_e_ignorada(monkeypatch):
+    """Promover uma tela desligada deixaria a area de trabalho no escuro."""
+    telas = [_Tela("uw", False, False), _Tela("tv", True, True)]
+    a, fake = _com_padrao(monkeypatch, telas, "uw")
+    assert a._enforce_primary() == ""
+    assert fake.primarias == []
+
+
+def test_jogo_aberto_manda_mais_que_o_padrao(monkeypatch):
+    """Durante o jogo a primaria foi trocada de proposito, e por nos."""
+    telas = [_Tela("uw", True, False), _Tela("tv", True, True)]
+    a, fake = _com_padrao(monkeypatch, telas, "uw")
+    a._session = object()
+    assert a._enforce_primary() == ""
+    assert fake.primarias == []
+
+
+def test_sem_escolha_feita_nao_faz_nada(monkeypatch):
+    telas = [_Tela("uw", True, False), _Tela("tv", True, True)]
+    a, fake = _com_padrao(monkeypatch, telas, "")
+    assert a._enforce_primary() == ""
+    assert fake.primarias == []

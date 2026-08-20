@@ -113,6 +113,18 @@ class Settings:
     display_restore_after_game: bool = True
     """Quando um jogo fecha, devolve as telas ao perfil padrao — abriu por onde abriu."""
     display_default_profile: str = ""
+    display_off_by_default: list = field(default_factory=list)
+    """monitor_id das telas que devem nascer apagadas.
+
+    A TV da sala fica nesse grupo: conectada e reconhecida, mas fora da area de
+    trabalho ate' um atalho de jogo pedir por ela.
+    """
+    display_primary_default: str = ""
+    """monitor_id que deve mandar quando nao ha' jogo pedindo outra coisa.
+
+    E' o "minha tela principal e' essa" da casa: conectar a TV, fechar um jogo
+    ou reiniciar o app nao pode mudar quem manda.
+    """
     """Perfil que representa o 'meu normal'. Vazio = usa o estado de quando abriu.
 
     E' para onde as telas voltam depois do jogo e ao fechar o app. Um perfil
@@ -203,6 +215,8 @@ class Settings:
         self.gamepad_scroll_speed = round(_clamp(_num(self.gamepad_scroll_speed, 1.0), 0.2, 4.0), 2)
         self.gamepad_deadzone = int(_clamp(_num(self.gamepad_deadzone, 8000), 0, 30000))
         self.gamepad_bindings = _clean_bindings(self.gamepad_bindings)
+        self.display_off_by_default = [str(x) for x in _as_list(self.display_off_by_default)
+                                       if str(x)]
 
     # ── persistencia ─────────────────────────────────────────────────────────
     @classmethod

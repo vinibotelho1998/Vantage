@@ -87,3 +87,37 @@ def test_primaria_volta_para_a_origem_ao_soltar():
     c.mouseMoveEvent(_Evento(inicio.x() + 80, inicio.y() + 20))
     c.mouseReleaseEvent(_Evento(inicio.x() + 80, inicio.y() + 20))
     assert c.rects["ultrawide"].topLeft() == QPoint(0, 0)
+
+
+# ── seletor de resolucao ─────────────────────────────────────────────────────
+def test_indice_por_valor_e_nao_por_identidade():
+    """QComboBox.findData compara payload Python por identidade.
+
+    Procurar (1920, 1080) devolvia -1 mesmo com o item guardando exatamente
+    (1920, 1080). O seletor ficava no primeiro item — o maior modo da lista —
+    e numa TV 4K isso oferecia "4096 x 2160 escalonada" com o painel em 3840 x
+    2160 nativo. Aplicar sem perceber esticava a imagem.
+    """
+    from PySide6.QtWidgets import QComboBox
+
+    from dbxstats.ui.views.displays import _index_of
+
+    box = QComboBox()
+    for wh in ((2560, 1440), (1920, 1200), (1920, 1080), (1280, 720)):
+        box.addItem(f"{wh[0]} x {wh[1]}", wh)
+
+    assert _index_of(box, (1920, 1080)) == 2
+    assert _index_of(box, (2560, 1440)) == 0
+    assert _index_of(box, (800, 600)) == -1
+
+
+def test_seletor_nasce_no_modo_atual_e_nao_no_maior():
+    from PySide6.QtWidgets import QComboBox
+
+    from dbxstats.ui.views.displays import _combo, _index_of
+
+    itens = [("4096 x 2160   escalonada", (4096, 2160)),
+             ("3840 x 2160   nativa", (3840, 2160))]
+    box = _combo(itens, (3840, 2160))
+    assert box.currentData() == (3840, 2160)
+    assert _index_of(box, box.currentData()) == 1

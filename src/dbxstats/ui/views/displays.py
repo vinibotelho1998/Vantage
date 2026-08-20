@@ -38,12 +38,28 @@ _KPIS = [
 ]
 
 
+def _index_of(box: QComboBox, value) -> int:
+    """Indice do item com esse valor, comparando por igualdade.
+
+    QComboBox.findData nao serve aqui: com payload Python opaco — uma tupla
+    (largura, altura) — ele compara por identidade, entao procurar (1920, 1080)
+    devolvia -1 mesmo com o item guardando exatamente (1920, 1080). O seletor
+    ficava parado no primeiro item, que e' o maior modo da lista: numa TV 4K
+    isso mostrava "4096 x 2160 escalonada" com a tela em 3840 x 2160 nativo, e
+    aplicar sem perceber jogava o painel para um modo esticado.
+    """
+    for i in range(box.count()):
+        if box.itemData(i) == value:
+            return i
+    return -1
+
+
 def _combo(items: list[tuple[str, object]], current=None) -> QComboBox:
     box = QComboBox()
     for text, value in items:
         box.addItem(text, value)
     if current is not None:
-        idx = box.findData(current)
+        idx = _index_of(box, current)
         if idx >= 0:
             box.setCurrentIndex(idx)
     return box
@@ -254,7 +270,15 @@ class _DisplayCard(Card):
         self.add_layout(info)
         self.add(divider())
 
-        self.res_box = _combo(self._resolutions())
+        # A nativa e' o padrao quando nao da' para casar com o modo atual. Deixar
+        # o seletor no primeiro item significaria oferecer a maior resolucao da
+        # lista, que costuma ser escalonada.
+        inicial = None
+        if self.disp.mode:
+            inicial = (self.disp.mode.width, self.disp.mode.height)
+        elif self.disp.native:
+            inicial = tuple(self.disp.native)
+        self.res_box = _combo(self._resolutions(), inicial)
         self.hz_box = _combo([])
         self.res_box.currentIndexChanged.connect(self._fill_rates)
         self._fill_rates()
@@ -285,8 +309,14 @@ class _DisplayCard(Card):
         self.btn_power.clicked.connect(self._toggle_power)
         self.btn_mirror = PillButton("Espelhar nesta", theme.DISK)
         self.btn_mirror.clicked.connect(self._save_mirror)
+        self.btn_default = PillButton("", theme.OK)
+        self.btn_default.clicked.connect(self._set_default_primary)
+        self.btn_off_default = PillButton("", theme.MUTE)
+        self.btn_off_default.clicked.connect(self._toggle_off_by_default)
         actions.addWidget(self.btn_apply)
         actions.addWidget(self.btn_primary)
+        actions.addWidget(self.btn_default)
+        actions.addWidget(self.btn_off_default)
         actions.addWidget(self.btn_windows)
         actions.addWidget(self.btn_mirror)
         actions.addWidget(self.btn_power)
@@ -331,8 +361,26 @@ class _DisplayCard(Card):
         return D.Mode(size[0], size[1], hz)
 
     def _sync_state(self) -> None:
-        if self.disp.primary:
+        padrao = self.view.cfg.display_primary_default == self.disp.monitor_id
+        self.btn_default.setText("Não ser a principal padrão" if padrao
+                                 else "Ser a principal padrão")
+        self.btn_default.set_color(theme.MUTE if padrao else theme.OK)
+        self.btn_default.setVisible(self.disp.active)
+        apagada_por_padrao = self.disp.monitor_id in self.view.cfg.display_off_by_default
+        self.btn_off_default.setText("Não nascer apagada" if apagada_por_padrao
+                                     else "Nascer apagada")
+        self.btn_off_default.set_color(theme.MUTE if apagada_por_padrao else theme.DISK)
+        # Uma tela nao pode ser a principal padrao e nascer apagada ao mesmo tempo.
+        self.btn_off_default.setVisible(not padrao)
+        if self.disp.primary and padrao:
+            self.badge.update_badge("PRIMÁRIA · PADRÃO", theme.OK)
+        elif self.disp.primary:
             self.badge.update_badge("PRIMÁRIA", theme.RAM)
+        elif padrao:
+            self.badge.update_badge("padrão", theme.OK)
+        elif self.disp.monitor_id in self.view.cfg.display_off_by_default:
+            self.badge.update_badge("apagada por padrão" if not self.disp.active
+                                    else "ligada · apaga por padrão", theme.DISK)
         elif self.disp.active:
             self.badge.update_badge("ligada", theme.OK)
         else:
@@ -345,11 +393,11 @@ class _DisplayCard(Card):
         self.hz_box.setEnabled(self.disp.active)
 
         if self.disp.active and self.disp.mode:
-            idx = self.res_box.findData((self.disp.mode.width, self.disp.mode.height))
+            idx = _index_of(self.res_box, (self.disp.mode.width, self.disp.mode.height))
             if idx >= 0 and idx != self.res_box.currentIndex():
                 self.res_box.setCurrentIndex(idx)
                 self._fill_rates()
-            idx = self.hz_box.findData(self.disp.mode.refresh)
+            idx = _index_of(self.hz_box, self.disp.mode.refresh)
             if idx >= 0:
                 self.hz_box.setCurrentIndex(idx)
 
@@ -406,6 +454,49 @@ class _DisplayCard(Card):
         ok, err = D.set_primary(self.disp.device)
         self.view.notify(f"{self.disp.name} agora é a primária" if ok
                          else f"{self.disp.name}: {err}", theme.OK if ok else theme.BAD)
+        self.view.reload()
+
+    def _set_default_primary(self) -> None:
+        """Marca (ou desmarca) esta tela como a principal da casa.
+
+        Diferente de "Tornar primaria", que vale so' agora: esta escolha e'
+        reimposta quando um monitor e' conectado, quando um jogo fecha e quando
+        o app abre. Sem ela, plugar a TV entrega a primaria a ela — o Windows
+        promove sozinho a tela que acabou de chegar — e a barra de tarefas some
+        para um canto onde ninguem esta'.
+        """
+        cfg = self.view.cfg
+        ja_era = cfg.display_primary_default == self.disp.monitor_id
+        cfg.display_primary_default = "" if ja_era else self.disp.monitor_id
+        cfg.save()
+        if not ja_era:
+            D.set_primary(self.disp.device)
+            self.view.notify(f"{self.disp.name} agora é a principal padrão", theme.OK)
+        else:
+            self.view.notify(f"{self.disp.name} deixou de ser a principal padrão",
+                             theme.MUTE)
+        self.view.reload()
+
+    def _toggle_off_by_default(self) -> None:
+        """Esta tela nasce apagada, mesmo conectada.
+
+        E' o arranjo da TV da sala: plugada e reconhecida o tempo todo, fora da
+        area de trabalho ate' um atalho de jogo pedir por ela. Sem isso o
+        Windows acende a tela assim que a detecta.
+        """
+        cfg = self.view.cfg
+        lista = list(cfg.display_off_by_default)
+        ja_era = self.disp.monitor_id in lista
+        if ja_era:
+            lista.remove(self.disp.monitor_id)
+        else:
+            lista.append(self.disp.monitor_id)
+        cfg.display_off_by_default = lista
+        cfg.save()
+        self.view.notify(
+            f"{self.disp.name} volta a acompanhar o Windows" if ja_era
+            else f"{self.disp.name} vai nascer apagada; um atalho de jogo acende",
+            theme.MUTE if ja_era else theme.OK)
         self.view.reload()
 
     def _toggle_power(self) -> None:

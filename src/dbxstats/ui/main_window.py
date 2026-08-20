@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import theme
+from .. import log, theme
 from ..core import units
 from ..platform import win as winapi
 from .components import IconButton, LoadDots, NavButton, PillButton, label
@@ -31,6 +31,8 @@ from .views.memory import MemoryView
 from .views.network import NetworkView
 from .views.processes import ProcessesView
 from .views.sensors import SensorsView
+
+_log = log.get("ui")
 
 VIEW_CLASSES = (DashboardView, GamingView, CpuView, GpuView, MemoryView,
                 NetworkView, SensorsView, ProcessesView, BenchmarkView, LauncherView,
@@ -236,6 +238,19 @@ class MainWindow(QWidget):
         self.apply_settings()
 
     # ── navegacao ────────────────────────────────────────────────────────────
+    def reload_displays(self) -> None:
+        """Redesenha a aba Telas depois de um monitor entrar ou sair.
+
+        Ela so' se redesenhava ao ser aberta, entao plugar um monitor com ela
+        ja' na frente nao mostrava nada.
+        """
+        view = self.views.get("displays")
+        if view is not None and hasattr(view, "reload"):
+            try:
+                view.reload()
+            except Exception:
+                _log.exception("falha redesenhando a aba Telas")
+
     def show_view(self, key: str) -> None:
         view = self.views.get(key)
         if view is None or key == self._current:

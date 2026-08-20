@@ -104,6 +104,8 @@ class App:
         self._display_boot: list[dict] = []
         self._displays_seen: frozenset[str] | None = None
         """Monitores conectados no ultimo tique; ver _watch_displays."""
+        self._displays_pending: frozenset[str] | None = None
+        """Conjunto novo aguardando confirmacao no tique seguinte."""
         self._session: GameSession | None = None
         self._session_restore: list[dict] | None = None
         self._session_primary = ""
@@ -157,6 +159,11 @@ class App:
         if not self.settings.start_minimized:
             self.window.show()
         self._apply_overlay()
+        # Antes dos timers: se a maquina abriu com a primaria na tela errada
+        # (TV ligada por ultimo, por exemplo), a janela ja' nasce no lugar certo.
+        nome = self._enforce_display_defaults()
+        if nome:
+            self.notify("DBX Stats", f"{nome} de volta como tela principal.")
         self._init_timers()
         self._init_hotkeys()
         # A escuta do controle fica sempre de pe'. Ela nao mexe em nada sozinha:
@@ -372,19 +379,83 @@ class App:
                                    if d.monitor_id)
         except Exception:
             return
-        anterior, self._displays_seen = self._displays_seen, conectados
-        if anterior is None or anterior == conectados or self._session is not None:
+        if self._displays_seen is None:
+            self._displays_seen = conectados
             return
-        alvo = self._normal_layout()
-        if alvo is None:
-            _log.info("conjunto de telas mudou; sem perfil padrao para reimpor")
+        if conectados == self._displays_seen:
+            self._displays_pending = None
             return
-        if _same_layout(alvo, dsp.snapshot()):
+        # Espera o conjunto se acomodar antes de agir. Aplicar um arranjo faz o
+        # Windows soltar e reanexar caminhos por um instante; agir nesse piscar
+        # desfazia a mudanca que o usuario tinha acabado de aplicar.
+        if self._displays_pending != conectados:
+            self._displays_pending = conectados
             return
-        ok, err = dsp.apply_profile(alvo, self._normal_topology())
-        _log.info("telas mudaram; padrao reimposto (%s)", "ok" if ok else err)
-        if ok:
-            self.notify("DBX Stats", "Monitor conectado — arranjo padrão de volta.")
+        self._displays_seen = conectados
+        self._displays_pending = None
+        if self._session is not None:
+            return
+        _log.info("conjunto de telas mudou: %d conectadas", len(conectados))
+        try:
+            # Aqui NAO se reimpoe perfil nenhum. Perfil mexe em tudo — topologia,
+            # modos, posicoes — e reaplica-lo por causa de um monitor plugado
+            # apagava o arranjo que a pessoa tinha acabado de montar na mao. O
+            # que vale sao as duas escolhas explicitas: quem manda e quem apaga.
+            self._enforce_display_defaults()
+        finally:
+            # A aba Telas so' se redesenhava ao ser aberta. Plugar a TV com ela
+            # ja' na frente nao mostrava nada — a tela nova simplesmente nao
+            # aparecia. Redesenhar aqui vale ate' quando nao ha' perfil padrao:
+            # a lista tem de refletir o que esta' ligado na maquina, sempre.
+            self.window.reload_displays()
+
+    def _enforce_display_defaults(self) -> str:
+        """Poe as telas no arranjo escolhido como o normal da casa.
+
+        Duas escolhas, nesta ordem obrigatoria: primeiro quem manda, depois
+        quem apaga — o Windows nao desliga a tela que esta' mandando.
+
+        So' roda quando um monitor entra ou sai, e na abertura do app. Nao e'
+        um vigia constante de proposito: ligar a TV na mao pela aba Telas tem
+        de continuar funcionando sem o app apaga-la um segundo depois.
+        """
+        nome = self._enforce_primary()
+        if self._session is not None:
+            return nome
+        apagar = set(self.settings.display_off_by_default)
+        if not apagar:
+            return nome
+        for d in dsp.list_displays(with_modes=False):
+            if d.monitor_id not in apagar or not d.active or d.primary:
+                continue
+            ok, err = dsp.set_enabled(d.device, False)
+            _log.info("%s apagada por padrao (%s)", d.name, "ok" if ok else err)
+        return nome
+
+    def _enforce_primary(self) -> str:
+        """Devolve o comando para a tela escolhida como principal da casa.
+
+        Conectar a TV entrega a primaria a ela — o Windows promove sozinho a
+        tela que acabou de chegar. Como quase todo o uso do PC acontece no
+        monitor da mesa, a barra de tarefas e as janelas novas iam parar numa
+        tela que muitas vezes nem esta' ligada.
+
+        Sai de fininho quando ha' jogo aberto: nesse caso a primaria foi
+        trocada de proposito, e por nos.
+        """
+        alvo_id = self.settings.display_primary_default
+        if not alvo_id or self._session is not None:
+            return ""
+        alvo = next((d for d in dsp.list_displays(with_modes=False)
+                     if d.monitor_id == alvo_id and d.active), None)
+        if alvo is None or alvo.primary:
+            return ""
+        ok, err = dsp.set_primary(alvo.device)
+        if not ok:
+            _log.warning("nao consegui devolver a principal para %s: %s", alvo.name, err)
+            return ""
+        _log.info("principal devolvida para %s", alvo.name)
+        return alvo.name
 
     def _restore_primary(self, monitor_id: str, desligar: str = "") -> None:
         """Devolve a primaria e, se ligamos alguma tela para o jogo, apaga de novo.
