@@ -123,13 +123,22 @@ class LauncherView(View):
 
     # ── dados ────────────────────────────────────────────────────────────────
     def _targets(self) -> list[tuple[str, str]]:
-        """Opcoes de tela para o combo: nao mexer, primaria, ou perfil salvo."""
+        """Opcoes de tela para o combo.
+
+        Trocar a principal vem antes dos perfis de proposito: e' a acao que o
+        atalho de jogo quer quase sempre ("abre na TV"), custa uma chamada so' e
+        se desfaz sozinha no fim. Perfil mexe na topologia inteira e faz as telas
+        apagarem por segundos — util quando e' mesmo o caso, exagero como padrao.
+        """
         opcoes = [("Não mexer nas telas", "")]
         for disp in D.list_displays(with_modes=False):
-            if disp.monitor_id:
-                opcoes.append((f"Primária: {disp.name}", f"primary:{disp.monitor_id}"))
+            if not disp.monitor_id or not disp.active:
+                continue
+            marca = " (já é a principal)" if disp.primary else ""
+            opcoes.append((f"Abrir na {disp.name}{marca}", f"primary:{disp.monitor_id}"))
         for profile in self.cfg.display_profiles:
-            opcoes.append((f"Perfil: {profile['name']}", f"profile:{profile['name']}"))
+            opcoes.append((f"Aplicar o perfil '{profile['name']}'",
+                           f"profile:{profile['name']}"))
         return opcoes
 
     def _add_files(self, paths: list[str]) -> None:
@@ -211,7 +220,7 @@ class LauncherView(View):
 
         meio = QHBoxLayout()
         meio.setSpacing(theme.scaled(8))
-        meio.addWidget(label("Antes de abrir", 8.5, color=theme.MUTE))
+        meio.addWidget(label("Ao abrir", 8.5, color=theme.MUTE))
         combo = QComboBox()
         for texto, valor in alvos:
             combo.addItem(texto, valor)
@@ -221,7 +230,9 @@ class LauncherView(View):
             lambda _i, idx=index, w=combo: self._set(idx, "target", w.currentData()))
         meio.addWidget(combo, 1)
 
-        voltar = QCheckBox("devolver as telas quando o jogo fechar")
+        voltar = QCheckBox("voltar ao normal quando o jogo fechar")
+        voltar.setToolTip("O app acompanha o processo do jogo e desfaz a troca "
+                          "sozinho quando ele fecha.")
         voltar.setChecked(bool(item.get("restore", True)))
         voltar.toggled.connect(lambda on, i=index: self._set(i, "restore", bool(on)))
         meio.addWidget(voltar)

@@ -49,3 +49,4 @@ def test_nice_step_rounds_up():
     assert nice_step(100) == 25.0
     assert nice_step(1000) == 250.0
     assert nice_step(0) == 1.0
+

@@ -244,6 +244,27 @@ class LhmReader:
             elif st == "Voltage" and ("Core" in name or "VID" in name):
                 result.setdefault("cpu_volts", round(f, 3))
 
+        # Duas leituras contam historia diferente e o overlay mostra as duas:
+        # Tctl/Tdie e' o ponto mais quente do encapsulamento, que e' quem dita
+        # boost e limite; a media dos dies (ou dos nucleos, quando existem) e' a
+        # temperatura de trabalho. So' o pico assusta a toa; so' a media esconde
+        # throttle.
+        pacote = None
+        for key in ("Core (Tctl/Tdie)", "Tctl/Tdie", "Tdie", "CPU Package", "Package"):
+            achados = [v for nm, v in temps_by_name.items() if key in nm and v > 0]
+            if achados:
+                pacote = max(achados)
+                break
+        if pacote:
+            result["cpu_temp_package"] = round(pacote, 1)
+
+        medias = [t for t in core_temps if t > 0]
+        if not medias:
+            # Ryzen nao expoe nucleo a nucleo; o que ele da' e' um sensor por CCD.
+            medias = [v for nm, v in temps_by_name.items() if "CCD" in nm and v > 0]
+        if medias:
+            result["cpu_temp_cores"] = round(sum(medias) / len(medias), 1)
+
         temp = None
         for key in _CPU_TEMP_PRIORITY:
             matches = [v for nm, v in temps_by_name.items() if key in nm and v > 0]

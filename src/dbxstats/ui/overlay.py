@@ -289,18 +289,18 @@ class GameOverlay(QWidget):
         watts_on = "watts" in metrics
         # A coluna da direita carrega carga e frequencia: temperatura sozinha nao
         # diz se a peca esta' entregando clock ou se afundou por limite termico.
+        # Duas temperaturas por peca: a de trabalho e o ponto quente. Uma so'
+        # sempre mente para algum lado — a media esconde throttle, o pico
+        # assusta a toa. Juntas dizem se o calor esta' espalhado ou concentrado.
         if "cpu" in self._rows:
-            temp = d.get("cpu_temp")
-            self._set("cpu", units.temp(temp), theme.temp_color(temp),
-                      f"{d.get('cpu_pct', 0):.0f}%  {_ghz(d.get('cpu_mhz'))}"
-                      + (f"  {units.watts(d.get('cpu_watts'), 0)}" if watts_on else ""))
+            self._set_temps("cpu", d.get("cpu_temp_cores"),
+                            d.get("cpu_temp_package") or d.get("cpu_temp"),
+                            f"{d.get('cpu_pct', 0):.0f}%  {_ghz(d.get('cpu_mhz'))}"
+                            + (f"  {units.watts(d.get('cpu_watts'), 0)}" if watts_on else ""))
         if "gpu" in self._rows:
-            # Hot spot e' o ponto mais quente do die e o que dita throttle; o
-            # "GPU Core" e' uma media mais fria e mais otimista que a realidade.
-            temp = g.get("temp_hotspot") or g.get("temp")
-            self._set("gpu", units.temp(temp), theme.temp_color(temp),
-                      f"{g.get('usage', 0):.0f}%  {_ghz(g.get('freq'))}"
-                      + (f"  {units.watts(g.get('watts'), 0)}" if watts_on else ""))
+            self._set_temps("gpu", g.get("temp"), g.get("temp_hotspot"),
+                            f"{g.get('usage', 0):.0f}%  {_ghz(g.get('freq'))}"
+                            + (f"  {units.watts(g.get('watts'), 0)}" if watts_on else ""))
         if "ram" in self._rows:
             self._set("ram",
                       f"{d.get('ram_used', 0):.1f}/{d.get('ram_total', 0):.0f}GB",
@@ -338,6 +338,33 @@ class GameOverlay(QWidget):
             return ()
         return (screen.name(), int(screen.logicalDotsPerInch()),
                 screen.geometry().width(), screen.geometry().height())
+
+    def _set_temps(self, key: str, media, pico, sub: str) -> None:
+        """Media e ponto quente lado a lado, cada um na sua cor.
+
+        Quando a maquina so' expoe uma das duas, mostra a que existe em vez de
+        um "—" ao lado de um numero: placa e processador variam muito no que
+        publicam, e furo de sensor nao pode virar buraco no overlay.
+        """
+        if media is None and pico is None:
+            self._set(key, "—", theme.MUTE, sub)
+            return
+        if media is None or pico is None:
+            unico = media if media is not None else pico
+            self._set(key, units.temp(unico), theme.temp_color(unico), sub)
+            return
+        # A unidade aparece uma vez so'. Repetir "°C" nos dois numeros custa
+        # largura que o overlay nao tem de sobra e nao esclarece nada.
+        texto = (f"<span style='color:{theme.temp_color(media)}'>{media:.0f}</span>"
+                 f"<span style='color:{theme.FAINT}'>/</span>"
+                 f"<span style='color:{theme.temp_color(pico)}'>{units.temp(pico)}</span>")
+        row = self._rows.get(key)
+        if row is None:
+            return
+        _tag, value, subtitle = row
+        value.setText(texto)
+        value.setStyleSheet("")
+        subtitle.setText(sub)
 
     def _set(self, key: str, main: str, color: str, sub: str) -> None:
         row = self._rows.get(key)

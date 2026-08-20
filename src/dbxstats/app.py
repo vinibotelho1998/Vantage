@@ -104,6 +104,8 @@ class App:
         self._display_boot: list[dict] = []
         self._session: GameSession | None = None
         self._session_restore: list[dict] | None = None
+        self._session_primary = ""
+        """monitor_id da primaria de antes, quando so' a primaria mudou."""
         self._session_name = ""
         self._game_pid = 0
         self._game_name = ""
@@ -238,18 +240,27 @@ class App:
     def play_item(self, item: dict) -> tuple[bool, str]:
         """Prepara as telas, abre o jogo e agenda a volta para quando ele fechar."""
         antes = dsp.snapshot()
+        antes_primaria = next((d["monitor_id"] for d in antes if d.get("primary")), "")
         trocou, msg = self._apply_target(item.get("target", ""))
+        so_primaria = trocou and item.get("target", "").startswith("primary:")
 
         session = GameSession(item["path"], item.get("args", ""))
         started, err = session.start()
         if not started:
             if trocou and item.get("restore", True):
-                dsp.apply_profile(antes)
+                if so_primaria and antes_primaria:
+                    self._restore_primary(antes_primaria)
+                else:
+                    dsp.apply_profile(antes)
             return False, f"não consegui abrir: {err}"
 
         self._session = session
         # So' promete devolver as telas se elas realmente mudaram por causa daqui.
-        self._session_restore = antes if (trocou and item.get("restore", True)) else None
+        # Trocar so' a primaria se desfaz trocando so' a primaria de volta: mandar
+        # o perfil inteiro apaga as tres telas por varios segundos sem precisar.
+        devolver = trocou and item.get("restore", True)
+        self._session_primary = antes_primaria if (devolver and so_primaria) else ""
+        self._session_restore = antes if (devolver and not so_primaria) else None
         self._session_name = item.get("name") or Path(item["path"]).stem
         aviso = f"{self._session_name} abrindo"
         return True, f"{aviso} — {msg}" if msg else aviso
@@ -293,12 +304,13 @@ class App:
 
         self._session = None
         restore = self._session_restore
+        primaria = self._session_primary
         self._session_restore = None
-        if restore is None:
+        self._session_primary = ""
+        if restore is None and not primaria:
             return
-        restore = self._normal_layout() or restore
         if not session.ever_started:
-            # Nunca reconhecemos o jogo. Trocar de tela agora seria pior que nao
+            # Nunca reconhecemos o jogo. Mexer nas telas agora seria pior que nao
             # fazer nada: se ele estiver rodando, a mudanca cai em cima do jogo.
             _log.warning("nao consegui acompanhar o processo de %s; telas ficam como estao",
                          self._session_name)
@@ -306,12 +318,37 @@ class App:
                         f"não consegui acompanhar {self._session_name}. "
                         "As telas ficam como estão — use a aba Telas quando terminar.")
             return
+        if primaria:
+            self._restore_primary(primaria)
+            return
+        restore = self._normal_layout() or restore
         try:
             if not _same_layout(restore, dsp.snapshot()):
                 dsp.apply_profile(restore)
                 self.notify("DBX Stats", f"{self._session_name} fechou — telas de volta")
         except Exception:
             _log.exception("falha devolvendo as telas depois do jogo")
+
+    def _restore_primary(self, monitor_id: str) -> None:
+        """Devolve so' a primaria, sem tocar no resto do arranjo.
+
+        Reaplicar o perfil inteiro para desfazer uma troca de primaria e' o que
+        fazia as tres telas apagarem por varios segundos toda vez que um jogo
+        fechava. Aqui e' uma chamada so', e as telas que nunca mudaram nem
+        piscam.
+        """
+        alvo = next((d for d in dsp.list_displays(with_modes=False)
+                     if d.monitor_id == monitor_id and d.active), None)
+        if alvo is None:
+            _log.warning("a tela primaria de antes (%s) nao esta mais ligada", monitor_id)
+            return
+        if alvo.primary:
+            return
+        ok, err = dsp.set_primary(alvo.device)
+        if ok:
+            self.notify("DBX Stats", f"{self._session_name} fechou — {alvo.name} de volta")
+        else:
+            _log.warning("nao consegui devolver a primaria: %s", err)
 
     def _follow_game_server(self) -> None:
         """Aponta o ping para o servidor do jogo em foco.
@@ -427,7 +464,16 @@ class App:
         if not alvo:
             return
         try:
-            if _same_layout(alvo, dsp.snapshot()):
+            atual = dsp.snapshot()
+            if _same_layout(alvo, atual):
+                return
+            # Se a unica diferenca e' quem manda, trocar a primaria basta. Mandar
+            # o perfil inteiro por causa disso apagava as tres telas por varios
+            # segundos — justo na hora em que o app esta' sumindo e nao tem mais
+            # como desfazer nada.
+            so_primaria = _only_primary_differs(alvo, atual)
+            if so_primaria:
+                self._restore_primary(so_primaria)
                 return
             ok, err = dsp.apply_profile(alvo)
             _log.info("telas restauradas ao fechar" if ok
@@ -816,6 +862,24 @@ def _same_layout(a: list[dict], b: list[dict]) -> bool:
                  tuple(e.get("mode") or ()))
                 for e in entries}
     return chave(a) == chave(b)
+
+
+def _only_primary_differs(alvo: list[dict], atual: list[dict]) -> str:
+    """monitor_id que deveria ser a primaria, se for a unica diferenca.
+
+    Devolve "" quando ha' qualquer outra mudanca (tela ligada, resolucao,
+    posicao): nesse caso so' o perfil inteiro resolve.
+    """
+    def sem_primaria(entries: list[dict]) -> set:
+        return {(e.get("monitor_id") or e.get("device"), bool(e.get("active")),
+                 tuple(e.get("position") or ()), tuple(e.get("mode") or ()))
+                for e in entries}
+
+    if sem_primaria(alvo) != sem_primaria(atual):
+        return ""
+    quer = next((e.get("monitor_id") for e in alvo if e.get("primary")), "")
+    tem = next((e.get("monitor_id") for e in atual if e.get("primary")), "")
+    return quer if (quer and quer != tem) else ""
 
 
 def _summary_row(m: fr.FrameMetrics) -> dict:

@@ -131,6 +131,8 @@ class Settings:
     gamepad_deadzone: int = 8000
     gamepad_scroll_speed: float = 1.0
     gamepad_toggle_combo: bool = True
+    gamepad_bindings: dict = field(default_factory=dict)
+    """Botao -> acao, so' o que o usuario mudou; o resto segue o padrao."""
     """Back mais Start liga e desliga o modo mouse sem sair do sofa."""
     gamepad_only_with_tv: bool = False
     """So assume o mouse quando um perfil de tela marcado como sofa estiver ativo."""
@@ -200,6 +202,7 @@ class Settings:
         self.gamepad_speed = round(_clamp(_num(self.gamepad_speed, 1.0), 0.2, 4.0), 2)
         self.gamepad_scroll_speed = round(_clamp(_num(self.gamepad_scroll_speed, 1.0), 0.2, 4.0), 2)
         self.gamepad_deadzone = int(_clamp(_num(self.gamepad_deadzone, 8000), 0, 30000))
+        self.gamepad_bindings = _clean_bindings(self.gamepad_bindings)
 
     # ── persistencia ─────────────────────────────────────────────────────────
     @classmethod
@@ -272,6 +275,19 @@ def _clean_launch_item(raw) -> dict | None:
         "target": target,
         "restore": bool(raw.get("restore", True)),
     }
+
+
+def _clean_bindings(raw) -> dict:
+    """Guarda so' botao e acao que existem de verdade.
+
+    Um settings.json de versao antiga (ou editado a mao) nao pode fazer o modo
+    mouse subir com botao apontando para acao inexistente.
+    """
+    from .platform.gamepad import ACTIONS, DEFAULT_BINDINGS
+    if not isinstance(raw, dict):
+        return {}
+    return {str(k): str(v) for k, v in raw.items()
+            if str(k) in DEFAULT_BINDINGS and str(v) in ACTIONS}
 
 
 def _clean_profile(raw) -> dict | None:

@@ -72,6 +72,16 @@ VK_DOWN = 0x28
 VK_LWIN = 0x5B
 VK_TAB = 0x09
 VK_MENU = 0x12
+VK_F4 = 0x73
+VK_SPACE = 0x20
+VK_APPS = 0x5D              # tecla de menu de contexto
+VK_D = 0x44
+VK_VOLUME_MUTE = 0xAD
+VK_VOLUME_DOWN = 0xAE
+VK_VOLUME_UP = 0xAF
+VK_MEDIA_NEXT = 0xB0
+VK_MEDIA_PREV = 0xB1
+VK_MEDIA_PLAY_PAUSE = 0xB3
 
 TRIGGER_THRESHOLD = 40
 _POLL_MS = 8
@@ -161,25 +171,6 @@ def scroll(amount: int, horizontal: bool = False) -> None:
 
 
 # ── laco de leitura ──────────────────────────────────────────────────────────
-_MOUSE_BUTTONS = {
-    BTN_A: (MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP),
-    BTN_B: (MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP),
-    BTN_RTHUMB: (MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP),
-}
-
-# Backspace no X: e' o botao que cai debaixo do polegar sem largar o analogico,
-# e apagar caractere e' o que mais se faz digitando no teclado virtual.
-_KEY_BUTTONS = {
-    BTN_X: VK_BACK,
-    BTN_Y: VK_ESCAPE,
-    BTN_START: VK_RETURN,
-    BTN_DPAD_UP: VK_UP,
-    BTN_DPAD_DOWN: VK_DOWN,
-    BTN_DPAD_LEFT: VK_LEFT,
-    BTN_DPAD_RIGHT: VK_RIGHT,
-}
-
-
 def tap_alt_tab() -> None:
     """Alterna janelas. Sentado no sofa e' a acao mais usada depois do clique."""
     _send(_key(VK_MENU, False), _key(VK_TAB, False),
@@ -188,6 +179,25 @@ def tap_alt_tab() -> None:
 
 def tap_win() -> None:
     _send(_key(VK_LWIN, False), _key(VK_LWIN, True))
+
+
+def _combo(modificador: int, tecla: int) -> None:
+    _send(_key(modificador, False), _key(tecla, False),
+          _key(tecla, True), _key(modificador, True))
+
+
+def show_desktop() -> None:
+    """Win+D. Sentado no sofa e' a saida de emergencia: seja la' o que esteja na
+    frente, uma apertada devolve a area de trabalho."""
+    _combo(VK_LWIN, VK_D)
+
+
+def task_view() -> None:
+    _combo(VK_LWIN, VK_TAB)
+
+
+def close_window() -> None:
+    _combo(VK_MENU, VK_F4)
 
 
 def toggle_osk() -> None:
@@ -254,11 +264,78 @@ def _merge(pads: list[XINPUT_GAMEPAD]) -> XINPUT_GAMEPAD:
     return out
 
 
-_ACTION_BUTTONS = {
-    BTN_LB: tap_alt_tab,
-    BTN_RB: tap_win,
-    BTN_LTHUMB: toggle_osk,
+def _tap(vk: int):
+    return lambda: _send(_key(vk, False), _key(vk, True))
+
+
+ACTIONS: dict[str, tuple[str, object]] = {
+    "": ("Nada", None),
+    "click_left": ("Clique esquerdo", (MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP)),
+    "click_right": ("Clique direito", (MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP)),
+    "click_middle": ("Clique do meio", (MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP)),
+    "key_enter": ("Enter", VK_RETURN),
+    "key_esc": ("Esc, volta", VK_ESCAPE),
+    "key_back": ("Backspace, apaga", VK_BACK),
+    "key_delete": ("Delete", VK_DELETE),
+    "key_tab": ("Tab", VK_TAB),
+    "key_space": ("Espaço", VK_SPACE),
+    "key_up": ("Seta acima", VK_UP),
+    "key_down": ("Seta abaixo", VK_DOWN),
+    "key_left": ("Seta esquerda", VK_LEFT),
+    "key_right": ("Seta direita", VK_RIGHT),
+    "key_menu": ("Menu de contexto", VK_APPS),
+    "win": ("Menu Iniciar", tap_win),
+    "desktop": ("Área de trabalho (Win+D)", show_desktop),
+    "alt_tab": ("Alt+Tab, troca de janela", tap_alt_tab),
+    "task_view": ("Visão de tarefas (Win+Tab)", task_view),
+    "close_window": ("Fechar a janela (Alt+F4)", close_window),
+    "osk": ("Teclado virtual", toggle_osk),
+    "vol_up": ("Volume +", _tap(VK_VOLUME_UP)),
+    "vol_down": ("Volume −", _tap(VK_VOLUME_DOWN)),
+    "vol_mute": ("Mudo", _tap(VK_VOLUME_MUTE)),
+    "media_play": ("Tocar / pausar", _tap(VK_MEDIA_PLAY_PAUSE)),
+    "media_next": ("Faixa seguinte", _tap(VK_MEDIA_NEXT)),
+    "media_prev": ("Faixa anterior", _tap(VK_MEDIA_PREV)),
+    "scroll_up": ("Rolar para cima", "scroll_up"),
+    "scroll_down": ("Rolar para baixo", "scroll_down"),
 }
+"""Tudo que um botao pode fazer, com o nome que aparece na interface.
+
+Cada valor diz *como* a acao e' executada, e o laco decide por isso: par de
+flags e' botao de mouse (segura enquanto o botao estiver apertado), inteiro e'
+tecla (idem), texto e' rolagem continua e funcao e' disparo unico na descida.
+"""
+
+# Controle do sofa: o PC inteiro na mao, sem teclado por perto. A ideia por tras
+# das escolhas: os dois botoes de baixo sao os cliques (e' o que mais se faz),
+# os de cima sao navegacao entre janelas, o gatilho direito e' a saida rapida
+# para a area de trabalho e o direcional anda pela interface.
+DEFAULT_BINDINGS: dict[str, str] = {
+    "A": "click_left",
+    "B": "click_right",
+    "X": "key_back",
+    "Y": "key_esc",
+    "LB": "alt_tab",
+    "RB": "win",
+    "L3": "osk",
+    "R3": "click_middle",
+    "Start": "key_enter",
+    # Back fica livre de proposito: ele forma o combo que assume e devolve o
+    # mouse, e apertar os dois botoes nunca sai perfeitamente junto. Com uma
+    # acao aqui, o caminho ate' o combo dispararia ela toda vez — Alt+F4 era o
+    # padrao anterior, e fechar a janela sem querer e' o pior jeito de descobrir
+    # isso. Quem quiser pode escolher uma na tela do controle.
+    "Back": "",
+    "LT": "task_view",
+    "RT": "desktop",
+    "Direcional ↑": "key_up",
+    "Direcional ↓": "key_down",
+    "Direcional ←": "key_left",
+    "Direcional →": "key_right",
+}
+
+TRIGGERS = ("LT", "RT")
+"""Gatilhos: analogicos, mas tratados como botao a partir de um limiar."""
 
 BUTTON_NAMES = {
     BTN_A: "A", BTN_B: "B", BTN_X: "X", BTN_Y: "Y",
@@ -268,41 +345,47 @@ BUTTON_NAMES = {
     BTN_DPAD_LEFT: "Direcional ←", BTN_DPAD_RIGHT: "Direcional →",
 }
 
-_VK_LABELS = {
-    VK_BACK: "Backspace, apaga", VK_RETURN: "Enter", VK_ESCAPE: "Esc",
-    VK_UP: "Seta acima", VK_DOWN: "Seta abaixo",
-    VK_LEFT: "Seta esquerda", VK_RIGHT: "Seta direita",
-}
+MASK_BY_NAME = {nome: mask for mask, nome in BUTTON_NAMES.items()}
 
-_MOUSE_LABELS = {
-    BTN_A: "Clique esquerdo", BTN_B: "Clique direito", BTN_RTHUMB: "Clique do meio",
-}
-
-_ACTION_LABELS = {
-    BTN_LB: "Alt+Tab, troca de janela",
-    BTN_RB: "Tecla Windows",
-    BTN_LTHUMB: "Teclado virtual",
-}
+BUTTON_ORDER = ("A", "B", "X", "Y", "LB", "RB", "LT", "RT",
+                "L3", "R3", "Back", "Start",
+                "Direcional ↑", "Direcional ↓", "Direcional ←", "Direcional →")
+"""Ordem em que os botoes aparecem na tela de configuracao."""
 
 
-def describe() -> list[tuple[str, str]]:
-    """Mapa do controle montado a partir das tabelas reais de mapeamento.
+def action_label(action: str) -> str:
+    return ACTIONS.get(action, ("desconhecida", None))[0]
 
-    Nasce do proprio codigo de proposito: um mapa escrito a mao na interface
-    envelhece calado toda vez que alguem remapeia um botao.
+
+def bindings_from(cfg) -> dict[str, str]:
+    """Mapa em uso: o padrao com as trocas do usuario por cima.
+
+    Partir do padrao a cada leitura e' de proposito. Assim um botao que o
+    usuario nunca tocou continua acompanhando o padrao quando ele melhora, e
+    uma configuracao antiga nao deixa botao novo sem funcao nenhuma.
     """
+    mapa = dict(DEFAULT_BINDINGS)
+    for nome, acao in (getattr(cfg, "gamepad_bindings", None) or {}).items():
+        if nome in mapa and acao in ACTIONS:
+            mapa[nome] = acao
+    return mapa
+
+
+def describe(cfg=None) -> list[tuple[str, str]]:
+    """Mapa do controle montado a partir do mapeamento real.
+
+    Nasce do proprio mapeamento de proposito: uma lista escrita a mao na
+    interface envelhece calada toda vez que alguem remapeia um botao.
+    """
+    mapa = bindings_from(cfg) if cfg is not None else dict(DEFAULT_BINDINGS)
     linhas: list[tuple[str, str]] = [
         ("Analógico esquerdo", "Move o cursor"),
         ("Analógico direito", "Rola a página"),
     ]
-    for mask, label in _MOUSE_LABELS.items():
-        linhas.append((BUTTON_NAMES.get(mask, "?"), label))
-    for mask, vk in _KEY_BUTTONS.items():
-        linhas.append((BUTTON_NAMES.get(mask, "?"), _VK_LABELS.get(vk, "tecla")))
-    for mask, _ in _ACTION_BUTTONS.items():
-        linhas.append((BUTTON_NAMES.get(mask, "?"), _ACTION_LABELS.get(mask, "ação")))
-    linhas.append(("Gatilho esquerdo", "Página acima"))
-    linhas.append(("Gatilho direito", "Página abaixo"))
+    for nome in BUTTON_ORDER:
+        acao = mapa.get(nome, "")
+        if acao:
+            linhas.append((nome, action_label(acao)))
     linhas.append(("Back + Start", "Assume ou devolve o mouse"))
     return linhas
 
@@ -329,7 +412,8 @@ class GamepadMouse(QObject):
         self._connected = False
         self._active = False
         self.last: XINPUT_GAMEPAD | None = None
-        self._held: dict[int, bool] = {}
+        self._held: dict[str, bool] = {}
+        self._bindings = bindings_from(settings)
         self._combo_held = False
         """Back+Start ainda esta' pressionado; segura a borda ate' soltar."""
         self._last_packet = 0
@@ -383,14 +467,26 @@ class GamepadMouse(QObject):
         QTimer.singleShot(180, lambda: rumble(alvos, 0, 0))
 
     def _release_all(self) -> None:
-        for button, held in list(self._held.items()):
+        """Solta tudo que estava pressionado ao devolver o mouse.
+
+        Sem isso, desligar o modo com um botao apertado deixaria a tecla ou o
+        clique presos no Windows — e o usuario sem entender por que a maquina
+        parou de responder.
+        """
+        for nome, held in list(self._held.items()):
             if not held:
                 continue
-            if button in _MOUSE_BUTTONS:
-                _send(_mouse(_MOUSE_BUTTONS[button][1]))
-            elif button in _KEY_BUTTONS:
-                _send(_key(_KEY_BUTTONS[button], True))
+            efeito = ACTIONS.get(self._bindings.get(nome, ""), ("", None))[1]
+            if isinstance(efeito, tuple):
+                _send(_mouse(efeito[1]))
+            elif isinstance(efeito, int):
+                _send(_key(efeito, True))
         self._held.clear()
+
+    def reload_bindings(self) -> None:
+        """Reaplica o mapeamento depois de o usuario mexer nele."""
+        self._release_all()
+        self._bindings = bindings_from(self.cfg)
 
     # ── leitura ──────────────────────────────────────────────────────────────
     def _read(self) -> XINPUT_GAMEPAD | None:
@@ -499,29 +595,36 @@ class GamepadMouse(QObject):
             self._hscroll_carry -= steps * WHEEL_DELTA
 
     def _buttons(self, buttons: int) -> None:
-        for mask, (down, up) in _MOUSE_BUTTONS.items():
-            self._edge(buttons, mask, lambda f=down: _send(_mouse(f)),
-                       lambda f=up: _send(_mouse(f)))
-        for mask, vk in _KEY_BUTTONS.items():
-            self._edge(buttons, mask, lambda v=vk: _send(_key(v, False)),
-                       lambda v=vk: _send(_key(v, True)))
-        # Acoes disparam so' na descida: repetir Alt+Tab enquanto o botao esta'
-        # pressionado geraria uma enxurrada de trocas de janela.
-        for mask, action in _ACTION_BUTTONS.items():
-            self._edge(buttons, mask, action, lambda: None)
-
-    def _edge(self, buttons: int, mask: int, on_press, on_release) -> None:
-        pressed = bool(buttons & mask)
-        if pressed and not self._held.get(mask):
-            self._held[mask] = True
-            on_press()
-        elif not pressed and self._held.get(mask):
-            self._held[mask] = False
-            on_release()
+        for nome, mask in MASK_BY_NAME.items():
+            self._apply(nome, bool(buttons & mask))
 
     def _triggers(self, pad: XINPUT_GAMEPAD) -> None:
-        """Gatilhos rolam pagina, que e' o gesto natural pra navegar deitado."""
-        if pad.bRightTrigger > TRIGGER_THRESHOLD:
-            scroll(-WHEEL_DELTA)
-        elif pad.bLeftTrigger > TRIGGER_THRESHOLD:
-            scroll(WHEEL_DELTA)
+        """Gatilhos viram botao a partir de um limiar, e valem como qualquer outro."""
+        self._apply("LT", pad.bLeftTrigger > TRIGGER_THRESHOLD)
+        self._apply("RT", pad.bRightTrigger > TRIGGER_THRESHOLD)
+
+    def _apply(self, nome: str, pressed: bool) -> None:
+        """Executa a acao do botao conforme o tipo dela.
+
+        Clique e tecla acompanham o botao (descem e sobem junto), rolagem repete
+        enquanto estiver segurado, e o resto dispara so' na descida: repetir
+        Alt+Tab a 125 vezes por segundo viraria uma enxurrada de trocas de
+        janela.
+        """
+        efeito = ACTIONS.get(self._bindings.get(nome, ""), ("", None))[1]
+        if efeito is None:
+            return
+        if efeito == "scroll_up" or efeito == "scroll_down":
+            if pressed:
+                scroll(WHEEL_DELTA if efeito == "scroll_up" else -WHEEL_DELTA)
+            return
+        antes = self._held.get(nome, False)
+        if pressed == antes:
+            return
+        self._held[nome] = pressed
+        if isinstance(efeito, tuple):
+            _send(_mouse(efeito[0] if pressed else efeito[1]))
+        elif isinstance(efeito, int):
+            _send(_key(efeito, not pressed))
+        elif pressed and callable(efeito):
+            efeito()

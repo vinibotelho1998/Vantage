@@ -8,11 +8,12 @@ from __future__ import annotations
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import QHBoxLayout, QSlider, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QSlider, QVBoxLayout,
+                               QWidget)
 
 from ... import theme
 from ...platform import gamepad as G
-from ..components import Card, KpiStrip, MetricList, divider, label
+from ..components import Card, KpiStrip, PillButton, divider, label
 from .base import View, scroll_page
 
 _KPIS = [
@@ -263,11 +264,9 @@ class GamepadView(View):
                                  self.cfg.gamepad_deadzone, self._dead)
         lay.addWidget(tune, 1)
 
-        ref = Card("Tudo que o controle faz", theme.GPU, "gerado do próprio mapeamento")
-        self.rows = MetricList([(str(i), name) for i, (name, _) in enumerate(G.describe())])
-        for i, (_, action) in enumerate(G.describe()):
-            self.rows.set(str(i), action)
-        ref.add(self.rows)
+        ref = Card("O que cada botão faz", theme.GPU,
+                   "escolha a ação; vale na hora, sem reiniciar")
+        ref.add(self._mapa())
         lay.addWidget(ref, 1)
         lay.addStretch(0)
 
@@ -279,6 +278,69 @@ class GamepadView(View):
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
         self._refresh()
+
+    def _mapa(self) -> QWidget:
+        """Uma linha por botao, com a acao num seletor.
+
+        Os analogicos ficam como texto: eles nao sao botao, e trocar a funcao
+        deles daria outro app, nao outro mapeamento.
+        """
+        caixa = QWidget()
+        col = QVBoxLayout(caixa)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(theme.scaled(4))
+
+        for nome, acao in (("Analógico esquerdo", "Move o cursor"),
+                           ("Analógico direito", "Rola a página"),
+                           ("Back + Start", "Assume ou devolve o mouse")):
+            linha = QHBoxLayout()
+            linha.addWidget(label(nome, 8.5, color=theme.MUTE))
+            linha.addStretch(1)
+            linha.addWidget(label(acao, 8.5, color=theme.FAINT))
+            col.addLayout(linha)
+
+        col.addWidget(divider())
+        atuais = G.bindings_from(self.cfg)
+        opcoes = sorted(G.ACTIONS.items(), key=lambda kv: (kv[0] != "", kv[1][0]))
+        self.combos: dict[str, QComboBox] = {}
+        for nome in G.BUTTON_ORDER:
+            linha = QHBoxLayout()
+            linha.addWidget(label(nome, 8.5))
+            linha.addStretch(1)
+            combo = QComboBox()
+            for chave, (rotulo, _) in opcoes:
+                combo.addItem(rotulo, chave)
+            combo.setCurrentIndex(max(0, combo.findData(atuais.get(nome, ""))))
+            combo.currentIndexChanged.connect(
+                lambda _i, b=nome, w=combo: self._bind(b, w.currentData()))
+            combo.setMinimumWidth(theme.scaled(150))
+            self.combos[nome] = combo
+            linha.addWidget(combo)
+            col.addLayout(linha)
+
+        restaurar = PillButton("Voltar ao padrão", theme.MUTE)
+        restaurar.clicked.connect(self._reset_bindings)
+        col.addWidget(restaurar)
+        return caixa
+
+    def _bind(self, botao: str, acao: str) -> None:
+        self.cfg.gamepad_bindings[botao] = acao
+        self.cfg.save()
+        self._reload_pad()
+
+    def _reset_bindings(self) -> None:
+        self.cfg.gamepad_bindings = {}
+        self.cfg.save()
+        for nome, combo in self.combos.items():
+            combo.blockSignals(True)
+            combo.setCurrentIndex(max(0, combo.findData(G.DEFAULT_BINDINGS.get(nome, ""))))
+            combo.blockSignals(False)
+        self._reload_pad()
+
+    def _reload_pad(self) -> None:
+        pad = getattr(self.app, "gamepad", None)
+        if pad is not None:
+            pad.reload_bindings()
 
     # ── ajustes ──────────────────────────────────────────────────────────────
     def _slider(self, card: Card, caption: str, lo: int, hi: int, value: int, cb) -> QSlider:

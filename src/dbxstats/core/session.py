@@ -43,6 +43,8 @@ class GameSession:
         self._proc: subprocess.Popen | None = None
         self._seen_alive = False
         self._last_alive = 0.0
+        self._pid = 0
+        """Processo do jogo ja' encontrado; evita varrer a tabela toda."""
         self.adopted = False
         """Ja' descobrimos o processo real do jogo (ver App._adopt_game_process)."""
         self.direct = True
@@ -93,16 +95,39 @@ class GameSession:
         return self._alive_by_name()
 
     def _alive_by_name(self) -> bool:
+        """O jogo ainda esta' de pe', olhando pelo nome do executavel.
+
+        Varrer a tabela de processos inteira uma vez por segundo, a partida toda,
+        custa caro justamente enquanto o jogo esta' rodando. Entao a varredura
+        acontece so' ate' achar; dai' em diante conferimos aquele pid, que e' uma
+        consulta unica. So' quando ele morre voltamos a varrer — e' assim que o
+        fim da partida e' percebido sem pesar no meio dela.
+        """
         if not self.names:
             return False
-        for proc in psutil.process_iter(["name"]):
+        if self._pid and self._same_game(self._pid):
+            return True
+        self._pid = 0
+        for proc in psutil.process_iter(["pid", "name"]):
             try:
                 nome = (proc.info.get("name") or "").lower()
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
             if nome in self.names:
+                self._pid = proc.info.get("pid") or 0
                 return True
         return False
+
+    def _same_game(self, pid: int) -> bool:
+        """Aquele pid continua vivo E continua sendo o jogo.
+
+        Conferir so' a existencia nao serve: o Windows reaproveita numero de pid,
+        e um processo qualquer herdando o numero faria a sessao nunca terminar.
+        """
+        try:
+            return psutil.Process(pid).name().lower() in self.names
+        except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
+            return False
 
     @property
     def ever_started(self) -> bool:
