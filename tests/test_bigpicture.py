@@ -184,3 +184,60 @@ def test_cabem_no_maximo_quatro_colunas():
     """Mais que isso vira card pequeno demais para tres metros."""
     bp = _bp(jogos=12)
     assert bp._colunas() <= 4
+
+
+# ── gesto de abrir ───────────────────────────────────────────────────────────
+def _app_para_gesto(botoes=0):
+    import dbxstats.app as appmod
+
+    a = appmod.App.__new__(appmod.App)
+    a._bigpicture = None
+    a._bp_back_desde = 0.0
+    a._bp_back_pronto = False
+    a.abriu = []
+    a.big_picture_abrir = lambda: a.abriu.append(1)
+    pad = XINPUT_GAMEPAD()
+    pad.wButtons = botoes
+    a.gamepad = type("G", (), {"last": pad})()
+    return a
+
+
+def test_back_ja_apertado_na_abertura_nao_abre_sozinho():
+    """O app subiu no Big Picture porque o controle ja' reportava Back.
+
+    Sem exigir a borda, um botao preso — ou apertado no instante em que o app
+    sobe — abre a grade sozinho um segundo depois.
+    """
+    import time
+
+    a = _app_para_gesto(BTN_BACK)
+    for _ in range(3):
+        a._vigiar_atalho_do_sofa()
+    a._bp_back_desde = time.monotonic() - 5
+    a._vigiar_atalho_do_sofa()
+    assert a.abriu == []
+
+
+def test_segurar_depois_de_soltar_abre():
+    import time
+
+    a = _app_para_gesto(0)
+    a._vigiar_atalho_do_sofa()          # viu solto: arma
+    a.gamepad.last.wButtons = BTN_BACK
+    a._vigiar_atalho_do_sofa()          # comecou a segurar
+    a._bp_back_desde = time.monotonic() - 2
+    a._vigiar_atalho_do_sofa()
+    assert a.abriu == [1]
+
+
+def test_combo_do_mouse_nao_abre_a_grade():
+    """Back+Start assume o mouse; nao pode virar Big Picture tambem."""
+    import time
+
+    a = _app_para_gesto(0)
+    a._vigiar_atalho_do_sofa()
+    a.gamepad.last.wButtons = BTN_BACK | BTN_START
+    a._vigiar_atalho_do_sofa()
+    a._bp_back_desde = time.monotonic() - 2
+    a._vigiar_atalho_do_sofa()
+    assert a.abriu == []

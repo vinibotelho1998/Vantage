@@ -139,6 +139,8 @@ class App:
         """Tela que o Big Picture acendeu e vai apagar ao sair."""
         self._bp_mouse_antes = False
         self._bp_back_desde = 0.0
+        self._bp_back_pronto = False
+        """So' arma depois de ver o Back solto uma vez; ver _vigiar_atalho_do_sofa."""
         self._bp_voltar = False
         self._session_off_pendente = ""
         """Perfil de esforco em uso; ver _apply_load_profile."""
@@ -955,18 +957,25 @@ class App:
         if self._bigpicture is not None and self._bigpicture.isVisible():
             self._bp_back_desde = 0.0
             return
-        pad = self.gamepad.last
         from .platform.gamepad import BTN_BACK, BTN_START
+        pad = self.gamepad.last
         segurando = pad is not None and (pad.wButtons & BTN_BACK) and not (
             pad.wButtons & BTN_START)
         agora = time.monotonic()
         if not segurando:
             self._bp_back_desde = 0.0
+            self._bp_back_pronto = True
+            return
+        # So' conta o segurar que COMECOU com a gente olhando. Sem exigir a
+        # borda, um controle que ja' estava com Back apertado — ou que reporta o
+        # botao preso — abria a grade sozinho um segundo depois de o app subir.
+        if not self._bp_back_pronto:
             return
         if not self._bp_back_desde:
             self._bp_back_desde = agora
         elif agora - self._bp_back_desde >= 1.0:
             self._bp_back_desde = 0.0
+            self._bp_back_pronto = False
             self.big_picture_abrir()
 
     # ── selecao do jogo ──────────────────────────────────────────────────────
