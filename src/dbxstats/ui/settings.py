@@ -220,6 +220,9 @@ class SettingsDialog(QDialog):
         self.tabs.addTab(self._tab_charts(), "Gráficos")
         self.tabs.addTab(self._tab_fps(), "FPS")
         self.tabs.addTab(self._tab_overlay(), "Overlay")
+        # Trocar de aba tambem redesenha: a previa montada numa aba escondida
+        # nao tem tamanho, e so' ganha um quando a aba vira a da frente.
+        self.tabs.currentChanged.connect(lambda _i: self._atualizar_previa())
         self.tabs.addTab(self._tab_alerts(), "Alertas")
         self.tabs.setCurrentIndex(max(0, min(tab, self.tabs.count() - 1)))
         root.addWidget(self.tabs, 1)
@@ -453,6 +456,17 @@ class SettingsDialog(QDialog):
             w.valueChanged.connect(self._atualizar_previa)
         for chk in self.overlay_checks.values():
             chk.toggled.connect(self._atualizar_previa)
+
+    def showEvent(self, event) -> None:
+        """Redesenha a previa quando a janela aparece de fato.
+
+        Montada junto com a aba, ela nasce antes de a janela existir na tela: o
+        layout ainda nao rodou, o widget fica com tamanho zero e nada aparece
+        ate' alguma mexida forcar a remontagem. Era por isso que a previa so'
+        surgia depois de desmarcar e marcar qualquer coisa.
+        """
+        super().showEvent(event)
+        self._atualizar_previa()
 
     def _atualizar_previa(self, *_a) -> None:
         from .overlay import GameOverlay

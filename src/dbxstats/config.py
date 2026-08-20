@@ -38,14 +38,16 @@ OVERLAY_METRICS = [
 ]
 _OVERLAY_KEYS = {k for k, _ in OVERLAY_METRICS}
 
-OVERLAY_OFF_BY_DEFAULT = frozenset({"jogo_ram_ws", "teto_watts", "mem_ctrl"})
+OVERLAY_OFF_BY_DEFAULT = frozenset({"jogo_ram_ws", "teto_watts", "mem_ctrl",
+                                    "mem_clock"})
 """Fora do padrao por atrapalharem mais do que informam no meio de uma partida.
 
 O working set ao lado do private bytes poe dois numeros na mesma celula e pede
 explicacao; o teto de potencia so' existe onde ha' sensor de limite real, e
 inventar o teto seria pior que nao mostrar; e a banda do controlador de memoria
 e' um numero de perfilamento, nao de partida — quem esta' jogando nao decide
-nada com ele.
+nada com ele. O clock das memorias fica cravado o jogo inteiro e nao explica
+queda nenhuma: quem quiser conferir liga uma vez e desliga.
 """
 
 OVERLAY_DEFAULT = [k for k, _ in OVERLAY_METRICS if k not in OVERLAY_OFF_BY_DEFAULT]

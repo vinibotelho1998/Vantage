@@ -115,6 +115,7 @@ class LhmReader:
         self._lock = threading.Lock()
         self._tree: list[SensorNode] = []
         self._tree_lock = threading.Lock()
+        self._rails_logados = False
         self._rails: dict[str, tuple[float, float]] = {}
         """Minimo e maximo ja' vistos de cada voltagem da placa; ver _vcore."""
         self._spd_at = 0.0
@@ -493,6 +494,14 @@ class LhmReader:
         carga. Por isso o rail so' e' adotado depois de se mexer de verdade;
         enquanto nao se mexeu, o app prefere nao ter numero a ter um chute.
         """
+        if rails and not getattr(self, "_rails_logados", False):
+            # Uma linha, uma vez por execucao. Sem isso a unica forma de saber
+            # o que a placa publica e' adivinhar — e adivinhar trilho de tensao
+            # foi exatamente o erro do VID.
+            self._rails_logados = True
+            _log.info("trilhos de tensao da placa: %s",
+                      "; ".join(f"{n}={v:.3f}V" for _, n, v in rails))
+
         for _, nome, valor in rails:
             if any(t in nome.lower() for t in _VCORE_NOMES):
                 _publicar_volts(result, valor, "vcore")

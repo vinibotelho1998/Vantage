@@ -81,3 +81,34 @@ def test_as_ferramentas_que_medem_texto_pedem_a_fonte_real_do_sistema():
         # A plataforma nem entra como opcao: `setdefault` deixaria a variavel de
         # ambiente de quem chamou decidir, e e' assim que a medida some de novo.
         assert '"offscreen"' not in fonte, nome
+
+
+def test_previa_ja_nasce_desenhada_ao_abrir_a_janela():
+    """Ela so' aparecia depois de desmarcar e marcar qualquer coisa.
+
+    Montada junto com a aba, nasce antes de a janela existir na tela: o layout
+    ainda nao rodou, o widget fica com tamanho zero e nada aparece ate' uma
+    mexida forcar a remontagem.
+    """
+    from dbxstats.app import App
+    from dbxstats.ui.settings import SettingsDialog
+
+    qt = QApplication.instance() or QApplication([])
+    app = App(qt)
+    d = SettingsDialog(app, 4)
+    d.show()
+    assert d._previa is not None
+    assert d._previa.sizeHint().width() > 0
+    assert not d._previa_erro.isVisible()
+
+
+def test_trocar_de_aba_redesenha_a_previa():
+    from dbxstats.app import App
+    from dbxstats.ui.settings import SettingsDialog
+
+    qt = QApplication.instance() or QApplication([])
+    app = App(qt)
+    d = SettingsDialog(app, 0)
+    antes = d._previa
+    d.tabs.setCurrentIndex(4)
+    assert d._previa is not None and d._previa is not antes
