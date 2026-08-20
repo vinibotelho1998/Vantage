@@ -154,9 +154,20 @@ class NetworkView(View):
         # meio de um teste deixaria os fluxos baixando com a janela ja' fechada.
         qt = QApplication.instance()
         if qt is not None:
-            qt.aboutToQuit.connect(self._teste.stop)
+            qt.aboutToQuit.connect(self._encerrar_teste)
         self._atualizar_teste()
         return card
+
+    def _encerrar_teste(self) -> None:
+        """Fechar o app: manda parar e espera pouco, nunca o timeout do socket.
+
+        `cancel()` derruba os sockets sem esperar quem esta' lendo, entao os
+        fluxos saem quase na hora. A espera curta existe so' para o caso raro de
+        um fluxo teimoso — segurar a saida do app por segundos seria trocar um
+        congelamento por outro.
+        """
+        self._teste_timer.stop()
+        self._teste.stop(0.5)
 
     def _alternar_teste(self) -> None:
         if self._teste.rodando:
@@ -175,18 +186,29 @@ class NetworkView(View):
         self.test_btn.set_color(theme.BAD if rodando
                                 else theme.accent_color(self.cfg.accent))
         texto, cor = _ROTULO_FASE.get(fase, _ROTULO_FASE[speedtest.FASE_OCIOSO])
+        # Medicao que fechou faltando um pedaco (download fora, servidor reserva,
+        # fluxo que caiu) nao pode receber o mesmo verde de uma medicao limpa: o
+        # aviso logo abaixo passaria batido e o numero seria lido como definitivo.
+        if fase == speedtest.FASE_PRONTO and s["aviso"]:
+            texto, cor = "medição concluída, com ressalva", theme.WARN
         self.test_badge.update_badge(texto, cor)
         self.test_bar.setValue(int(s["progresso"] * 1000))
 
         # Enquanto a fase corre, o tile dela mostra a parcial em cinza: e' um
         # numero vivo, ainda nao o resultado — pintar de cor final daria ao
         # aquecimento do TCP a mesma autoridade da medida fechada.
+        #
+        # Quem manda no "medindo…" e' a FASE, e nao a existencia da parcial: o
+        # motor so' publica parcial quando byte novo chegou, e enquanto ele nao
+        # chega o tile fica no travessao — dizer "0.0 Mbps · medindo…" enquanto se
+        # espera o primeiro byte era inventar numero no lugar de "ainda nao sei".
         parcial = s["parcial"] if rodando else None
         for chave, valor, cor_final, fase_da_vez in (
                 ("dl", s["download"], theme.NET, speedtest.FASE_DOWNLOAD),
                 ("ul", s["upload"], theme.FPS, speedtest.FASE_UPLOAD)):
-            medindo = fase == fase_da_vez and parcial is not None
-            self.test_tiles[chave].set(units.mbps(parcial if medindo else valor),
+            medindo = rodando and fase == fase_da_vez
+            vivo = parcial if (medindo and parcial is not None) else valor
+            self.test_tiles[chave].set(units.mbps(vivo),
                                        theme.MUTE if medindo else cor_final,
                                        "medindo…" if medindo else "")
         self.test_tiles["ping"].set(units.integer(s["ping"]), theme.ping_color(s["ping"]))
@@ -195,10 +217,14 @@ class NetworkView(View):
         self.test_rows.set("jitter", units.ms(s["jitter"], 1))
         self.test_rows.set("quando", s["quando"] or units.DASH)
 
+        # O erro pode chegar com o teste ainda rodando — o download morre e o
+        # upload continua —, e e' de proposito: esconder a falha ate o fim deixava
+        # o usuario encarando um tile vazio sem saber que ja' nao havia o que
+        # esperar. Ressalva sai em ambar, nao em cinza, senao ninguem le'.
         recado = s["erro"] or s["aviso"] or ""
         self.test_msg.setText(recado)
         self.test_msg.setStyleSheet(
-            f"color: {theme.BAD if s['erro'] else theme.MUTE}; background: transparent;")
+            f"color: {theme.BAD if s['erro'] else theme.WARN}; background: transparent;")
         self.test_msg.setVisible(bool(recado))
 
     def on_settings_changed(self) -> None:
