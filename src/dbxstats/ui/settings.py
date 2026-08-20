@@ -35,7 +35,7 @@ from ..config import (
 _VIEW_LABELS = {
     "dashboard": "Painel", "cpu": "CPU", "gpu": "GPU",
     "memory": "Memória & Disco", "network": "Rede", "sensors": "Sensores",
-    "processes": "Processos", "benchmark": "Benchmark", "launcher": "Atalhos",
+    "processes": "Processos", "benchmark": "Benchmark", "launcher": "Jogos",
     "displays": "Telas", "gamepad": "Controle",
 }
 _CORNERS = [("Superior esquerdo", "top-left"), ("Superior direito", "top-right"),

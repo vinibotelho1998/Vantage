@@ -20,6 +20,8 @@ class _MotorFalso(diskbench.DiskBench):
         super().__init__()
         self.blocos = 0
         self.bytes = 0
+        self.escritos = 0
+        self.lidos = 0
         self.offsets: list[int] = []
         self._parar_apos = parar_apos
 
@@ -29,9 +31,24 @@ class _MotorFalso(diskbench.DiskBench):
     def _bloco(self, buffer, quantos: int, escrever: bool) -> int:
         self.blocos += 1
         self.bytes += quantos
+        if escrever:
+            self.escritos += quantos
+        else:
+            self.lidos += quantos
         if self._parar_apos is not None and self.blocos >= self._parar_apos:
             self._parar.set()
         return quantos
+
+
+class _MotorSemDisco(_MotorFalso):
+    """Alem do I/O, troca a abertura do arquivo: nada e' criado em lugar nenhum."""
+
+    def _abrir(self, caminho) -> bool:
+        self.abertos = getattr(self, "abertos", []) + [caminho]
+        return True
+
+    def _flush(self) -> None:
+        pass
 
 
 def _buffer(tamanho: int = diskbench.BLOCO_SEQ):
@@ -176,7 +193,7 @@ def test_progresso_e_do_teste_inteiro_e_nunca_recua():
 
     b = DiskBench()
     visto = []
-    for i, fase in enumerate(FASES):
+    for fase in FASES:
         for fracao in (0.0, 0.5, 1.0, 0.0, 0.7):   # repeticao de passada
             b._publicar(fase, fracao)
             visto.append(b.estado()["progresso"])
@@ -194,3 +211,178 @@ def test_fase_desconhecida_nao_quebra_a_barra():
     b = DiskBench()
     b._publicar("fase que nao existe", 0.5)
     assert 0.0 <= b.estado()["progresso"] <= 1.0
+
+
+def test_barra_fecha_na_ultima_fase_marcada():
+    """Com duas fases marcadas, a barra tem de chegar a 100% — e nao a 40%.
+
+    O denominador era o teste completo; quem rodasse so' a leitura 4K veria a
+    barra parar no meio e concluir, que se le' como teste interrompido.
+    """
+    b = diskbench.DiskBench()
+    b._roteiro = [diskbench.FASE_PREPARO, diskbench.ROTULOS_FASES["ralea"]]
+    b._publicar(diskbench.ROTULOS_FASES["ralea"], 1.0)
+    assert b.estado()["progresso"] == 1.0
+
+
+# ── opcoes escolhidas pelo usuario ───────────────────────────────────────────
+def test_folga_exigida_acompanha_o_tamanho_escolhido():
+    """Escolher 4 GiB e continuar validando 1 GiB encheria a unidade do usuario."""
+    livre, total = 7 << 30, 120 << 30
+    assert diskbench.folga_suficiente(livre, total, 1 << 30)[0]
+    ok, erro = diskbench.folga_suficiente(livre, total, 4 << 30)
+    assert not ok and erro
+
+
+def test_iniciar_valida_o_espaco_com_o_tamanho_pedido():
+    """A recusa acontece antes de qualquer byte: nenhuma thread chega a subir."""
+    vistos: list[int] = []
+    motor = diskbench.DiskBench()
+    motor._validar = lambda mount, tamanho: (vistos.append(tamanho), (False, "sem espaço"))[1]
+    pedido = 4 * 1024 * diskbench.MIB
+    ok, erro = motor.iniciar("X:\\", diskbench.Opcoes(tamanho=pedido))
+    assert not ok and erro == "sem espaço"
+    assert vistos == [pedido]
+    assert not motor.ativo
+
+
+def test_opcoes_estragadas_no_settings_viram_teste_valido():
+    """settings.json editado a mao nao pode virar pedido de 1 TB de arquivo."""
+    o = diskbench.Opcoes(tamanho=999 << 30, fases=("banana", "rseq"),
+                         segundos_fase=0.0, profundidade=32).normalizar()
+    assert o.tamanho == diskbench.TAMANHO_MAXIMO
+    assert o.fases == ("rseq",)
+    assert o.segundos_fase >= 0.2
+    assert o.profundidade == 1
+
+
+def test_fases_fora_de_ordem_voltam_para_a_ordem_de_execucao():
+    """Ler antes de escrever mediria um arquivo que ainda nao tem dado nenhum."""
+    assert diskbench.Opcoes(fases=("walea", "rseq", "wseq")).normalizar().fases == (
+        "wseq", "rseq", "walea")
+
+
+def test_lista_de_fases_vazia_vira_teste_completo():
+    """Teste sem fase nenhuma nao mede nada e ainda cria o arquivo — sem sentido."""
+    assert diskbench.Opcoes(fases=()).normalizar().fases == diskbench.CHAVES_FASES
+
+
+def test_profundidade_de_fila_maior_que_um_e_recusada():
+    """QD>1 exigiria I/O assincrono; aceitar o numero seria rotular QD1 de QD32."""
+    assert diskbench.PROFUNDIDADES == (1,)
+    assert diskbench.Opcoes(profundidade=32).normalizar().profundidade == 1
+
+
+def test_teto_de_tempo_acompanha_o_minimo_escolhido():
+    """Com 6 s por fase, um teto fixo de 8 s cortaria a medida quase no comeco."""
+    assert diskbench.Opcoes(segundos_fase=6.0).tempo_maximo >= 30.0
+    assert diskbench.Opcoes(segundos_fase=0.5).tempo_maximo == diskbench.TEMPO_MAXIMO_FASE
+
+
+# ── fases marcadas e desmarcadas ─────────────────────────────────────────────
+def _opcoes(**kw) -> diskbench.Opcoes:
+    base = {"tamanho": 8 * diskbench.BLOCO_SEQ, "segundos_fase": 0.0}
+    base.update(kw)
+    return diskbench.Opcoes(**base)
+
+
+def test_fase_desmarcada_nao_roda_nem_aparece_no_resultado():
+    """Desmarcar leitura tem de economizar o I/O, e nao so' esconder o numero."""
+    motor = _MotorSemDisco()
+    r = motor._medir(Path("teste.tmp"), "X:\\", _opcoes(fases=("wseq",)), setor=4096)
+    assert motor.lidos == 0
+    assert r.leitura_seq is None and r.leitura_alea is None and r.escrita_alea is None
+    assert r.fases == ("wseq",)
+
+
+def test_so_leitura_marcada_grava_o_arquivo_antes_de_medir():
+    """Ler um arquivo de zero byte devolveria uma taxa que nao mediu disco nenhum.
+
+    A gravacao acontece na fase "preparando" e fica fora do cronometro — o
+    resultado nao traz numero de escrita porque escrita nao foi o que se mediu.
+    """
+    motor = _MotorSemDisco()
+    tamanho = 8 * diskbench.BLOCO_SEQ
+    r = motor._medir(Path("teste.tmp"), "X:\\", _opcoes(fases=("rseq",)), setor=4096)
+    assert motor.escritos == tamanho          # exatamente uma gravacao do arquivo
+    assert motor.lidos >= tamanho
+    assert r.escrita_seq is None
+
+
+def test_cada_fase_cai_no_campo_certo_do_resultado():
+    """Trocar leitura 4K por escrita 4K no resultado passaria despercebido na tela."""
+    motor = _MotorSemDisco()
+    motor._sequencial = lambda buffer, tamanho, escrever, fase, tempo_minimo=None, \
+        tempo_maximo=None: (11.0 if escrever else 22.0)
+    motor._aleatorio = lambda buffer, tamanho, escrever, fase, segundos=None: (
+        (33.0, 44.0) if escrever else (55.0, 66.0))
+    r = motor._medir(Path("teste.tmp"), "X:\\", _opcoes(), setor=4096)
+    assert (r.escrita_seq, r.leitura_seq) == (11.0, 22.0)
+    assert (r.leitura_alea, r.iops_leitura) == (55.0, 66.0)
+    assert (r.escrita_alea, r.iops_escrita) == (33.0, 44.0)
+
+
+def test_escrita_sequencial_marcada_dispensa_o_preparo():
+    """Ela ja' deixa o arquivo cheio; preparar antes seria gravar tudo duas vezes."""
+    motor = _MotorSemDisco()
+    tamanho = 8 * diskbench.BLOCO_SEQ
+    motor._medir(Path("teste.tmp"), "X:\\",
+                 _opcoes(fases=("wseq", "rseq")), setor=4096)
+    assert motor.escritos == tamanho
+
+
+def test_a_leitura_mede_so_o_pedaco_que_a_escrita_gravou():
+    """Num disco lento o teto de tempo corta a escrita no meio do arquivo.
+
+    Ler o arquivo inteiro depois disso bateria no fim do dado valido: o Windows
+    devolve zero byte na hora, e esse trecho entraria na conta como se tivesse
+    sido lido em tempo nenhum — inflando a leitura.
+    """
+    motor = _MotorSemDisco()
+    pedidos: list[tuple[bool, int]] = []
+    curto = 2 * diskbench.BLOCO_SEQ
+
+    def _seq(buffer, tamanho, escrever, fase, tempo_minimo=None, tempo_maximo=None):
+        pedidos.append((escrever, tamanho))
+        if escrever:
+            motor._validos = curto
+        return 1.0
+
+    motor._sequencial = _seq
+    tamanho = 64 * diskbench.BLOCO_SEQ
+    motor._medir(Path("teste.tmp"), "X:\\",
+                 _opcoes(tamanho=tamanho, fases=("wseq", "rseq")), setor=4096)
+    assert pedidos == [(True, tamanho), (False, curto)]
+
+
+def test_aleatorio_nao_sorteia_alem_do_dado_gravado():
+    """Escrever 4K depois do fim do arquivo faz o NTFS zerar o buraco no meio da medida."""
+    motor = _MotorFalso(parar_apos=64)
+    tamanho = 4 * 1024 * 1024
+    motor._aleatorio(_buffer(diskbench.BLOCO_ALEA), tamanho=tamanho,
+                     escrever=True, fase="teste", segundos=0.2)
+    assert motor.offsets
+    assert max(motor.offsets) <= tamanho - diskbench.BLOCO_ALEA
+
+
+def test_cancelar_no_preparo_nao_deixa_nenhuma_medida_inventada():
+    """Parar antes de existir dado valido tem de devolver 'nao sei', nao um numero."""
+    motor = _MotorSemDisco(parar_apos=2)
+    r = motor._medir(Path("teste.tmp"), "X:\\",
+                     _opcoes(fases=("rseq", "ralea")), setor=4096)
+    assert r.leitura_seq is None and r.leitura_alea is None
+
+
+def test_o_tempo_escolhido_chega_em_todas_as_fases():
+    """Se o tempo por fase nao descesse ate' o laco, a opcao seria so' enfeite."""
+    motor = _MotorSemDisco()
+    seq: list[tuple] = []
+    alea: list[float] = []
+    motor._sequencial = lambda buffer, tamanho, escrever, fase, tempo_minimo=None, \
+        tempo_maximo=None: (seq.append((tempo_minimo, tempo_maximo)) or 1.0)
+    motor._aleatorio = lambda buffer, tamanho, escrever, fase, segundos=None: (
+        alea.append(segundos) or (1.0, 1.0))
+    opcoes = _opcoes(segundos_fase=3.0)
+    motor._medir(Path("teste.tmp"), "X:\\", opcoes, setor=4096)
+    assert seq == [(3.0, opcoes.tempo_maximo)] * 2
+    assert alea == [3.0, 3.0]

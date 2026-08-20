@@ -1,4 +1,4 @@
-"""Atalhos de jogo: arraste o .exe, escolha a tela, clique e jogue.
+"""Biblioteca de jogos: arraste o .exe, escolha a tela, clique e jogue.
 
 A ideia e' cortar o ritual de sempre — abrir Configuracoes do Windows, trocar a
 primaria para a TV, achar o jogo, jogar, e no fim desfazer tudo na mao. Aqui o
@@ -23,8 +23,8 @@ from PySide6.QtWidgets import (
 
 from ... import theme
 from ...core.session import resolve_shortcut
-from ...sensors import procs as P
 from ...platform import displays as D
+from ...sensors import procs as P
 from ..components import Badge, Card, PillButton, divider, label
 from .base import View, scroll_page
 
@@ -100,9 +100,9 @@ Os outros monitores continuam ligados o tempo todo: só muda quem manda."""
 
 class LauncherView(View):
     key = "launcher"
-    title = "Atalhos"
+    title = "Jogos"
     glyph = "▶"
-    subtitle = "abre o jogo já na tela certa"
+    subtitle = "sua biblioteca: abre na tela certa, com um clique"
 
     def __init__(self, app) -> None:
         super().__init__(app)

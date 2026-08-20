@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 from .. import theme
 
 _VIEWS = [("dashboard", "Painel"), ("cpu", "CPU"),
-          ("gpu", "GPU"), ("sensors", "Sensores"), ("benchmark", "Benchmark"),
+          ("gpu", "GPU"), ("sensors", "Sensores"), ("launcher", "Jogos"), ("benchmark", "Benchmark"),
           ("displays", "Telas"), ("gamepad", "Controle")]
 
 

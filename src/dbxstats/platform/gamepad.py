@@ -264,6 +264,36 @@ def _merge(pads: list[XINPUT_GAMEPAD]) -> XINPUT_GAMEPAD:
     return out
 
 
+NAV_DEADZONE = 16000
+"""Zona morta da navegacao, bem maior que a do cursor.
+
+Mover o foco e' passo discreto: com a zona morta do cursor, um analogico
+descansando torto ja' pularia de card sozinho."""
+
+
+def nav_direction(pad, deadzone: int = NAV_DEADZONE) -> str:
+    """Para onde o foco deve andar: "", "up", "down", "left" ou "right".
+
+    Direcional e analogico esquerdo valem igual. Diagonal resolve pelo eixo de
+    maior deflexao, senao um empurrao torto viraria dois passos de uma vez.
+    """
+    b = pad.wButtons
+    if b & BTN_DPAD_UP:
+        return "up"
+    if b & BTN_DPAD_DOWN:
+        return "down"
+    if b & BTN_DPAD_LEFT:
+        return "left"
+    if b & BTN_DPAD_RIGHT:
+        return "right"
+    x, y = pad.sThumbLX, pad.sThumbLY
+    if abs(x) < deadzone and abs(y) < deadzone:
+        return ""
+    if abs(x) >= abs(y):
+        return "right" if x > 0 else "left"
+    return "up" if y > 0 else "down"
+
+
 def _tap(vk: int):
     return lambda: _send(_key(vk, False), _key(vk, True))
 
@@ -422,6 +452,8 @@ class GamepadMouse(QObject):
         self._last_seek = 0.0
         self._gate = None
         """Callable opcional que decide se o modo mouse pode assumir agora."""
+        self._consumer = None
+        """Quem assumiu o controle inteiro; ver set_consumer."""
 
     # ── ciclo ────────────────────────────────────────────────────────────────
     def start(self) -> None:
@@ -434,6 +466,25 @@ class GamepadMouse(QObject):
         self._timer.stop()
         self._release_all()
         self._combo_held = False
+        self._set_active(False)
+
+    def set_consumer(self, fn) -> None:
+        """Entrega o controle inteiro para outra tela, ou devolve com None.
+
+        Um laco so', um dono. Um segundo leitor de XInput significaria dois
+        donos do mesmo hardware disputando o mesmo estado a cada 8 ms.
+        """
+        self._consumer = fn
+        if fn is not None:
+            self._release_all()      # nada de tecla presa ao trocar de dono
+
+    def deactivate(self) -> None:
+        """Desliga o modo mouse sem alternar.
+
+        toggle() nao serve para garantir estado: chamado com o modo ja' desligado
+        ele LIGA. Quem entra numa tela propria precisa de "desligado", nao de
+        "o contrario do que estava".
+        """
         self._set_active(False)
 
     def set_gate(self, fn) -> None:
@@ -539,6 +590,14 @@ class GamepadMouse(QObject):
             return
 
         buttons = pad.wButtons
+        # Quem assumiu o controle recebe o estado cru e o laco para por aqui.
+        # A checagem vem ANTES do combo de proposito: o combo roda mesmo com o
+        # modo mouse desligado, e sem essa ordem apertar Back+Start dentro de uma
+        # tela propria devolveria o cursor calado, por baixo dela.
+        if self._consumer is not None:
+            self._consumer(pad)
+            return
+
         # O estado do combo vive fora de `_held` de proposito: desligar o modo mouse
         # chama `_release_all`, que zera `_held`. Com o combo guardado la', a borda
         # se perdia no mesmo instante e o proximo tick religava tudo — o atalho so'

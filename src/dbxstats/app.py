@@ -25,13 +25,13 @@ from .platform import displays as dsp
 from .platform.gamepad import GamepadMouse
 from .platform.hotkeys import MOD_ALT, MOD_CONTROL, HotkeyManager
 from .sensors import net as netmod
+from .sensors import procs
 from .sensors.collector import Collector
 from .sensors.fps import FpsEngine
 from .sensors.gpu import GpuReader
 from .sensors.lhm import LhmReader
 from .sensors.net import PingMonitor
 from .sensors.peer import PeerFinder
-from .sensors import procs
 from .sensors.procs import ProcessMonitor
 from .ui import style
 from .ui.main_window import MainWindow
@@ -132,6 +132,13 @@ class App:
         self._alerted: dict[str, bool] = {}
         self._tray_hinted = False
         self._load_now = ""
+        self._bigpicture = None
+        self._bp_off = ""
+        """Tela que o Big Picture acendeu e vai apagar ao sair."""
+        self._bp_mouse_antes = False
+        self._bp_back_desde = 0.0
+        self._bp_voltar = False
+        self._session_off_pendente = ""
         """Perfil de esforco em uso; ver _apply_load_profile."""
 
         self._bench_active = False
@@ -214,7 +221,8 @@ class App:
         mods = MOD_CONTROL | MOD_ALT
         bindings = ((0x52, self._hotkey_reset, "Ctrl+Alt+R"),
                     (0x4F, self.toggle_overlay, "Ctrl+Alt+O"),
-                    (0x42, self._hotkey_benchmark, "Ctrl+Alt+B"))
+                    (0x42, self._hotkey_benchmark, "Ctrl+Alt+B"),
+                    (0x47, self.big_picture_toggle, "Ctrl+Alt+G"))
         for vk, callback, name in bindings:
             if not self._hotkeys.register(mods, vk, callback):
                 _log.warning("nao foi possivel registrar %s (em uso por outro app?)", name)
@@ -355,6 +363,11 @@ class App:
 
         self._session = None
         self._close_session_bench()
+        if self._bp_voltar:
+            # Voltou do jogo: a grade reaparece na TV, e nao a janela de mesa —
+            # quem esta' no sofa nao alcanca o teclado para reabrir.
+            self._bp_voltar = False
+            QTimer.singleShot(1200, self.big_picture_abrir)
         restore = self._session_restore
         primaria = self._session_primary
         desligar = self._session_off
@@ -528,6 +541,96 @@ class App:
                     f"{registro.get('fps_avg', 0):.0f} fps médio, "
                     f"1% low {registro.get('low_1', 0):.0f}")
         self.show_view("benchmark")
+
+    # ── big picture ──────────────────────────────────────────────────────────
+    def big_picture_toggle(self) -> None:
+        if self._bigpicture is not None and self._bigpicture.isVisible():
+            self._big_picture_fechar()
+        else:
+            self.big_picture_abrir()
+
+    def big_picture_abrir(self) -> None:
+        """Abre a grade de jogos na tela de jogar, acendendo-a se preciso.
+
+        Nao troca a primaria de proposito. Quem manda continua sendo assunto do
+        atalho, dentro de play_item — dois donos para a mesma regra viraria
+        briga com a principal padrao da casa.
+        """
+        from .ui.bigpicture import BigPicture
+
+        if self._bigpicture is None:
+            self._bigpicture = BigPicture(self)
+            self._bigpicture.escolheu.connect(self._big_picture_jogar)
+            self._bigpicture.fechou.connect(self._big_picture_fechar)
+
+        tela = self._acender_tela_de_jogo()
+        self.window.store_geometry()
+        self.window.hide()
+        self._bp_mouse_antes = self.gamepad.active
+        self.gamepad.deactivate()
+        self.gamepad.set_consumer(self._bigpicture.tratar_pad)
+        self._bigpicture.abrir(tela)
+
+    def _acender_tela_de_jogo(self):
+        """Liga a tela marcada para nascer apagada e devolve o QScreen dela."""
+        alvo_id = next(iter(self.settings.display_off_by_default), "")
+        if not alvo_id:
+            return None
+        alvo = next((d for d in dsp.list_displays(with_modes=False)
+                     if d.monitor_id == alvo_id), None)
+        if alvo is None:
+            return None
+        if not alvo.active:
+            ok, err = dsp.set_enabled(alvo.device, True)
+            if not ok:
+                _log.warning("nao consegui acender %s: %s", alvo.name, err)
+                return None
+            self._bp_off = alvo.monitor_id
+        return _tela_qt(alvo.name)
+
+    def _big_picture_jogar(self, item: dict) -> None:
+        from .platform.gamepad import rumble
+
+        # Do sofa, a vibracao e' a unica confirmacao de que o A pegou antes de a
+        # TV trocar de modo e ficar preta por um instante.
+        rumble(self.gamepad.slots, 20000, 20000)
+        QTimer.singleShot(180, lambda: rumble(self.gamepad.slots, 0, 0))
+        QTimer.singleShot(600, lambda: self._big_picture_disparar(item))
+
+    def _big_picture_disparar(self, item: dict) -> None:
+        # Passagem de bastao: quem acendeu a TV foi o Big Picture, mas quem vai
+        # apaga-la e' o fim da sessao. Sem isso play_item veria a tela ja' acesa,
+        # nao marcaria nada para desligar, e a TV ficaria ligada para sempre.
+        if self._bp_off:
+            self._session_off_pendente = self._bp_off
+            self._bp_off = ""
+        self._bp_voltar = True
+        if self._bigpicture is not None:
+            self._bigpicture.hide()
+        ok, msg = self.play_item(item)
+        if self._session_off_pendente:
+            self._session_off = self._session_off_pendente
+            self._session_off_pendente = ""
+        if not ok:
+            self.notify("DBX Stats", msg)
+            self._bp_voltar = False
+            self.big_picture_abrir()
+
+    def _big_picture_fechar(self) -> None:
+        self.gamepad.set_consumer(None)
+        if self._bp_mouse_antes:
+            self.gamepad.toggle()
+        if self._bigpicture is not None:
+            self._bigpicture.hide()
+        apagar, self._bp_off = self._bp_off, ""
+        if apagar:
+            tela = next((d for d in dsp.list_displays(with_modes=False)
+                         if d.monitor_id == apagar and d.active and not d.primary), None)
+            if tela is not None:
+                dsp.set_enabled(tela.device, False)
+        self._bp_voltar = False
+        self.window.show()
+        self.window.raise_()
 
     def _restore_primary(self, monitor_id: str, desligar: str = "") -> None:
         """Devolve a primaria e, se ligamos alguma tela para o jogo, apaga de novo.
@@ -746,6 +849,10 @@ class App:
 
     def _tick_fast(self) -> None:
         self._stream = self._select_stream()
+        # O coletor mede a RAM do jogo, mas quem sabe qual e' o jogo e' o motor de
+        # FPS. Avisar aqui, e nao no ciclo de 1 s, faz a medida acabar junto com o
+        # jogo em vez de sobreviver um segundo a mais apontando para um pid morto.
+        self.collector.set_game_pid(self._stream.pid if self._stream is not None else 0)
         if self._session is not None and self._stream is not None:
             pid = self._stream.pid
             if pid != self._session_bench_pid:
@@ -805,6 +912,10 @@ class App:
         own = {int(self.window.winId())}
         if self._overlay is not None:
             own.add(int(self._overlay.winId()))
+        if self._bigpicture is not None:
+            # Sem isso o Big Picture, que e' tela cheia, seria julgado como o
+            # jogo em foco — e o app passaria a medir a si mesmo.
+            own.add(int(self._bigpicture.winId()))
         self._fg_fullscreen = fullscreen and hwnd not in own
         self._fg_pid = win.window_pid(hwnd) if hwnd not in own else 0
         self.fps.expect(self._fg_pid if self._fg_fullscreen else None)
@@ -812,6 +923,38 @@ class App:
         if self.settings.overlay_enabled and self.settings.overlay_auto_game:
             self._sync_overlay_visibility()
         self._apply_load_profile()
+        if (self._bigpicture is not None and self._bigpicture.isVisible()
+                and self.game_in_focus()):
+            # Um jogo subiu por fora. Uma janela em tela cheia disputando o
+            # primeiro plano com ele so' atrapalha.
+            self._bigpicture.hide()
+        if not self.gamepad.connected and self._bigpicture is not None:
+            self._bigpicture.sem_controle()
+        self._vigiar_atalho_do_sofa()
+
+    def _vigiar_atalho_do_sofa(self) -> None:
+        """Segurar Back por um segundo abre o Big Picture.
+
+        Back esta' livre de proposito no mapeamento, e segurar evita colidir com
+        o combo Back+Start, que assume o mouse. Do sofa, e' o unico jeito de
+        chamar a grade sem levantar.
+        """
+        if self._bigpicture is not None and self._bigpicture.isVisible():
+            self._bp_back_desde = 0.0
+            return
+        pad = self.gamepad.last
+        from .platform.gamepad import BTN_BACK, BTN_START
+        segurando = pad is not None and (pad.wButtons & BTN_BACK) and not (
+            pad.wButtons & BTN_START)
+        agora = time.monotonic()
+        if not segurando:
+            self._bp_back_desde = 0.0
+            return
+        if not self._bp_back_desde:
+            self._bp_back_desde = agora
+        elif agora - self._bp_back_desde >= 1.0:
+            self._bp_back_desde = 0.0
+            self.big_picture_abrir()
 
     # ── selecao do jogo ──────────────────────────────────────────────────────
     def _select_stream(self):
@@ -1109,6 +1252,20 @@ _NOT_A_GAME = {
     "pythonw.exe", "dbx-stats.exe", "dbxstats.exe",
 }
 """Janelas que podem ficar em tela cheia sem serem o jogo que acabamos de abrir."""
+
+
+def _tela_qt(nome: str):
+    """QScreen cujo nome bate com o da tela, quando da' para casar.
+
+    O Qt demora um instante para enxergar uma tela recem-acesa. Nao achando,
+    devolve None e o Big Picture abre na primaria — melhor do que nao abrir.
+    """
+    from PySide6.QtWidgets import QApplication
+    alvo = (nome or "").strip().lower()
+    for tela in QApplication.screens():
+        if alvo and alvo in (tela.name() or "").strip().lower():
+            return tela
+    return None
 
 
 def _process_name(pid: int) -> str:

@@ -14,9 +14,8 @@ from PySide6.QtWidgets import (
 )
 
 from ... import theme
-from ...core import export
+from ...core import export, units
 from ...core import frames as fr
-from ...core import units
 from ..charts import FrameTimeChart, Histogram
 from ..components import Badge, Card, KpiStrip, MetricList, PillButton, label
 from .base import View, scroll_page
@@ -72,7 +71,7 @@ class BenchmarkView(View):
         # jogo como ele foi, do inicio ao fim. A corrida cronometrada continua
         # abaixo, para quando se quer comparar um trecho especifico.
         self.card_sessoes = Card("Sessões de jogo", theme.FPS,
-                                 "gravadas do início ao fim ao abrir pelos Atalhos")
+                                 "gravadas do início ao fim ao abrir pela aba Jogos")
         self.tabela = QTableWidget(0, len(_COLUNAS_SESSAO))
         self.tabela.setHorizontalHeaderLabels(_COLUNAS_SESSAO)
         self.tabela.verticalHeader().setVisible(False)
@@ -181,7 +180,7 @@ class BenchmarkView(View):
         self.btn_exp_sessao.setVisible(not vazio)
         self.btn_exp_todas.setVisible(not vazio)
         if vazio:
-            self.aviso_sessao.setText("Abra um jogo pelos Atalhos com "
+            self.aviso_sessao.setText("Abra um jogo pela aba Jogos com "
                                       "“gravar métricas da partida” ligado.")
         else:
             self.aviso_sessao.setText("")

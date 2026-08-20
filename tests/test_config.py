@@ -1,4 +1,4 @@
-from dbxstats.config import Settings
+from dbxstats.config import VIEWS, Settings
 
 
 def test_defaults_roundtrip():
@@ -144,3 +144,61 @@ def test_lixo_no_arquivo_nao_derruba():
     c.dashboard_plots = "cpu"
     c.sanitize()
     assert isinstance(c.dashboard_plots, list)
+
+
+# ── teste de disco ───────────────────────────────────────────────────────────
+# Aqui o risco nao e' cosmetico: essas opcoes decidem quantos gigabytes o app
+# escreve na unidade do usuario.
+def test_tamanho_absurdo_do_teste_de_disco_nao_passa():
+    """999999 MiB no settings.json nao pode virar um arquivo temporario de 1 TB."""
+    from dbxstats.sensors.diskbench import TAMANHOS_MIB
+
+    assert Settings.from_dict({"diskbench_size_mib": 999999}).diskbench_size_mib \
+        == max(TAMANHOS_MIB)
+    assert Settings.from_dict({"diskbench_size_mib": "grande"}).diskbench_size_mib == 1024
+    assert Settings.from_dict({"diskbench_size_mib": -8}).diskbench_size_mib \
+        == min(TAMANHOS_MIB)
+
+
+def test_fases_do_teste_de_disco_voltam_para_a_ordem_de_execucao():
+    """Ler antes de escrever mediria um arquivo que ainda nao tem dado nenhum."""
+    s = Settings.from_dict({"diskbench_phases": ["walea", "inexistente", "wseq"]})
+    assert s.diskbench_phases == ["wseq", "walea"]
+
+
+def test_teste_de_disco_sem_nenhuma_fase_volta_ao_completo():
+    """Teste sem fase nao mede nada e ainda assim cria o arquivo na unidade."""
+    from dbxstats.config import DISKBENCH_PHASES
+
+    assert Settings.from_dict({"diskbench_phases": []}).diskbench_phases == \
+        [k for k, _ in DISKBENCH_PHASES]
+
+
+def test_fila_do_teste_de_disco_e_sempre_um():
+    """O motor e' sincrono: guardar QD32 seria prometer o que ele nao faz."""
+    assert Settings.from_dict({"diskbench_queue_depth": 32}).diskbench_queue_depth == 1
+
+
+def test_chaves_das_fases_batem_com_o_motor():
+    """Config e motor precisam falar a mesma lingua, ou a fase marcada some."""
+    from dbxstats.config import DISKBENCH_PHASES
+    from dbxstats.sensors.diskbench import CHAVES_FASES
+
+    assert tuple(k for k, _ in DISKBENCH_PHASES) == CHAVES_FASES
+
+
+def test_aba_de_jogos_mantem_a_chave_antiga():
+    """O rotulo virou "Jogos", mas a chave continua "launcher".
+
+    Trocar a chave faria sanitize() nao reconhecer o start_view de quem ja'
+    escolhia essa aba e cair calado para o painel — foi o que aconteceu quando a
+    tela "gaming" saiu de VIEWS.
+    """
+    assert "launcher" in VIEWS
+    c = Settings.from_dict({"start_view": "launcher"})
+    assert c.start_view == "launcher"
+
+
+def test_aba_removida_no_passado_nao_deixa_o_app_sem_tela():
+    c = Settings.from_dict({"start_view": "gaming"})
+    assert c.start_view in VIEWS
