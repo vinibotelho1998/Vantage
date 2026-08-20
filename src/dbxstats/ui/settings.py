@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QFormLayout,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -81,6 +82,73 @@ def _header(text: str) -> QLabel:
     lbl.setStyleSheet(
         f"color: {theme.MUTE}; font-weight: 700; letter-spacing: 1px; margin-top: 8px;")
     return lbl
+
+
+class _CfgPrevia:
+    """Configuracao de mentira: o que esta' salvo, com a aba por cima.
+
+    A previa precisa refletir o que a pessoa acabou de mexer, e nao o que ja'
+    foi confirmado — senao ela mostra o passado e nao ajuda a decidir nada.
+    """
+
+    def __init__(self, real, mudancas: dict) -> None:
+        self._real = real
+        self._mudancas = mudancas
+
+    def __getattr__(self, nome):
+        if nome in self._mudancas:
+            return self._mudancas[nome]
+        return getattr(self._real, nome)
+
+
+class _PingPrevia:
+    target_label = "servidor"
+
+
+class _HistPrevia:
+    def values(self, _chave):
+        # Uma serrinha suave; grafico reto nao mostra como a linha fica.
+        base = [138, 142, 151, 147, 139, 144, 158, 152, 146, 141]
+        return [b + (i % 3) for i, b in enumerate(base * 6)]
+
+
+class _StreamPrevia:
+    app = "jogo.exe"
+    pid = 4242
+
+    class metrics:
+        fps_now = 144.0
+        fps_avg = 141.7
+        low_1 = 96.0
+        low_01 = 88.0
+        ft_avg = 6.94
+
+
+class _CtlPrevia:
+    """Controlador falso com numeros plausiveis desta maquina."""
+
+    def __init__(self, cfg) -> None:
+        self.settings = cfg
+        self.ping = _PingPrevia()
+        self.history = _HistPrevia()
+
+    def last_data(self) -> dict:
+        return {
+            "cpu_pct": 42.0, "cpu_temp": 78.0, "cpu_temp_package": 78.0,
+            "cpu_temp_cores": 61.0, "cpu_mhz": 4900, "cpu_watts": 95.0,
+            "cpu_volts": 1.18,
+            "ram_used": 18.2, "ram_total": 32.0, "ram_pct": 57.0, "ram_freq": 6000,
+            "ping_ms": 15.0, "packet_loss": 0.0,
+            "gpu": {"usage": 98.0, "temp": 64, "temp_hotspot": 81, "temp_vram": 70,
+                    "freq": 2900, "mem_freq": 2500, "watts": 290.0, "volts": 1.05,
+                    "vram_used": 9000, "vram_total": 16384, "vram_pct": 55.0},
+        }
+
+    def active_stream(self):
+        return _StreamPrevia()
+
+    def last_bench(self):
+        return None
 
 
 class SettingsDialog(QDialog):
@@ -284,8 +352,88 @@ class SettingsDialog(QDialog):
             self.overlay_checks[key] = chk
             grid.addWidget(chk, i // 3, i % 3)
         lay.addLayout(grid)
+
+        lay.addWidget(_header("Prévia"))
+        lay.addWidget(self._montar_previa())
         lay.addStretch(1)
+        self._ligar_previa()
+        self._atualizar_previa()
         return area
+
+    # ── previa do overlay ────────────────────────────────────────────────────
+    def _montar_previa(self) -> QWidget:
+        """Mostra o overlay de verdade aqui dentro, com numeros de exemplo.
+
+        E' a propria classe GameOverlay, reparentada: uma segunda implementacao
+        so' para a previa envelheceria em silencio e passaria a mentir sobre como
+        o overlay fica de fato.
+        """
+        moldura = QFrame()
+        moldura.setObjectName("PreviaOverlay")
+        moldura.setStyleSheet(
+            "#PreviaOverlay { background: #0b1015; border: 1px solid #1d2733;"
+            " border-radius: 8px; }")
+        caixa = QVBoxLayout(moldura)
+        caixa.setContentsMargins(14, 14, 14, 14)
+
+        self._previa_erro = QLabel("")
+        self._previa_erro.setStyleSheet("color: #ff8080; background: transparent;")
+        self._previa_erro.setVisible(False)
+        caixa.addWidget(self._previa_erro)
+
+        self._previa_caixa = QHBoxLayout()
+        self._previa_caixa.addStretch(1)
+        caixa.addLayout(self._previa_caixa)
+        self._previa = None
+        return moldura
+
+    def _ligar_previa(self) -> None:
+        """Qualquer mexida nas opcoes redesenha a previa na hora."""
+        for w in (self.c_overlay, self.c_overlay_auto):
+            w.toggled.connect(self._atualizar_previa)
+        for w in (self.w_corner, self.w_ocols):
+            w.currentIndexChanged.connect(self._atualizar_previa)
+        for w in (self.w_opacity, self.w_oscale, self.w_ohz, self.w_ograph):
+            w.valueChanged.connect(self._atualizar_previa)
+        for chk in self.overlay_checks.values():
+            chk.toggled.connect(self._atualizar_previa)
+
+    def _atualizar_previa(self, *_a) -> None:
+        from .overlay import GameOverlay
+
+        # A previa le' uma copia das opcoes com o que esta' na tela agora, e nao
+        # o que ja' foi salvo: a graca e' ver o efeito antes de confirmar.
+        cfg = _CfgPrevia(self._cfg, self._coletar_overlay())
+        try:
+            if self._previa is not None:
+                self._previa.setParent(None)
+                self._previa.deleteLater()
+            previa = GameOverlay(_CtlPrevia(cfg))
+            previa.setWindowFlags(Qt.WindowType.Widget)
+            previa.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+            self._previa_caixa.insertWidget(0, previa)
+            previa.refresh()
+            previa.show()
+            self._previa = previa
+            self._previa_erro.setVisible(False)
+        except Exception as e:                                   # noqa: BLE001
+            self._previa = None
+            self._previa_erro.setText(f"Não consegui desenhar a prévia: {e}")
+            self._previa_erro.setVisible(True)
+
+    def _coletar_overlay(self) -> dict:
+        """O que os controles da aba dizem agora, sem tocar na configuracao real."""
+        return {
+            "overlay_enabled": self.c_overlay.isChecked(),
+            "overlay_auto_game": self.c_overlay_auto.isChecked(),
+            "overlay_corner": self.w_corner.currentData(),
+            "overlay_opacity": self.w_opacity.value() / 100.0,
+            "overlay_scale": self.w_oscale.value() / 100.0,
+            "overlay_refresh_hz": self.w_ohz.value() / 10.0,
+            "overlay_graph_seconds": self.w_ograph.value(),
+            "overlay_columns": self.w_ocols.currentData(),
+            "overlay_metrics": [k for k, c in self.overlay_checks.items() if c.isChecked()],
+        }
 
     def _tab_alerts(self) -> QWidget:
         area, lay = _page()
