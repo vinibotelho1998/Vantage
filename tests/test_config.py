@@ -202,3 +202,39 @@ def test_aba_de_jogos_mantem_a_chave_antiga():
 def test_aba_removida_no_passado_nao_deixa_o_app_sem_tela():
     c = Settings.from_dict({"start_view": "gaming"})
     assert c.start_view in VIEWS
+
+
+def test_janela_fora_de_qualquer_tela_nao_e_restaurada():
+    """A posicao guardada envelhece e o app parecia fechar sozinho.
+
+    Basta fechar com a janela na TV e depois desligar a TV: a geometria salva
+    aponta para o vazio, a janela nasce fora de qualquer monitor e, de fora,
+    parece que o app nao abriu — com o processo vivo na bandeja o tempo todo.
+    """
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from dbxstats.ui.main_window import _cabe_em_alguma_tela
+
+    app = QApplication.instance() or QApplication([])
+    tela = app.primaryScreen().availableGeometry()
+
+    assert _cabe_em_alguma_tela(tela.x() + 20, tela.y() + 20, 400, 300)
+    assert not _cabe_em_alguma_tela(tela.right() + 500, tela.y(), 400, 300)
+    assert not _cabe_em_alguma_tela(-9000, 0, 400, 300)
+
+
+def test_canto_espiando_nao_conta_como_visivel():
+    """Quarenta pixels de titulo na borda nao dao para arrastar de volta."""
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from dbxstats.ui.main_window import _cabe_em_alguma_tela
+
+    app = QApplication.instance() or QApplication([])
+    tela = app.primaryScreen().availableGeometry()
+    assert not _cabe_em_alguma_tela(tela.right() - 30, tela.y(), 1360, 860)

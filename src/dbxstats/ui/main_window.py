@@ -165,6 +165,28 @@ class Sidebar(QWidget):
             btn.set_active(btn_key == key, accent)
 
 
+def _cabe_em_alguma_tela(x: int, y: int, w: int, h: int) -> bool:
+    """A janela restaurada aparece em alguma tela ligada?
+
+    A posicao guardada envelhece: basta fechar o app com a janela na TV e depois
+    desligar a TV para a geometria apontar para o vazio. O app abria, a janela
+    nascia fora de qualquer monitor, e de fora parecia que ele tinha fechado
+    sozinho — com o processo vivo na bandeja o tempo todo.
+
+    Exige um pedaco de verdade visivel, e nao so' o canto: um titulo de 40 px
+    espiando na borda nao da' para arrastar de volta.
+    """
+    from PySide6.QtCore import QRect
+
+    janela = QRect(int(x), int(y), max(1, int(w)), max(1, int(h)))
+    minimo = janela.width() * janela.height() * 0.15
+    for tela in QApplication.screens():
+        visivel = janela.intersected(tela.availableGeometry())
+        if visivel.width() * visivel.height() >= minimo:
+            return True
+    return False
+
+
 class MainWindow(QWidget):
     """Janela sem moldura nativa, com redimensionamento e snap do Windows."""
 
@@ -296,7 +318,8 @@ class MainWindow(QWidget):
 
     def restore_geometry(self) -> None:
         cfg = self.app.settings
-        if cfg.win_x >= -10000 and cfg.win_y >= -10000 and cfg.win_x != -1:
+        if (cfg.win_x >= -10000 and cfg.win_y >= -10000 and cfg.win_x != -1
+                and _cabe_em_alguma_tela(cfg.win_x, cfg.win_y, cfg.win_w, cfg.win_h)):
             self.setGeometry(cfg.win_x, cfg.win_y, cfg.win_w, cfg.win_h)
         else:
             self.resize(cfg.win_w, cfg.win_h)
