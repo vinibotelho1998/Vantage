@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import threading
 
-from PySide6.QtCore import QPoint, QTimer
+from PySide6.QtCore import QPoint, Qt, QTimer
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QApplication,
@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ... import theme
+from ... import config, theme
 from ...core import units
 from ...platform import memclean
 from ...sensors import diskbench, diskhealth
@@ -54,10 +54,32 @@ _EXPLICA_LIMPEZA = (
 )
 
 _EXPLICA_BENCH = (
-    "Grava um arquivo temporário de 1 GB na própria unidade, mede, e apaga ao terminar "
-    "— inclusive se o teste falhar ou o app fechar no meio. Nenhum arquivo existente é "
+    "Grava um arquivo temporário na própria unidade, mede, e apaga ao terminar — "
+    "inclusive se o teste falhar ou o app fechar no meio. Nenhum arquivo existente é "
     "tocado. O acesso é feito sem o cache do sistema, por isso os números são os do "
     "dispositivo e não os da RAM."
+)
+
+_EXPLICA_TAMANHO = (
+    "Arquivo pequeno (256–512 MiB) cabe no cache SLC do SSD e é reescrito várias "
+    "vezes dentro da fase: a escrita sai inflada, é a velocidade do cache e não a do "
+    "disco — inclusive num SSD que já está lento por ter escrito muito. Arquivo "
+    "grande, com mais tempo por fase, empurra mais gigabytes de uma vez e chega perto "
+    "da escrita sustentada, a que aparece ao copiar um jogo inteiro; em SSD com cache "
+    "folgado só dá para ver a queda com 4 GiB e 6 s por fase. Arquivo maior também "
+    "exige mais espaço livre, e o teste é recusado se não houver."
+)
+
+_EXPLICA_FILA = (
+    "Fila 1: uma operação por vez, cada uma esperando a anterior — é o que um jogo "
+    "carregando textura faz. Fila maior exigiria I/O assíncrono de verdade "
+    "(OVERLAPPED), que este motor não usa; oferecer QD32 aqui seria um QD1 com "
+    "rótulo errado, então só QD1 é oferecido."
+)
+
+_EXPLICA_SO_LEITURA = (
+    "Só leitura marcada: o arquivo é gravado antes, na fase “preparando”, e essa "
+    "gravação fica fora da medição — não dá para ler o que não existe."
 )
 
 
@@ -189,7 +211,7 @@ class MemoryView(View):
         linha = QHBoxLayout()
         linha.setSpacing(theme.scaled(8))
         self.btn_testar = PillButton("Testar unidade", theme.GPU, filled=True)
-        self.btn_testar.clicked.connect(self._escolher_unidade)
+        self.btn_testar.clicked.connect(self._iniciar_bench)
         linha.addWidget(self.btn_testar)
         self.btn_cancelar = PillButton("Cancelar", theme.BAD)
         self.btn_cancelar.clicked.connect(self._cancelar_bench)
@@ -199,6 +221,7 @@ class MemoryView(View):
         self.bench_badge = Badge("parado", theme.FAINT)
         linha.addWidget(self.bench_badge)
         self.card_bench.add_layout(linha)
+        self.card_bench.add_layout(self._montar_opcoes_bench())
 
         self.bench_progress = QProgressBar()
         self.bench_progress.setTextVisible(False)
@@ -213,7 +236,57 @@ class MemoryView(View):
         self.bench_aviso.setWordWrap(True)
         self.card_bench.add(self.bench_aviso)
         self.card_bench.body.addStretch(1)
+        self._sync_opcoes_bench()
         return self.card_bench
+
+    def _montar_opcoes_bench(self) -> QVBoxLayout:
+        """As escolhas do teste, na própria tela: unidade, tamanho, fases, tempo."""
+        box = QVBoxLayout()
+        box.setSpacing(theme.scaled(5))
+
+        grade = QGridLayout()
+        grade.setHorizontalSpacing(theme.scaled(8))
+        grade.setVerticalSpacing(theme.scaled(4))
+        self.opt_unidade = _Escolha(theme.GPU, self._opcoes_unidade, self._set_unidade)
+        self.opt_tamanho = _Escolha(theme.GPU, _opcoes_tamanho, self._set_tamanho)
+        self.opt_tamanho.setToolTip(_EXPLICA_TAMANHO)
+        self.opt_tempo = _Escolha(theme.GPU, _opcoes_tempo, self._set_tempo)
+        self.opt_tempo.setToolTip("Tempo mínimo de medição de cada fase. Mais tempo, "
+                                  "número mais estável; menos tempo, teste mais rápido.")
+        fila = label(f"QD{diskbench.PROFUNDIDADES[0]}", 8.5,
+                     QFont.Weight.DemiBold, theme.MUTE)
+        fila.setToolTip(_EXPLICA_FILA)
+        esquerda = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        for i, (texto, widget) in enumerate((("Unidade", self.opt_unidade),
+                                             ("Arquivo", self.opt_tamanho),
+                                             ("Tempo/fase", self.opt_tempo),
+                                             ("Fila", fila))):
+            rotulo = label(texto, 7.5, QFont.Weight.Normal, theme.FAINT)
+            grade.addWidget(rotulo, i // 2, (i % 2) * 2, esquerda)
+            grade.addWidget(widget, i // 2, (i % 2) * 2 + 1, esquerda)
+        # A folga vai toda para a coluna vazia da direita: esticar a coluna da
+        # pilula so' afastaria o valor do rotulo a que ele pertence.
+        grade.setColumnStretch(4, 1)
+        box.addLayout(grade)
+
+        # Duas colunas em vez de quatro pilulas lado a lado: o card divide a
+        # largura com o de saude, e quatro rotulos numa linha so' vazam para fora.
+        fases = QGridLayout()
+        fases.setHorizontalSpacing(theme.scaled(6))
+        fases.setVerticalSpacing(theme.scaled(4))
+        self._fase_botoes: dict[str, _FaseToggle] = {}
+        for i, (chave, rotulo) in enumerate(config.DISKBENCH_PHASES):
+            botao = _FaseToggle(chave, rotulo)
+            botao.clicked.connect(lambda c=chave: self._alternar_fase(c))
+            self._fase_botoes[chave] = botao
+            fases.addWidget(botao, i // 2, i % 2, esquerda)
+        fases.setColumnStretch(2, 1)
+        box.addLayout(fases)
+
+        self.bench_resumo = label("", 7.5, QFont.Weight.DemiBold, theme.FAINT)
+        self.bench_resumo.setWordWrap(True)
+        box.addWidget(self.bench_resumo)
+        return box
 
     # ── ciclo de vida ────────────────────────────────────────────────────────
     def on_activate(self) -> None:
@@ -270,18 +343,81 @@ class MemoryView(View):
         self.limpeza_status.setText(texto)
         self.limpeza_status.setStyleSheet(f"color: {cor}; background: transparent;")
 
-    # ── benchmark ────────────────────────────────────────────────────────────
-    def _escolher_unidade(self) -> None:
-        if self._bench.ativo:
-            return
-        menu = QMenu(self)
-        mounts = self._mounts or ["C:\\"]
-        for mount in mounts:
-            menu.addAction(f"Testar {mount}", lambda m=mount: self._iniciar_bench(m))
-        menu.exec(self.btn_testar.mapToGlobal(QPoint(0, self.btn_testar.height() + 4)))
+    # ── opcoes do benchmark ──────────────────────────────────────────────────
+    def _opcoes_unidade(self) -> list[tuple[str, str]]:
+        return [(m, m) for m in (self._mounts or ["C:\\"])]
 
-    def _iniciar_bench(self, mount: str) -> None:
-        ok, erro = self._bench.iniciar(mount)
+    def _unidade_bench(self) -> str:
+        """A unidade escolhida, ou a primeira que o coletor listou."""
+        escolhida = (self.cfg.diskbench_drive or "").strip()
+        return escolhida or (self._mounts or ["C:\\"])[0]
+
+    def _guardar(self) -> None:
+        """Persiste a escolha. `save_settings` pode nao existir num app de teste."""
+        salvar = getattr(self.app, "save_settings", None)
+        if callable(salvar):
+            salvar()
+
+    def _set_unidade(self, mount: str) -> None:
+        self.cfg.diskbench_drive = mount
+        self._guardar()
+        self._sync_opcoes_bench()
+
+    def _set_tamanho(self, mib: int) -> None:
+        self.cfg.diskbench_size_mib = int(mib)
+        self._guardar()
+        self._sync_opcoes_bench()
+
+    def _set_tempo(self, segundos: float) -> None:
+        self.cfg.diskbench_seconds = float(segundos)
+        self._guardar()
+        self._sync_opcoes_bench()
+
+    def _alternar_fase(self, chave: str) -> None:
+        """Marca ou desmarca uma fase, sem nunca deixar o teste sem nenhuma."""
+        marcadas = [c for c, _ in config.DISKBENCH_PHASES
+                    if c in set(self.cfg.diskbench_phases)]
+        if chave in marcadas:
+            if len(marcadas) == 1:
+                return
+            marcadas.remove(chave)
+        else:
+            marcadas = [c for c, _ in config.DISKBENCH_PHASES
+                        if c in set(marcadas) | {chave}]
+        self.cfg.diskbench_phases = marcadas
+        self._guardar()
+        self._sync_opcoes_bench()
+
+    def _opcoes_bench(self) -> diskbench.Opcoes:
+        return diskbench.Opcoes(
+            tamanho=int(self.cfg.diskbench_size_mib) * diskbench.MIB,
+            fases=tuple(self.cfg.diskbench_phases),
+            segundos_fase=float(self.cfg.diskbench_seconds),
+            profundidade=int(self.cfg.diskbench_queue_depth),
+        ).normalizar()
+
+    def _sync_opcoes_bench(self) -> None:
+        opcoes = self._opcoes_bench()
+        self.opt_unidade.mostrar(self._unidade_bench())
+        self.opt_tamanho.mostrar(_rotulo_tamanho(self.cfg.diskbench_size_mib))
+        self.opt_tempo.mostrar(_rotulo_tempo(self.cfg.diskbench_seconds))
+        for chave, botao in self._fase_botoes.items():
+            botao.set_ativo(chave in opcoes.fases)
+        # A conta do espaco exigido fica visivel porque ela e' o motivo de o teste
+        # ser recusado: escolher 4 GiB muda o que a unidade precisa ter livre.
+        precisa = units.size(opcoes.tamanho + diskbench.MARGEM_LIVRE)
+        resumo = (f"{_rotulo_tamanho(self.cfg.diskbench_size_mib)} · "
+                  f"{len(opcoes.fases)} de {len(config.DISKBENCH_PHASES)} fases · "
+                  f"{_rotulo_tempo(self.cfg.diskbench_seconds)}/fase · "
+                  f"precisa de {precisa} livres")
+        if opcoes.precisa_preparar:
+            resumo = f"{resumo}\n{_EXPLICA_SO_LEITURA}"
+        self.bench_resumo.setText(resumo)
+
+    # ── benchmark ────────────────────────────────────────────────────────────
+    def _iniciar_bench(self, mount: str | None = None) -> None:
+        mount = mount or self._unidade_bench()
+        ok, erro = self._bench.iniciar(mount, self._opcoes_bench())
         if not ok:
             self.bench_badge.update_badge("recusado", theme.BAD)
             self.bench_aviso.setText(erro)
@@ -295,6 +431,7 @@ class MemoryView(View):
         self.bench_progress.setValue(0)
         for chave, _ in _BENCH_ROWS:
             self.bench_rows.set(chave, units.DASH, theme.MUTE)
+        self._mostrar_linhas_bench(self._opcoes_bench().fases)
         self._timer.start()
 
     def _cancelar_bench(self) -> None:
@@ -325,6 +462,21 @@ class MemoryView(View):
         if not ocupado:
             self._timer.stop()
 
+    def _mostrar_linhas_bench(self, fases) -> None:
+        """Esconde a linha de fase que nao foi pedida.
+
+        Travessao numa fase desmarcada se le' como "o teste tentou e falhou aqui",
+        que e' exatamente o oposto do que aconteceu.
+        """
+        rodadas = set(fases or ())
+        for chave, _rotulo in config.DISKBENCH_PHASES:
+            linha = self.bench_rows.row(chave)
+            if linha is not None:
+                linha.setVisible(chave in rodadas)
+        iops = self.bench_rows.row("iops")
+        if iops is not None:
+            iops.setVisible(bool(rodadas & {"ralea", "walea"}))
+
     def _mostrar_bench(self, estado: dict) -> None:
         if estado["erro"]:
             self.bench_badge.update_badge("falhou", theme.BAD)
@@ -343,14 +495,22 @@ class MemoryView(View):
         else:
             self.bench_badge.update_badge(f"{r.unidade} · {r.segundos:.0f}s", theme.OK)
             self.bench_progress.setValue(1000)
+        self._mostrar_linhas_bench(r.fases)
         self.bench_rows.set("wseq", units.rate(r.escrita_seq), theme.DISK)
         self.bench_rows.set("rseq", units.rate(r.leitura_seq), theme.GPU)
         self.bench_rows.set("ralea", units.rate(r.leitura_alea), theme.GPU)
         self.bench_rows.set("walea", units.rate(r.escrita_alea), theme.DISK)
-        self.bench_rows.set("iops", f"{units.compact(r.iops_leitura, 0)} / "
-                                    f"{units.compact(r.iops_escrita, 0)}"
-                            if r.iops_leitura else units.DASH)
-        self.bench_rows.set("arquivo", units.size(r.bytes_arquivo))
+        # Com uma das duas fases 4K desmarcada, "10k / —" nao diz qual das duas
+        # foi medida; a linha passa a mostrar so' o que rodou, e o rotulo diz o que e'.
+        medidos = [(nome, valor) for nome, valor in (("leitura", r.iops_leitura),
+                                                     ("escrita", r.iops_escrita)) if valor]
+        self.bench_rows.set_label("iops", "IOPS 4K"
+                                  + (f" ({'/'.join(n for n, _ in medidos)})"
+                                     if len(medidos) == 1 else ""))
+        self.bench_rows.set("iops", " / ".join(units.compact(v, 0) for _, v in medidos)
+                            or units.DASH)
+        self.bench_rows.set("arquivo", f"{units.size(r.bytes_arquivo)}  ·  "
+                                       f"QD{r.profundidade}")
         if not r.cache_evitado:
             self.bench_aviso.setText(
                 "Esta unidade não aceitou acesso sem cache: os números de leitura "
@@ -402,7 +562,12 @@ class MemoryView(View):
         self.io_rows.set("drives", str(len(drives)))
         self.io_rows.set("uptime", units.duration(d.get("uptime")))
 
-        self._mounts = [x.get("mount", "") for x in drives if x.get("mount")]
+        mounts = [x.get("mount", "") for x in drives if x.get("mount")]
+        if mounts != self._mounts:
+            # A lista de unidades so' chega com o primeiro snapshot; ate' la' a
+            # pilula mostra um palpite, e trocar de unidade so' e' possivel aqui.
+            self._mounts = mounts
+            self._sync_opcoes_bench()
         self._sync_drives(drives)
         self._sync_saude()
 
@@ -500,6 +665,61 @@ class MemoryView(View):
         self.saude_grid.addWidget(raiz, indice // 3, indice % 3)
         self.saude_grid.setColumnStretch(indice % 3, 1)
         return {"root": raiz, "titulo": titulo, "sub": sub, "badge": badge, "rows": rows}
+
+
+# ── controles das opcoes do teste ────────────────────────────────────────────
+class _Escolha(PillButton):
+    """Pilula que mostra a opção atual e abre um menu com as outras."""
+
+    def __init__(self, cor: str, opcoes, escolher) -> None:
+        super().__init__("", cor)
+        self._opcoes = opcoes
+        self._escolher = escolher
+        self.clicked.connect(self._abrir)
+
+    def _abrir(self) -> None:
+        menu = QMenu(self)
+        for rotulo, valor in self._opcoes():
+            menu.addAction(rotulo, lambda v=valor: self._escolher(v))
+        menu.exec(self.mapToGlobal(QPoint(0, self.height() + 4)))
+
+    def mostrar(self, texto: str) -> None:
+        self.setText(f"{texto}  ▾")
+
+
+class _FaseToggle(PillButton):
+    """Pílula que liga e desliga uma fase do teste."""
+
+    def __init__(self, chave: str, rotulo: str) -> None:
+        super().__init__(f"✓ {rotulo}", theme.GPU)
+        self.chave = chave
+        self._rotulo = rotulo
+        self._ativo = True
+
+    def set_ativo(self, ativo: bool) -> None:
+        # A comparacao evita remontar a folha de estilo a cada snapshot: a tela
+        # sincroniza as opcoes junto com os dados, duas vezes por segundo.
+        if ativo == self._ativo:
+            return
+        self._ativo = ativo
+        self.setText(f"✓ {self._rotulo}" if ativo else self._rotulo)
+        self.set_color(theme.GPU if ativo else theme.MUTE)
+
+
+def _rotulo_tamanho(mib: int) -> str:
+    return f"{mib} MiB" if mib < 1024 else f"{mib // 1024} GiB"
+
+
+def _rotulo_tempo(segundos: float) -> str:
+    return f"{segundos:.1f} s".replace(".", ",")
+
+
+def _opcoes_tamanho() -> list[tuple[str, int]]:
+    return [(_rotulo_tamanho(m), m) for m in diskbench.TAMANHOS_MIB]
+
+
+def _opcoes_tempo() -> list[tuple[str, float]]:
+    return [(_rotulo_tempo(s), s) for s in diskbench.SEGUNDOS_POR_FASE]
 
 
 # ── formatacao ───────────────────────────────────────────────────────────────

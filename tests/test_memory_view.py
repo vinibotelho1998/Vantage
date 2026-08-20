@@ -134,3 +134,81 @@ def test_fechar_o_app_cancela_o_teste_em_andamento():
     v._bench.cancelar = lambda esperar=3.0: pedidos.append(esperar)
     v._encerrar()
     assert pedidos and not v._timer.isActive()
+
+
+# ── opcoes do teste de disco ─────────────────────────────────────────────────
+def test_o_tamanho_escolhido_chega_ao_motor():
+    """A opcao so' vale se o motor receber: e' ela que dimensiona o arquivo e a
+    checagem de espaco livre. Escolher 4 GiB e testar 1 GiB seria pior que nada."""
+    v = _view()
+    v.cfg.diskbench_size_mib = 4096
+    v._sync_opcoes_bench()
+    pedidos = []
+    v._bench.iniciar = lambda mount, opcoes=None: (pedidos.append((mount, opcoes)), (True, ""))[1]
+    v._iniciar_bench("D:\\")
+    mount, opcoes = pedidos[0]
+    assert mount == "D:\\"
+    assert opcoes.tamanho == 4096 * diskbench.MIB
+
+
+def test_a_unidade_escolhida_manda_no_botao_de_testar():
+    """Antes o botao abria um menu; agora ele roda na unidade que esta' na tela."""
+    v = _view()
+    v.on_system({"disks": [{"mount": "C:\\"}, {"mount": "D:\\"}]})
+    v._set_unidade("D:\\")
+    assert v.cfg.diskbench_drive == "D:\\"
+    pedidos = []
+    v._bench.iniciar = lambda mount, opcoes=None: (pedidos.append(mount), (True, ""))[1]
+    v._iniciar_bench()
+    assert pedidos == ["D:\\"]
+
+
+def test_desmarcar_a_ultima_fase_e_ignorado():
+    """Teste sem fase nenhuma criaria o arquivo na unidade para nao medir nada."""
+    v = _view()
+    v.cfg.diskbench_phases = ["rseq"]
+    v._sync_opcoes_bench()
+    v._alternar_fase("rseq")
+    assert v.cfg.diskbench_phases == ["rseq"]
+
+
+def test_fase_desmarcada_nao_deixa_travessao_no_resultado():
+    """Travessao numa fase que ninguem pediu se le' como 'o teste falhou aqui'."""
+    v = _view()
+    v._bench.iniciar = lambda *_a, **_k: (True, "")
+    v._iniciar_bench("D:\\")
+    v._bench.estado = lambda: {
+        "ativo": False, "unidade": "D:\\", "fase": "concluído", "progresso": 1.0,
+        "erro": "", "resultado": diskbench.Resultado(unidade="D:\\", leitura_seq=2.8e9,
+                                                     fases=("rseq",))}
+    v._tick_tarefas()
+    assert v.bench_rows.row("rseq").isVisibleTo(v)
+    for ausente in ("wseq", "ralea", "walea", "iops"):
+        assert not v.bench_rows.row(ausente).isVisibleTo(v), ausente
+
+
+def test_iops_de_uma_fase_so_diz_qual_fase_foi_medida():
+    """"9k / —" não diz se o que sobrou na linha é leitura ou escrita."""
+    v = _view()
+    v._mostrar_bench({"erro": "", "resultado": diskbench.Resultado(
+        unidade="D:\\", leitura_alea=4e7, iops_leitura=9000.0, fases=("ralea",))})
+    linha = v.bench_rows.row("iops")
+    assert "leitura" in linha._label.text()
+    assert "/" not in linha._value.text()
+
+
+def test_o_resumo_mostra_o_espaco_que_o_teste_vai_exigir():
+    """E' o motivo mais comum de recusa; ver a conta antes evita a surpresa."""
+    v = _view()
+    v.cfg.diskbench_size_mib = 4096
+    v._sync_opcoes_bench()
+    assert "4 GiB" in v.bench_resumo.text()
+    assert "livres" in v.bench_resumo.text()
+
+
+def test_so_leitura_marcada_avisa_que_o_arquivo_e_gravado_antes():
+    """O usuario precisa saber que 'só leitura' ainda grava — o disco vai ser escrito."""
+    v = _view()
+    v.cfg.diskbench_phases = ["rseq"]
+    v._sync_opcoes_bench()
+    assert "gravado antes" in v.bench_resumo.text()

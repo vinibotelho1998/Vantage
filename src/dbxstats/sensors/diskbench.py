@@ -26,6 +26,19 @@ no lugar errado destroi dado de verdade. As regras aqui sao:
   Windows quando o handle fecha — inclusive se o processo morrer no meio;
 * `finally` e `atexit` ainda tentam remover arquivo e pasta, e uma varredura no
   inicio limpa sobra de execucao anterior que tenha escapado de tudo isso.
+
+O que o usuario escolhe
+-----------------------
+`Opcoes` carrega tamanho do arquivo, quais fases rodar e quanto tempo medir cada
+uma. Duas consequencias que o resto do modulo trata com cuidado:
+
+* o tamanho manda na checagem de espaco livre — escolher 4 GiB e continuar
+  validando 1 GiB seria a forma mais facil de encher a unidade do usuario;
+* fase de leitura sem fase de escrita nao tem o que ler. Nesse caso o arquivo e'
+  gravado antes, na fase "preparando", fora do cronometro. Sem isso a leitura
+  bateria no fim do arquivo vazio e devolveria um numero que nao mediu nada, e o
+  4K aleatorio escreveria alem do fim do arquivo — o que faz o NTFS zerar o
+  buraco no meio da medida.
 """
 from __future__ import annotations
 
@@ -48,10 +61,25 @@ from .. import log
 
 _log = log.get("diskbench")
 
-TAMANHO_PADRAO = 1024 * 1024 * 1024
+MIB = 1024 * 1024
+TAMANHO_PADRAO = 1024 * MIB
 """1 GiB. Grande o bastante para nao caber em cache de controlador nem em SLC."""
 
-BLOCO_SEQ = 4 * 1024 * 1024
+TAMANHOS_MIB = (256, 512, 1024, 2048, 4096)
+"""Tamanhos oferecidos na tela, em MiB.
+
+Nao e' so' "rapido x demorado". O que enche o cache SLC do SSD e' o total gravado
+na fase, que e' o tamanho vezes o numero de passadas: um arquivo pequeno cabe no
+cache e e' reescrito la' dentro varias vezes, entao a taxa medida e' a do cache —
+num SSD medido logo depois de encher o cache, 256 MiB ainda reportou 2,2 GB/s
+enquanto 4 GiB na mesma hora reportou 0,35 GB/s. Arquivo grande com tempo maior
+por fase e' o unico jeito de chegar na escrita sustentada.
+"""
+
+TAMANHO_MINIMO = 64 * MIB
+TAMANHO_MAXIMO = 16 * 1024 * MIB
+
+BLOCO_SEQ = 4 * MIB
 BLOCO_ALEA = 4096
 """4 KiB QD1 — o bloco que representa carga de sistema operacional e de jogo."""
 
@@ -66,11 +94,45 @@ FRACAO_LIVRE_MINIMA = 0.05
 TEMPO_MINIMO_FASE = 1.5
 TEMPO_MAXIMO_FASE = 8.0
 TEMPO_ALEATORIO = 2.0
+SEGUNDOS_POR_FASE = (0.5, 1.5, 3.0, 6.0)
+"""Tempo minimo de medicao por fase, oferecido na tela.
+
+Menos que isso e a medida vira ruido do agendador; mais estabiliza o numero em
+troca de um teste mais demorado.
+"""
+
+PROFUNDIDADES = (1,)
+"""Profundidades de fila oferecidas — uma so', e de proposito.
+
+Fila maior que 1 significa deixar varias operacoes pendentes no dispositivo ao
+mesmo tempo, e isso exige I/O assincrono de verdade: FILE_FLAG_OVERLAPPED, uma
+estrutura OVERLAPPED por requisicao e espera em evento — ou varios handles em
+varias threads. Este motor usa ReadFile/WriteFile sincronos, que so' retornam
+quando a operacao terminou; repetir a chamada em laco continua sendo QD1.
+Chamar isso de QD32 daria um numero maior e falso, entao a lista tem um item so'.
+"""
+
+TEMPO_MAXIMO_FATOR = 5.0
+"""Teto de uma fase em relacao ao minimo pedido.
+
+O teto existe para o caso oposto ao do NVMe: num disco lento uma unica passada
+por um arquivo de 4 GiB pode levar minutos, e a fase precisa terminar. Como ele
+acompanha o minimo escolhido, pedir 6 s por fase nao esbarra num teto de 8 s.
+"""
+
 PREFIXO = "dbxstats-bench-"
 IDADE_SOBRA_S = 3600.0
 
-FASES = ("preparando", "escrita seq.", "leitura seq.", "leitura 4K", "escrita 4K")
+CHAVES_FASES = ("wseq", "rseq", "ralea", "walea")
+"""Ordem de execucao, nao so' de exibicao: a escrita sequencial e' o que deixa o
+arquivo com dado valido para as tres fases seguintes lerem."""
+
+ROTULOS_FASES = {"wseq": "escrita seq.", "rseq": "leitura seq.",
+                 "ralea": "leitura 4K", "walea": "escrita 4K"}
 """Nomes curtos de proposito: viram texto de badge numa barra ja' apertada."""
+
+FASE_PREPARO = "preparando"
+FASES = (FASE_PREPARO,) + tuple(ROTULOS_FASES[c] for c in CHAVES_FASES)
 
 
 # ── win32 ────────────────────────────────────────────────────────────────────
@@ -119,6 +181,42 @@ class BenchError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class Opcoes:
+    """O que o usuario escolheu na tela.
+
+    Imutavel de proposito: a thread do teste le' isso sem trava nenhuma, e mudar
+    o tamanho no meio da corrida quebraria a validacao de espaco que ja' passou.
+    """
+
+    tamanho: int = TAMANHO_PADRAO
+    fases: tuple[str, ...] = CHAVES_FASES
+    segundos_fase: float = TEMPO_MINIMO_FASE
+    profundidade: int = 1
+
+    def normalizar(self) -> Opcoes:
+        """Devolve opcoes que o motor pode executar sem se machucar.
+
+        A ordem das fases e' reimposta aqui: um settings.json com "rseq" antes de
+        "wseq" faria a leitura acontecer antes de existir dado no arquivo.
+        """
+        pedidas = {c for c in self.fases if isinstance(c, str)}
+        fases = tuple(c for c in CHAVES_FASES if c in pedidas) or CHAVES_FASES
+        tamanho = max(TAMANHO_MINIMO, min(TAMANHO_MAXIMO, int(self.tamanho or 0)))
+        segundos = max(0.2, min(30.0, float(self.segundos_fase or TEMPO_MINIMO_FASE)))
+        return replace(self, tamanho=tamanho, fases=fases, segundos_fase=segundos,
+                       profundidade=PROFUNDIDADES[0])
+
+    @property
+    def precisa_preparar(self) -> bool:
+        """Se ha' fase que depende de dado que a escrita sequencial nao vai gravar."""
+        return "wseq" not in self.fases and bool(self.fases)
+
+    @property
+    def tempo_maximo(self) -> float:
+        return max(TEMPO_MAXIMO_FASE, self.segundos_fase * TEMPO_MAXIMO_FATOR)
+
+
+@dataclass(frozen=True)
 class Resultado:
     unidade: str
     escrita_seq: float | None = None
@@ -131,6 +229,11 @@ class Resultado:
     cache_evitado: bool = True
     cancelado: bool = False
     segundos: float = 0.0
+    fases: tuple[str, ...] = CHAVES_FASES
+    """Quais fases de fato rodaram — a tela esconde as linhas das outras em vez
+    de mostrar travessao, que se le' como 'o teste falhou aqui'."""
+    segundos_fase: float = TEMPO_MINIMO_FASE
+    profundidade: int = 1
 
 
 # ── regras puras (testadas sem tocar em disco) ───────────────────────────────
@@ -281,6 +384,15 @@ class DiskBench:
         self._resultado: Resultado | None = None
         self._erro = ""
         self._handle: int | None = None
+        self._roteiro: list[str] = list(FASES)
+        """Fases desta corrida, na ordem. E' o denominador da barra de progresso:
+        com duas fases marcadas, cada uma vale metade da barra."""
+        self._validos = 0
+        """Ate' onde o arquivo tem dado gravado nesta corrida.
+
+        Ler ou sortear posicao alem disso mediria o fim do arquivo (zero byte de
+        volta) ou faria o NTFS zerar o buraco no meio da medida.
+        """
         _registrar(self)
 
     # ── controle ─────────────────────────────────────────────────────────────
@@ -295,21 +407,29 @@ class DiskBench:
                     "progresso": self._progresso, "resultado": self._resultado,
                     "erro": self._erro}
 
-    def iniciar(self, mount: str, tamanho: int = TAMANHO_PADRAO) -> tuple[bool, str]:
-        """Valida tudo o que da' para validar antes de escrever o primeiro byte."""
+    def iniciar(self, mount: str, opcoes: Opcoes | None = None) -> tuple[bool, str]:
+        """Valida tudo o que da' para validar antes de escrever o primeiro byte.
+
+        A validacao de espaco usa o tamanho destas opcoes, e nao um padrao fixo:
+        o usuario que escolhe 4 GiB precisa ter 4 GiB mais a folga, senao o teste
+        e' recusado aqui e nenhum byte chega ao disco.
+        """
         if self.ativo:
             return False, "Já existe um teste em andamento."
-        ok, erro = self._validar(mount, tamanho)
+        opcoes = (opcoes or Opcoes()).normalizar()
+        ok, erro = self._validar(mount, opcoes.tamanho)
         if not ok:
             return False, erro
         with self._lock:
             self._parar = threading.Event()
-            self._fase = FASES[0]
+            self._fase = FASE_PREPARO
             self._progresso = 0.0
             self._unidade = mount
             self._resultado = None
             self._erro = ""
-        self._thread = threading.Thread(target=self._rodar, args=(mount, tamanho),
+            self._validos = 0
+            self._roteiro = [FASE_PREPARO] + [ROTULOS_FASES[c] for c in opcoes.fases]
+        self._thread = threading.Thread(target=self._rodar, args=(mount, opcoes),
                                         name="diskbench", daemon=True)
         self._thread.start()
         return True, ""
@@ -350,13 +470,17 @@ class DiskBench:
         Quem chama passa a fracao da propria fase, que e' o que cada laco sabe.
         Publicar isso cru fazia a barra voltar ao comeco a cada troca — 64%, 24%,
         14%, 5% — e barra andando para tras se le' como travamento.
+
+        O denominador e' o roteiro desta corrida: com uma fase so' marcada, a
+        barra tem de chegar ao fim ao terminar essa fase, e nao em 20%.
         """
+        roteiro = self._roteiro or list(FASES)
         try:
-            posicao = FASES.index(fase)
+            posicao = roteiro.index(fase)
         except ValueError:
             posicao = 0
         fracao = max(0.0, min(1.0, progresso))
-        total = (posicao + fracao) / len(FASES)
+        total = (posicao + fracao) / len(roteiro)
         with self._lock:
             self._fase = fase
             # Nunca deixa recuar. Cada fase repete passadas ate' fechar o tempo
@@ -364,17 +488,18 @@ class DiskBench:
             # repeticao — a barra ficava indo e voltando dentro da mesma fase.
             self._progresso = max(self._progresso, total)
 
-    def _rodar(self, mount: str, tamanho: int) -> None:
+    def _rodar(self, mount: str, opcoes: Opcoes) -> None:
         pasta: str | None = None
         caminho: Path | None = None
         comeco = time.monotonic()
         try:
             limpar_sobras(mount)
             setor = setor_do_volume(mount)
-            tamanho = max(alinhar(tamanho, max(setor, BLOCO_SEQ)), BLOCO_SEQ)
+            tamanho = max(alinhar(opcoes.tamanho, max(setor, BLOCO_SEQ)), BLOCO_SEQ)
+            opcoes = replace(opcoes, tamanho=tamanho)
             pasta = tempfile.mkdtemp(prefix=PREFIXO, dir=str(_pasta_base(mount)))
             caminho = Path(pasta) / "teste.tmp"
-            resultado = self._medir(caminho, mount, tamanho, setor)
+            resultado = self._medir(caminho, mount, opcoes, setor)
             # Cancelar no meio ainda deixa medida boa das fases que terminaram; o
             # que nao pode e' entregar isso com cara de teste completo.
             cancelado = self._parar.is_set()
@@ -419,7 +544,7 @@ class DiskBench:
         if handle:
             _kernel32.CloseHandle(wintypes.HANDLE(handle))
 
-    def _medir(self, caminho: Path, mount: str, tamanho: int, setor: int) -> Resultado:
+    def _medir(self, caminho: Path, mount: str, opcoes: Opcoes, setor: int) -> Resultado:
         evitado = self._abrir(caminho)
         alinhamento = max(setor, BLOCO_ALEA)
         buf_seq = _BufferAlinhado(BLOCO_SEQ, alinhamento)
@@ -427,16 +552,51 @@ class DiskBench:
         buf_alea = _BufferAlinhado(BLOCO_ALEA, alinhamento)
         buf_alea.preencher(os.urandom(BLOCO_ALEA))
 
-        escrita = self._sequencial(buf_seq, tamanho, escrever=True, fase=FASES[1])
+        tamanho = opcoes.tamanho
+        fases = opcoes.fases
+        minimo, maximo = opcoes.segundos_fase, opcoes.tempo_maximo
+        medidas: dict[str, float | None] = {}
+        iops: dict[str, float | None] = {}
+
+        # Fora do cronometro: so' existe para as fases seguintes terem o que ler.
+        if opcoes.precisa_preparar:
+            self._passada(buf_seq, tamanho, escrever=True, fase=FASE_PREPARO,
+                          comeco=time.monotonic(), limite=None)
+            self._flush()
+
+        if "wseq" in fases:
+            medidas["wseq"] = self._sequencial(buf_seq, tamanho, escrever=True,
+                                               fase=ROTULOS_FASES["wseq"],
+                                               tempo_minimo=minimo, tempo_maximo=maximo)
+            self._flush()
+        if "rseq" in fases:
+            medidas["rseq"] = self._sequencial(buf_seq, self._extensao(tamanho),
+                                               escrever=False,
+                                               fase=ROTULOS_FASES["rseq"],
+                                               tempo_minimo=minimo, tempo_maximo=maximo)
+        for chave, escrever in (("ralea", False), ("walea", True)):
+            if chave not in fases:
+                continue
+            medidas[chave], iops[chave] = self._aleatorio(
+                buf_alea, self._extensao(tamanho), escrever=escrever,
+                fase=ROTULOS_FASES[chave], segundos=minimo)
         self._flush()
-        leitura = self._sequencial(buf_seq, tamanho, escrever=False, fase=FASES[2])
-        le_alea, iops_le = self._aleatorio(buf_alea, tamanho, escrever=False, fase=FASES[3])
-        esc_alea, iops_esc = self._aleatorio(buf_alea, tamanho, escrever=True, fase=FASES[4])
-        self._flush()
-        return Resultado(unidade=mount, escrita_seq=escrita, leitura_seq=leitura,
-                         leitura_alea=le_alea, escrita_alea=esc_alea,
-                         iops_leitura=iops_le, iops_escrita=iops_esc,
-                         bytes_arquivo=tamanho, cache_evitado=evitado)
+        return Resultado(unidade=mount, escrita_seq=medidas.get("wseq"),
+                         leitura_seq=medidas.get("rseq"),
+                         leitura_alea=medidas.get("ralea"),
+                         escrita_alea=medidas.get("walea"),
+                         iops_leitura=iops.get("ralea"), iops_escrita=iops.get("walea"),
+                         bytes_arquivo=tamanho, cache_evitado=evitado, fases=fases,
+                         segundos_fase=minimo, profundidade=opcoes.profundidade)
+
+    def _extensao(self, tamanho: int) -> int:
+        """Ate' onde as fases de leitura podem ir sem sair do dado gravado.
+
+        Numa unidade lenta com arquivo grande, o teto de tempo pode cortar a
+        escrita no meio; ler alem disso devolveria zero byte e o resto do arquivo
+        entraria na conta como se tivesse sido lido instantaneamente.
+        """
+        return max(0, min(tamanho, self._validos))
 
     def _flush(self) -> None:
         if self._handle:
@@ -460,42 +620,63 @@ class DiskBench:
                              f"(erro {codigo}).")
         return int(feitos.value)
 
+    def _passada(self, buffer: _BufferAlinhado, tamanho: int, escrever: bool,
+                 fase: str, comeco: float, limite: float | None) -> int:
+        """Uma varredura do arquivo, do inicio ao fim. Devolve os bytes movidos.
+
+        `limite` e' o teto de tempo do conjunto (nao desta passada). A preparacao
+        chama com `None`: ela nao esta' medindo nada, e parar no meio deixaria o
+        arquivo pela metade justamente para quem so' quer medir leitura.
+        """
+        self._posicionar(0)
+        feito_total = 0
+        while feito_total < tamanho:
+            if self._parar.is_set():
+                break
+            pedaco = min(buffer.tamanho, tamanho - feito_total)
+            feito = self._bloco(buffer, pedaco, escrever)
+            if feito <= 0:
+                break
+            feito_total += feito
+            if escrever:
+                self._validos = max(self._validos, feito_total)
+            self._publicar(fase, feito_total / tamanho if tamanho else 1.0)
+            if limite is not None and (time.monotonic() - comeco) >= limite:
+                break
+        return feito_total
+
     def _sequencial(self, buffer: _BufferAlinhado, tamanho: int, escrever: bool,
-                    fase: str) -> float | None:
+                    fase: str, tempo_minimo: float | None = None,
+                    tempo_maximo: float | None = None) -> float | None:
         """Passa o arquivo inteiro do inicio ao fim, quantas vezes for preciso.
 
         Uma passada so' dura poucos decimos de segundo num NVMe rapido, e nessa
         escala o relogio e o proprio agendador dominam a medida. Repetir ate' um
         tempo minimo entrega um numero estavel sem gastar mais espaco em disco.
         """
+        minimo = TEMPO_MINIMO_FASE if tempo_minimo is None else tempo_minimo
+        maximo = TEMPO_MAXIMO_FASE if tempo_maximo is None else tempo_maximo
         total = 0
         comeco = time.monotonic()
         passadas = 0
         while True:
-            self._posicionar(0)
-            restante = tamanho
-            while restante > 0:
-                if self._parar.is_set():
-                    return taxa(total, time.monotonic() - comeco)
-                pedaco = min(buffer.tamanho, restante)
-                feito = self._bloco(buffer, pedaco, escrever)
-                if feito <= 0:
-                    break
-                total += feito
-                restante -= feito
-                decorrido = time.monotonic() - comeco
-                fracao = (total % tamanho) / tamanho if tamanho else 0.0
-                self._publicar(fase, fracao)
-                if decorrido >= TEMPO_MAXIMO_FASE:
-                    return taxa(total, decorrido)
+            total += self._passada(buffer, tamanho, escrever, fase, comeco, maximo)
             passadas += 1
-            if (time.monotonic() - comeco) >= TEMPO_MINIMO_FASE or passadas >= 16:
+            decorrido = time.monotonic() - comeco
+            if (self._parar.is_set() or decorrido >= minimo or decorrido >= maximo
+                    or passadas >= 16):
                 break
         return taxa(total, time.monotonic() - comeco)
 
     def _aleatorio(self, buffer: _BufferAlinhado, tamanho: int, escrever: bool,
-                   fase: str) -> tuple[float | None, float | None]:
-        """4 KiB em posicoes sorteadas, fila 1 — mede latencia, nao vazao de fita."""
+                   fase: str, segundos: float | None = None
+                   ) -> tuple[float | None, float | None]:
+        """4 KiB em posicoes sorteadas, fila 1 — mede latencia, nao vazao de fita.
+
+        Fila 1 nao e' escolha de conveniencia: com ReadFile/WriteFile sincronos
+        nao existe outra. Ver PROFUNDIDADES.
+        """
+        duracao = TEMPO_ALEATORIO if segundos is None else max(0.2, segundos)
         maximo = max(0, (tamanho - BLOCO_ALEA) // BLOCO_ALEA)
         if maximo <= 0:
             return None, None
@@ -506,13 +687,13 @@ class DiskBench:
             if self._parar.is_set():
                 break
             decorrido = time.monotonic() - comeco
-            if decorrido >= TEMPO_ALEATORIO:
+            if decorrido >= duracao:
                 break
             for _ in range(64):
                 self._posicionar(sorteio.randrange(maximo) * BLOCO_ALEA)
                 self._bloco(buffer, BLOCO_ALEA, escrever)
                 operacoes += 1
-            self._publicar(fase, min(1.0, decorrido / TEMPO_ALEATORIO))
+            self._publicar(fase, min(1.0, decorrido / duracao))
         decorrido = time.monotonic() - comeco
         if operacoes <= 0 or decorrido <= 0:
             return None, None
