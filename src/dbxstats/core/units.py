@@ -67,6 +67,14 @@ def ms(v: float | None, decimals: int = 1) -> str:
     return DASH if v is None else f"{v:.{decimals}f} ms"
 
 
+def mbps(v: float | None) -> str:
+    """Velocidade de link. Acima de 100 a casa decimal so' polui: ninguem
+    contrata "0,4 mega a mais"."""
+    if v is None:
+        return DASH
+    return f"{v:.0f}" if v >= 100 else f"{v:.1f}"
+
+
 def integer(v: float | None) -> str:
     return DASH if v is None else f"{v:.0f}"
 

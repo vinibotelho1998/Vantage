@@ -279,12 +279,21 @@ class KpiStrip(QWidget):
         self._max_columns = max(1, columns)
         self._columns = 0
         self.tiles: dict[str, StatTile] = {}
-        self._order: list[StatTile] = []
+        self._order: list[tuple[str, StatTile]] = []
+        self._ocultos: set[str] = set()
+        """Chaves que a maquina nao tem como preencher; ver show_only.
+
+        A lista de escondidos vive aqui, e nao em `isHidden()` de cada tile,
+        por causa de um ovo-e-galinha: um widget recem-criado, ainda sem pai,
+        responde `isHidden()` verdadeiro. O filtro entao nunca punha nenhum tile
+        no grid, e sem entrar no grid ele nunca ganhava pai — a faixa inteira
+        ficava vazia em todas as telas que nao chamam show_only.
+        """
         for key, caption, unit in specs:
             tile = StatTile(caption, unit)
             tile.setMinimumWidth(theme.scaled(_TILE_MIN))
             self.tiles[key] = tile
-            self._order.append(tile)
+            self._order.append((key, tile))
         self._relayout(self._max_columns)
 
     def _relayout(self, columns: int, forcar: bool = False) -> None:
@@ -295,7 +304,7 @@ class KpiStrip(QWidget):
             self._grid.takeAt(0)
         for i in range(self._grid.columnCount()):
             self._grid.setColumnStretch(i, 0)
-        visiveis = [t for t in self._order if not t.isHidden()]
+        visiveis = [t for chave, t in self._order if chave not in self._ocultos]
         for i, tile in enumerate(visiveis):
             self._grid.addWidget(tile, i // columns, i % columns)
         for i in range(min(columns, len(visiveis) or 1)):
@@ -308,15 +317,13 @@ class KpiStrip(QWidget):
         quebrado — numa maquina sem sensor de temperatura, ou sem GPU dedicada,
         e' melhor a faixa ficar menor e inteira do que grande e furada.
         """
-        alvo = set(keys)
-        mudou = False
+        ocultos = {chave for chave in self.tiles if chave not in set(keys)}
+        if ocultos == self._ocultos:
+            return
+        self._ocultos = ocultos
         for chave, tile in self.tiles.items():
-            deveria = chave in alvo
-            if tile.isHidden() == deveria:
-                tile.setVisible(deveria)
-                mudou = True
-        if mudou:
-            self._relayout(self._columns, forcar=True)
+            tile.setVisible(chave not in ocultos)
+        self._relayout(self._columns, forcar=True)
 
     def resizeEvent(self, event) -> None:
         gap = theme.scaled(theme.GAP)
