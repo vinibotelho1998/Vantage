@@ -1,4 +1,4 @@
-"""Popup de confirmar-ou-desfazer para mudancas de tela.
+"""Popups de confirmacao: o de confirmar-ou-desfazer das telas e o sim/nao geral.
 
 Mexer em resolucao, rotacao ou topologia e' a unica coisa no app que pode deixar
 a maquina sem imagem. O padrao do Windows resolve isso com um dialogo modal e um
@@ -121,6 +121,59 @@ class ConfirmRevertDialog(QDialog):
         area = screen.availableGeometry()
         self.move(area.center().x() - self.width() // 2,
                   area.center().y() - self.height() // 2)
+
+
+class ConfirmDialog(QDialog):
+    """Sim ou nao para uma acao que nao tem desfazer.
+
+    Nao e' QMessageBox porque o app desenha a propria barra de titulo e vive num
+    tema escuro: o dialogo nativo abre branco no meio da tela e parece de outro
+    programa — justo na hora em que a pessoa precisa confiar no que esta' lendo.
+    """
+
+    def __init__(self, titulo: str, texto: str, rotulo_ok: str = "Confirmar",
+                 perigo: bool = False, parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("SettingsRoot")
+        self.setWindowTitle("DBX Stats")
+        self.setWindowFlag(Qt.WindowType.WindowContextHelpButtonHint, False)
+        self.setModal(True)
+        self.setMinimumWidth(theme.scaled(430))
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(*(theme.scaled(18),) * 4)
+        root.setSpacing(theme.scaled(10))
+
+        cabeca = QLabel(titulo)
+        cabeca.setFont(QFont(theme.FONT_UI, max(8, theme.scaled(12)), QFont.Weight.Bold))
+        cabeca.setWordWrap(True)
+        root.addWidget(cabeca)
+
+        corpo = QLabel(texto)
+        corpo.setWordWrap(True)
+        corpo.setStyleSheet(f"color: {theme.MUTE};")
+        root.addWidget(corpo)
+
+        linha = QHBoxLayout()
+        linha.addStretch(1)
+        cancelar = QPushButton("Cancelar")
+        cancelar.clicked.connect(self.reject)
+        # Enter cai no Cancelar de proposito: acao destrutiva nunca pode ser o
+        # que acontece quando alguem so' queria fechar a janela no teclado.
+        cancelar.setDefault(True)
+        aceitar = QPushButton(rotulo_ok)
+        aceitar.setObjectName("Danger" if perigo else "Accent")
+        aceitar.clicked.connect(self.accept)
+        linha.addWidget(cancelar)
+        linha.addWidget(aceitar)
+        root.addLayout(linha)
+
+
+def confirmar(titulo: str, texto: str, rotulo_ok: str = "Confirmar",
+              perigo: bool = False, parent=None) -> bool:
+    """Pergunta e devolve True so' se a pessoa clicou no botao de confirmar."""
+    dlg = ConfirmDialog(titulo, texto, rotulo_ok, perigo, parent)
+    return dlg.exec() == QDialog.DialogCode.Accepted
 
 
 def confirm_or_revert(description: str, seconds: int, undo: Callable[[], None],
