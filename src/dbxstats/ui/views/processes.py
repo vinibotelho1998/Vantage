@@ -33,6 +33,22 @@ from ..confirm import confirmar
 from .base import View
 
 _HEADERS = ["Processo", "PID", "CPU", "Memória", "Threads"]
+_ORDENS = ("name", "pid", "cpu", "ram", "threads")
+"""Coluna -> criterio de ordenacao, na mesma ordem de _HEADERS."""
+_ROTULO_ORDEM = {"name": "nome", "pid": "PID", "cpu": "CPU",
+                 "ram": "memória", "threads": "threads"}
+
+
+def _chave_ordem(criterio: str):
+    if criterio == "name":
+        return lambda p: p.name.lower()
+    if criterio == "pid":
+        return lambda p: p.pid
+    if criterio == "ram":
+        return lambda p: p.ram_mb
+    if criterio == "threads":
+        return lambda p: p.threads
+    return lambda p: p.cpu
 _KPIS = [
     ("procs", "Processos", ""), ("threads", "Threads", ""), ("cpu", "CPU total", "%"),
     ("ram", "RAM usada", "GB"), ("top", "Maior consumidor", ""),
@@ -264,6 +280,17 @@ class ProcessesView(View):
         self.status.setWordWrap(True)
         root.addWidget(self.status)
 
+        # Faixa do processo escolhido. A tabela se reordena a cada 2,5 s e o
+        # destaque da linha viaja junto — dizer em letra grande QUEM esta' na
+        # mira e' o que evita apertar "Finalizar" achando que era outro.
+        self.escolhido = Card("Nenhum processo selecionado", theme.FAINT,
+                              "clique numa linha da lista")
+        self.escolhido_txt = label("Escolha um processo para agir sobre ele.", 9,
+                                   color=theme.MUTE)
+        self.escolhido_txt.setWordWrap(True)
+        self.escolhido.add(self.escolhido_txt)
+        root.addWidget(self.escolhido)
+
         card = Card("Em execução", theme.RAM, "atualiza a cada 2,5 s")
         self.table = QTableWidget(0, len(_HEADERS))
         self.table.setHorizontalHeaderLabels(_HEADERS)
@@ -276,8 +303,16 @@ class ProcessesView(View):
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._menu)
         self.table.itemSelectionChanged.connect(self._selecao_mudou)
+        # O realce padrao do tema e' discreto demais para uma lista que se
+        # reordena sozinha: com a linha mudando de lugar, o azul fraco se perde.
+        accent = theme.accent_color(self.cfg.accent)
+        self.table.setStyleSheet(
+            f"QTableWidget::item:selected {{ background: {accent}; color: #06121c; }}"
+            f"QTableWidget {{ selection-background-color: {accent}; }}")
         header = self.table.horizontalHeader()
         header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        header.setSectionsClickable(True)
+        header.sectionClicked.connect(self._ordenar_por)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         for i, width in ((1, 80), (2, 100), (3, 120), (4, 90)):
             header.setSectionResizeMode(i, QHeaderView.ResizeMode.Fixed)
@@ -287,12 +322,43 @@ class ProcessesView(View):
         card.add(self.table, 1)
         root.addWidget(card, 1)
 
-        self._sort_ram = False
         self._sel_pid: int | None = None
+        self._ordem = "cpu"
+        self._desc = True
+        self._marcar_ordem()
+
+    def _ordenar_por(self, coluna: int) -> None:
+        """Clique no cabecalho ordena por aquela coluna; de novo, inverte.
+
+        Vale mais que um botao de alternar entre duas ordens: quem procura "o
+        que esta' comendo a RAM" pensa na coluna, nao num modo escondido atras
+        de um botao.
+        """
+        chave = _ORDENS[coluna]
+        if chave == self._ordem:
+            self._desc = not self._desc
+        else:
+            self._ordem = chave
+            # Numero comeca do maior, nome comeca do A: e' o que se espera.
+            self._desc = chave != "name"
+        self._marcar_ordem()
+
+    def _marcar_ordem(self) -> None:
+        seta = " ▼" if self._desc else " ▲"
+        for i, titulo in enumerate(_HEADERS):
+            item = self.table.horizontalHeaderItem(i)
+            if item is not None:
+                item.setText(titulo + (seta if _ORDENS[i] == self._ordem else ""))
+        self.sort_btn.setText(f"Ordem: {_ROTULO_ORDEM[self._ordem]}"
+                              + (" ↓" if self._desc else " ↑"))
 
     def _toggle_sort(self) -> None:
-        self._sort_ram = not self._sort_ram
-        self.sort_btn.setText("Ordenar por RAM" if self._sort_ram else "Ordenar por CPU")
+        """O botao percorre as ordens, para quem prefere nao clicar no cabecalho."""
+        chaves = [c for c in _ORDENS if c]
+        atual = chaves.index(self._ordem) if self._ordem in chaves else 0
+        self._ordem = chaves[(atual + 1) % len(chaves)]
+        self._desc = self._ordem != "name"
+        self._marcar_ordem()
 
     def on_settings_changed(self) -> None:
         self.sort_btn.set_color(theme.accent_color(self.cfg.accent))
@@ -320,6 +386,39 @@ class ProcessesView(View):
         self.kill_btn.set_color(theme.BAD if ativo else theme.FAINT)
         if ativo:
             self._dizer(f"{alvo[1]} (PID {alvo[0]}) selecionado.", theme.MUTE)
+        self._pintar_escolhido(alvo)
+
+    def _pintar_escolhido(self, alvo) -> None:
+        """Faixa do topo com quem esta' na mira, e o que ja' se sabe dele."""
+        if alvo is None:
+            self.escolhido.set_title("Nenhum processo selecionado")
+            self.escolhido.set_hint("clique numa linha da lista", theme.FAINT)
+            self.escolhido_txt.setText("Escolha um processo para agir sobre ele.")
+            self.escolhido_txt.setStyleSheet(f"color: {theme.MUTE}; background: transparent;")
+            return
+        pid, nome = alvo
+        self.escolhido.set_title(f"{nome}   ·   PID {pid}")
+        bloqueio = P.bloqueio_encerrar(nome, pid)
+        if bloqueio:
+            self.escolhido.set_hint("protegido pelo Windows", theme.BAD)
+            self.escolhido_txt.setText(bloqueio)
+            self.escolhido_txt.setStyleSheet(f"color: {theme.BAD}; background: transparent;")
+            return
+        self.escolhido.set_hint("pronto para agir", theme.OK)
+        self.escolhido_txt.setStyleSheet(f"color: {theme.TXT}; background: transparent;")
+        d = P.detalhes(pid, nome)
+        partes = []
+        rotulo = P.rotulo_prioridade(d.get("prioridade"))
+        if rotulo:
+            partes.append(f"Prioridade: {rotulo}")
+        nucleos = d.get("nucleos")
+        if nucleos:
+            partes.append(f"Núcleos: {P.formatar_nucleos(nucleos)}")
+        aviso = P.aviso_encerrar(nome)
+        if aviso:
+            partes.append(aviso)
+        self.escolhido_txt.setText("   ·   ".join(partes)
+                                   or "Pronto para priorizar, fixar em núcleos ou finalizar.")
 
     def _restaurar_selecao(self, rows) -> None:
         """Mantem o destaque no mesmo processo mesmo quando a ordem muda.
@@ -438,7 +537,7 @@ class ProcessesView(View):
         needle = self.filter.text().strip().lower()
         if needle:
             rows = [p for p in rows if needle in p.name.lower()]
-        rows = sorted(rows, key=lambda p: -(p.ram_mb if self._sort_ram else p.cpu))
+        rows = sorted(rows, key=_chave_ordem(self._ordem), reverse=self._desc)
 
         count, threads = self.app.procs.totals()
         self.kpi.set("procs", str(count or (d or {}).get("processes", 0)), theme.TXT)

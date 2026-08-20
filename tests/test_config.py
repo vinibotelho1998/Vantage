@@ -113,3 +113,34 @@ def test_atalho_alvo_invalido_vira_vazio():
 def test_atalho_guarda_alvo_de_primaria():
     s = Settings.from_dict({"launch_items": [{"path": "a.exe", "target": r"primary:MON\TV"}]})
     assert s.launch_items[0]["target"] == r"primary:MON\TV"
+
+
+# ── filtros do grafico do painel ─────────────────────────────────────────────
+def test_linhas_do_painel_sobrevivem_ao_disco():
+    """Escolher o que olhar e' trabalho; refazer a cada abertura e' atrito."""
+    c = Settings()
+    c.dashboard_plots = ["cpu", "gpu"]
+    c.sanitize()
+    assert c.dashboard_plots == ["cpu", "gpu"]
+
+
+def test_linha_desconhecida_e_descartada():
+    c = Settings()
+    c.dashboard_plots = ["cpu", "npu", "gpu"]
+    c.sanitize()
+    assert c.dashboard_plots == ["cpu", "gpu"]
+
+
+def test_lista_vazia_volta_ao_padrao():
+    """Grafico em branco sem explicacao parece defeito, nao escolha."""
+    c = Settings()
+    c.dashboard_plots = []
+    c.sanitize()
+    assert set(c.dashboard_plots) == {"cpu", "gpu", "ram", "vram"}
+
+
+def test_lixo_no_arquivo_nao_derruba():
+    c = Settings()
+    c.dashboard_plots = "cpu"
+    c.sanitize()
+    assert isinstance(c.dashboard_plots, list)

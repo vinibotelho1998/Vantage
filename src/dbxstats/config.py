@@ -35,6 +35,13 @@ DASH_CARDS = [
 ]
 _DASH_KEYS = {k for k, _ in DASH_CARDS}
 
+DISKBENCH_PHASES = [
+    ("wseq", "Escrita seq."), ("rseq", "Leitura seq."),
+    ("ralea", "Leitura 4K"), ("walea", "Escrita 4K"),
+]
+"""Fases do teste de disco. As chaves espelham sensors/diskbench.CHAVES_FASES."""
+_DISKBENCH_KEYS = {k for k, _ in DISKBENCH_PHASES}
+
 
 @dataclass
 class Settings:
@@ -103,6 +110,22 @@ class Settings:
     bench_seconds: int = 60
     bench_autosave: bool = True
 
+    # teste de disco
+    diskbench_drive: str = ""
+    """Unidade da ultima corrida. Vazio = a primeira que o coletor listar."""
+    diskbench_size_mib: int = 1024
+    """Tamanho do arquivo de teste. Manda tambem na checagem de espaco livre."""
+    diskbench_phases: list[str] = field(
+        default_factory=lambda: [k for k, _ in DISKBENCH_PHASES])
+    diskbench_seconds: float = 1.5
+    """Tempo minimo de medicao por fase."""
+    diskbench_queue_depth: int = 1
+    """Sempre 1: o motor usa I/O sincrono, e fila maior precisaria de OVERLAPPED.
+
+    O campo existe para o dia em que isso mudar — e para deixar registrado que o
+    QD1 e' uma limitacao assumida, nao um esquecimento.
+    """
+
     # telas
     display_profiles: list[dict] = field(default_factory=list)
     """Cada perfil e' {"name", "hotkey", "entries": [...]}. Ver platform/displays.py."""
@@ -112,6 +135,12 @@ class Settings:
     """Ao fechar, devolve as telas ao arranjo normal."""
     display_restore_after_game: bool = True
     """Quando um jogo fecha, devolve as telas ao perfil padrao — abriu por onde abriu."""
+    dashboard_plots: list = field(default_factory=lambda: ["cpu", "gpu", "ram", "vram"])
+    """Linhas ligadas no grafico do painel.
+
+    Guardado porque escolher o que olhar e' trabalho, e refazer a cada abertura
+    e' o tipo de atrito que faz a pessoa parar de usar o filtro.
+    """
     display_default_profile: str = ""
     display_off_by_default: list = field(default_factory=list)
     """monitor_id das telas que devem nascer apagadas.
@@ -200,6 +229,8 @@ class Settings:
         self.dash_cards = [c for c in _as_list(self.dash_cards)
                            if c in _DASH_KEYS] or [k for k, _ in DASH_CARDS]
 
+        self._sanitize_diskbench()
+
         self.display_confirm_seconds = int(_clamp(_num(self.display_confirm_seconds, 15), 0, 60))
         self.launch_items = [i for i in
                              (_clean_launch_item(i) for i in _as_list(self.launch_items))
@@ -217,6 +248,33 @@ class Settings:
         self.gamepad_bindings = _clean_bindings(self.gamepad_bindings)
         self.display_off_by_default = [str(x) for x in _as_list(self.display_off_by_default)
                                        if str(x)]
+        conhecidas = {"cpu", "gpu", "ram", "vram"}
+        plots = [str(x) for x in _as_list(self.dashboard_plots) if str(x) in conhecidas]
+        # Lista vazia deixaria o grafico em branco sem explicacao nenhuma; nesse
+        # caso e' mais provavel arquivo estragado do que escolha deliberada.
+        self.dashboard_plots = plots or sorted(conhecidas)
+
+    def _sanitize_diskbench(self) -> None:
+        """Opcoes do teste de disco: valor estragado vira padrao, nunca lixo.
+
+        Este e' o unico bloco de configuracao que manda o app escrever gigabytes
+        na unidade do usuario. Um settings.json editado a mao com 999999 MiB nao
+        pode virar um pedido de 1 TB de arquivo temporario — o teto aqui e' a
+        primeira barreira, e a checagem de espaco livre do motor e' a segunda.
+        """
+        from .sensors.diskbench import PROFUNDIDADES, SEGUNDOS_POR_FASE, TAMANHOS_MIB
+        self.diskbench_size_mib = int(_nearest(_num(self.diskbench_size_mib, 1024),
+                                               TAMANHOS_MIB))
+        self.diskbench_seconds = float(_nearest(_num(self.diskbench_seconds, 1.5),
+                                                SEGUNDOS_POR_FASE))
+        if self.diskbench_queue_depth not in PROFUNDIDADES:
+            self.diskbench_queue_depth = PROFUNDIDADES[0]
+        # Ordem canonica, e nao a que veio do arquivo: ler antes de escrever
+        # mediria um arquivo vazio. Lista vazia vira o teste completo.
+        marcadas = {str(f) for f in _as_list(self.diskbench_phases)}
+        self.diskbench_phases = [k for k, _ in DISKBENCH_PHASES
+                                 if k in marcadas] or [k for k, _ in DISKBENCH_PHASES]
+        self.diskbench_drive = str(self.diskbench_drive or "").strip()[:8]
 
     # ── persistencia ─────────────────────────────────────────────────────────
     @classmethod

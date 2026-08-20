@@ -89,6 +89,9 @@ class DashboardView(View):
             chip.mousePressEvent = lambda _e, k=key: self._toggle(k)
             self._toggles[key] = chip
             legend.addWidget(chip)
+            if key not in self.cfg.dashboard_plots:
+                self.chart.toggle_plot(key)
+                chip.set_color(theme.FAINT)
         legend.addStretch(1)
         self._span_label = label("", 7.5, QFont.Weight.Normal, theme.FAINT)
         legend.addWidget(self._span_label)
@@ -100,6 +103,9 @@ class DashboardView(View):
         plot = self.chart.plot(key)
         chip = self._toggles[key]
         chip.set_color(plot.color if plot.visible else theme.FAINT)
+        self.cfg.dashboard_plots = [k for k in self._toggles
+                                    if self.chart.plot(k).visible]
+        self.cfg.save()
 
     def _build_fps_card(self) -> Card:
         card = Card("Jogo em foco", theme.FPS)
