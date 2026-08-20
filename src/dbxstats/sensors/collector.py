@@ -204,6 +204,8 @@ class Collector:
                 "freq": lhm.get("gpu_freq"),
                 "mem_freq": lhm.get("gpu_mem_freq"),
                 "mem_ctrl": lhm.get("gpu_mem_ctrl"),
+                "vram_volts": lhm.get("gpu", {}).get("vram_volts")
+                if isinstance(lhm.get("gpu"), dict) else None,
                 "video_engine": lhm.get("gpu_video_engine"),
                 "volts": lhm.get("gpu_volts"),
                 "vram_used": lhm.get("gpu_vram_used"),

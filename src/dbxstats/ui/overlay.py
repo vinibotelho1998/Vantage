@@ -709,12 +709,18 @@ class GameOverlay(QWidget):
             self._set("gpu", CAUDA, _watt(g.get("watts"), limite) if watts else "")
 
     def _pintar_memoria(self, d: dict, g: dict, stream, metrics: set[str]) -> None:
+        # A coluna de tensao ficava vazia nas duas linhas de memoria. Quando a
+        # placa expoe o trilho, ele cabe exatamente ali — e um numero util vale
+        # mais que uma coluna reservada para nada.
+        volts_mem = "volts" in metrics
         if "vram" in self._dados:
             usado, total = _gb(g.get("vram_used")), _gb(g.get("vram_total"))
             par = f"{usado:.1f}/{total:.1f}GB" if total else ""
             barra = _barra(usado, total, theme.DISK)
             self._set("vram", CARGA, f"{par}&nbsp;&nbsp;{barra}" if par else "")
             self._set("vram", TEMP, "")
+            self._set("vram", VOLT,
+                      _volt(g.get("vram_volts")) if volts_mem else "")
             if "temps_mem" in metrics and g.get("temp_vram") is not None:
                 self._set("vram", TEMP, units.temp(g["temp_vram"]).replace(" ", ""),
                           theme.vram_temp_color(g["temp_vram"]))
@@ -740,16 +746,19 @@ class GameOverlay(QWidget):
                            destaque=(jogo or 0) / 1024.0 if jogo else None)
             self._set("ram", CARGA, f"{par}&nbsp;&nbsp;{barra}" if par else "")
             self._set("ram", TEMP, "")
+            self._set("ram", VOLT, _volt(d.get("ram_volts")) if volts_mem else "")
             if "temps_mem" in metrics and d.get("ram_temp") is not None:
                 self._set("ram", TEMP, units.temp(d["ram_temp"]).replace(" ", ""),
                           dimm_color(d))
             cauda = []
             if "jogo_ram" in metrics and jogo:
-                wset = d.get("game_ram_wset")
-                if "jogo_ram_ws" in metrics and wset:
-                    cauda.append(f"jogo {jogo / 1024:.1f}/{wset / 1024:.1f}G")
-                else:
-                    cauda.append(f"jogo {jogo / 1024:.1f}G")
+                # Um numero so'. O par privada/working set escrevia "9.2/7.9G",
+                # que nao se explica sozinho e ainda parecia "usado/total" — com
+                # o segundo MENOR que o primeiro, o que nao faz sentido nenhum
+                # nessa leitura.
+                cauda.append(f"jogo {jogo / 1024:.1f}GB")
+                if "jogo_ram_ws" in metrics and d.get("game_ram_wset"):
+                    cauda.append(f"na RAM {d['game_ram_wset'] / 1024:.1f}GB")
             if "mem_clock" in metrics and d.get("ram_freq"):
                 # MT/s, nunca GHz: "6.00GHz" logo abaixo de "5.20GHz" convida a
                 # comparar coisas que nao se comparam.

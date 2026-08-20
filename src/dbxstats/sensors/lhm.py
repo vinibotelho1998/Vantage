@@ -350,6 +350,8 @@ class LhmReader:
                 g["temp_hotspot"] = int(f)
             elif st == "Temperature" and "Memory" in name and f > 0:
                 g["temp_vram"] = int(f)
+            elif st == "Voltage" and _e_trilho_de_memoria(name) and f > 0:
+                g["vram_volts"] = round(f, 3)
             elif st == "Power" and f > 0 and "watts" not in g:
                 g["watts"] = round(f, 1)
             elif st == "Clock" and name == "GPU Core":
@@ -426,7 +428,14 @@ class LhmReader:
         """
         modulo: dict = {}
         for s in hw.Sensors:
-            if str(s.SensorType) != "Temperature" or s.Value is None:
+            if s.Value is None:
+                continue
+            if str(s.SensorType) == "Voltage" and float(s.Value) > 0:
+                # Trilho do proprio pente, quando o modulo publica. Preenche a
+                # coluna de tensao que ficava vazia na linha da RAM.
+                result.setdefault("ram_volts", round(float(s.Value), 3))
+                continue
+            if str(s.SensorType) != "Temperature":
                 continue
             name = str(s.Name)
             f = round(float(s.Value), 2)
@@ -528,6 +537,18 @@ class LhmReader:
         disks.append(entry)
         if "temp" in entry and "nvme_temp" not in result:
             result["nvme_temp"] = entry["temp"]
+
+
+def _e_trilho_de_memoria(nome: str) -> bool:
+    """O nome do sensor diz que aquela tensao e' de memoria?
+
+    Exigir o nome e' proposital. Ha' placas em que o trilho existe mas chega
+    como "Voltage #7", sem identificacao — e adivinhar qual dos sete e' o da
+    memoria produziria um numero errado com cara de certo, que e' pior do que
+    deixar a celula vazia.
+    """
+    n = (nome or "").lower()
+    return any(t in n for t in ("vddq", "vddio", "vdd mem", "memory", "vram", "dimm"))
 
 
 def _core_index(name: str) -> int:
