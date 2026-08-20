@@ -85,6 +85,41 @@ def _header(text: str) -> QLabel:
     return lbl
 
 
+_EXPLICACOES = {
+    "fps": "Quadros por segundo agora, no número grande.",
+    "graph": "Traço da última janela de FPS. O número sozinho não mostra queda: "
+             "é o traço que denuncia o engasgo que já passou.",
+    "low1": "Média dos 1% piores quadros da janela. É o que se sente como "
+            "travada, mesmo com a média alta.",
+    "frametime": "Tempo médio de cada quadro, em milissegundos. 16,7 ms é 60 fps.",
+    "limite": "Quem está segurando o FPS: CPU, GPU, os dois, ou um limite de "
+              "VSync/cap. A porcentagem diz em quantos quadros isso valeu.",
+    "engasgo": "Fração de quadros que demoraram bem mais que o anterior. É o "
+               "solavanco que se sente mesmo quando a média continua boa.",
+    "cpu": "Uso, clock e temperatura do processador.",
+    "gpu": "Uso, clock e temperatura da placa de vídeo.",
+    "watts": "Consumo em watts de cada peça.",
+    "volts": "Tensão de núcleo. Ao lado do clock, mostra a peça baixando "
+             "frequência por limite térmico ou de energia.",
+    "vram": "Memória da placa de vídeo em uso e o total.",
+    "ram": "Memória do sistema em uso e o total.",
+    "temps_mem": "Temperatura da VRAM e dos pentes de RAM. A dos pentes depende "
+                 "da placa-mãe expor o sensor.",
+    "mem_ctrl": "Quanto da banda de memória da placa está em uso. Perto de 100% "
+                "significa que a VRAM é o caminho estreito, não a capacidade.",
+    "jogo_ram": "Memória privada do jogo — o que ele realmente reservou.",
+    "jogo_ram_ws": "Memória do jogo residente na RAM agora (working set). "
+                   "Costuma ser maior que a privada porque inclui o que é "
+                   "compartilhado com o sistema.",
+    "mem_clock": "Clock das memórias.",
+    "teto_watts": "Limite de potência da placa, ao lado do consumo. Consumo "
+                  "colado no teto explica clock abaixo do esperado.",
+    "ping": "Latência até o servidor da partida. Em jogo sem servidor aparece "
+            "\"local\" no lugar do número.",
+    "clock": "Hora, discreta no rodapé.",
+}
+
+
 class _CfgPrevia:
     """Configuracao de mentira: o que esta' salvo, com a aba por cima.
 
@@ -368,6 +403,7 @@ class SettingsDialog(QDialog):
         self.overlay_checks: dict[str, QCheckBox] = {}
         for i, (key, text) in enumerate(OVERLAY_METRICS):
             chk = QCheckBox(text)
+            chk.setToolTip(_EXPLICACOES.get(key, ""))
             chk.setChecked(key in active)
             self.overlay_checks[key] = chk
             grid.addWidget(chk, i // 3, i % 3)

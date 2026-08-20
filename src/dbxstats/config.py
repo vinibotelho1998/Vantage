@@ -25,11 +25,13 @@ SETTINGS_VERSION = 2
 
 OVERLAY_METRICS = [
     ("fps", "FPS"), ("graph", "Gráfico de FPS"), ("low1", "1% Low"),
-    ("frametime", "Frametime"), ("limite", "Quem está no limite"),
+    ("frametime", "Frametime"), ("limite", "Gargalo (quem segura o FPS)"),
     ("cpu", "CPU (uso/clock/temp)"), ("gpu", "GPU (uso/clock/temp)"),
     ("watts", "Consumo"), ("volts", "Tensão"),
     ("vram", "VRAM"), ("ram", "RAM"),
-    ("temps_mem", "Temperatura das memórias"), ("mem_ctrl", "Controlador de VRAM"),
+    ("engasgo", "Engasgos (% de quadros)"),
+    ("temps_mem", "Temperatura das memórias"),
+    ("mem_ctrl", "Uso da banda de VRAM"),
     ("jogo_ram", "RAM do jogo"), ("jogo_ram_ws", "RAM do jogo (working set)"),
     ("mem_clock", "Clock das memórias"), ("teto_watts", "Limite de potência"),
     ("ping", "Ping"), ("clock", "Relógio"),

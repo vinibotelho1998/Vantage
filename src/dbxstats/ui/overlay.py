@@ -150,6 +150,24 @@ def _largura_cauda(metrics: set[str]) -> int:
     return max(watts, vram, ram)
 
 
+def _uso(pct: float | None, cor: str, compacto: bool = False) -> str:
+    """Porcentagem com a barrinha ao lado.
+
+    A barra ja' existia so' nas memorias, onde a proporcao se le' melhor que o
+    par de numeros. Vale igual para carga: "98%" e' um numero que precisa ser
+    lido, a barra quase cheia e' vista de canto de olho, no meio de uma partida.
+
+    No modo compacto ela sai. Esse modo existe justamente para devolver largura
+    quando o overlay ficou grande demais para a tela, e dez caracteres de barra
+    e' exatamente o tipo de coisa que ele precisa cortar primeiro.
+    """
+    if pct is None:
+        return ""
+    if compacto:
+        return f"{pct:.0f}%"
+    return f"{pct:.0f}%&nbsp;&nbsp;{_barra(pct, 100.0, cor)}"
+
+
 def _barra(usado: float | None, total: float | None, cor: str,
            destaque: float | None = None) -> str:
     """Barra de ocupacao em rich text, com uma fatia destacada opcional.
@@ -307,7 +325,10 @@ class GameOverlay(QWidget):
         linha = QHBoxLayout(self._limite_box)
         linha.setContentsMargins(0, 0, 0, 0)
         linha.setSpacing(int(8 * scale))
-        self._limite_tag = QLabel("LIMITE")
+        # "LIMITE" sozinho nao dizia nada: limite de que? O painel ja' chama
+        # essa mesma leitura de "Gargalo", que e' o termo que se usa entre
+        # jogadores — dois nomes para a mesma coisa so' confundiam.
+        self._limite_tag = QLabel("GARGALO")
         self._limite_tag.setFont(_mono(8, QFont.Weight.Bold, scale))
         self._limite_tag.setStyleSheet(f"color: {theme.FAINT};")
         self._limite = QLabel("")
@@ -325,6 +346,7 @@ class GameOverlay(QWidget):
         # aqui: um setVisible(True) num widget sem pai viraria uma janelinha
         # solta no meio da tela do jogo.
         self._limite_on = "limite" in metrics
+        self._engasgo_on = "engasgo" in metrics
         if self._limite_on:
             lay.addWidget(self._limite_box)
 
@@ -577,7 +599,8 @@ class GameOverlay(QWidget):
         # repinta a 3 Hz: o rotulo responde "quem segurou o ultimo minuto", nao
         # "quem esta' segurando agora". A porcentagem ao lado existe para isso —
         # ela diz o quanto do minuto sustenta a afirmacao.
-        engasgo = f"engasgo {m.stutter_pct:.1f}%" if m.frames else ""
+        engasgo = (f"engasgo {m.stutter_pct:.1f}%"
+                   if m.frames and self._engasgo_on else "")
         self._engasgo.setText(engasgo)
         self._engasgo.setStyleSheet(f"color: {theme.stutter_color(m.stutter_pct)};")
         self._limite_tag.setVisible(bool(veredito))
@@ -590,7 +613,7 @@ class GameOverlay(QWidget):
         watts = "watts" in metrics
         teto = "teto_watts" in metrics
         if "cpu" in self._dados:
-            self._set("cpu", CARGA, _pct(d.get("cpu_pct")),
+            self._set("cpu", CARGA, _uso(d.get("cpu_pct"), theme.CPU, self._compacto),
                       theme.load_color(d.get("cpu_pct")))
             self._set("cpu", CLOCK, _ghz(d.get("cpu_mhz")))
             self._set("cpu", VOLT, _volt(d.get("cpu_volts")) if volts else "")
@@ -603,7 +626,8 @@ class GameOverlay(QWidget):
             self._set("cpu", CAUDA,
                       _watt(d.get("cpu_watts")) if watts else "")
         if "gpu" in self._dados:
-            self._set("gpu", CARGA, _pct(g.get("usage")), theme.load_color(g.get("usage")))
+            self._set("gpu", CARGA, _uso(g.get("usage"), theme.GPU, self._compacto),
+                      theme.load_color(g.get("usage")))
             self._set("gpu", CLOCK, _ghz(g.get("freq")))
             self._set("gpu", VOLT, _volt(g.get("volts")) if volts else "")
             self._temps("gpu", g.get("temp"), g.get("temp_hotspot"), theme.temp_color)
@@ -623,7 +647,9 @@ class GameOverlay(QWidget):
                           theme.vram_temp_color(g["temp_vram"]))
             cauda = []
             if "mem_ctrl" in metrics and g.get("mem_ctrl") is not None:
-                cauda.append(f"ctrl {g['mem_ctrl']:.0f}%")
+                # "ctrl" nao dizia nada. O numero e' quanto da banda de
+                # memoria da placa esta' em uso — e' assim que ele se le'.
+                cauda.append(f"banda {g['mem_ctrl']:.0f}%")
             if "mem_clock" in metrics and g.get("mem_freq"):
                 cauda.append(_ghz(g.get("mem_freq")))
             self._set("vram", CAUDA, " ".join(cauda))

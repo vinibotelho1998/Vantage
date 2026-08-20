@@ -29,3 +29,17 @@ def test_nao_derruba_o_app_quando_a_api_falta():
         _identidade_na_barra()      # nao pode levantar
     finally:
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID = original
+
+
+def test_o_icone_e_empacotado_junto():
+    """O icone embutido no .exe serve ao Explorer, nao a barra de tarefas.
+
+    A barra usa o icone da JANELA, carregado deste arquivo em tempo de execucao.
+    Ele nao estava sendo copiado para o pacote, entao setWindowIcon nunca rodava
+    e a janela ficava com o icone generico do Windows.
+    """
+    import pathlib
+
+    spec = pathlib.Path("packaging/DBXStats.spec").read_text(encoding="utf-8")
+    assert '"icon.ico"), "assets"' in spec, "o .ico precisa entrar em datas"
+    assert pathlib.Path("assets/icon.ico").exists()

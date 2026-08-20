@@ -42,6 +42,12 @@ a = Analysis(
     datas=[
         (os.path.join(ROOT, "vendor", "lhm"), "lhm"),
         (os.path.join(ROOT, "tools", "presentmon.exe"), "tools"),
+        # O icone precisa vir junto: o embutido no .exe serve para o Explorer,
+        # mas a barra de tarefas usa o icone da JANELA, e ele e' carregado deste
+        # arquivo em tempo de execucao. Sem ele no pacote, setWindowIcon nunca
+        # roda e a janela fica com o icone generico do Windows.
+        (os.path.join(ROOT, "assets", "icon.ico"), "assets"),
+        (os.path.join(ROOT, "assets", "icon.png"), "assets"),
     ],
     hiddenimports=["wmi", "pynvml", "clr", "win32api", "win32con", "win32gui"],
     hookspath=[],
