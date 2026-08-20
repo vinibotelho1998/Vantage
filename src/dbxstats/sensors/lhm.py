@@ -116,6 +116,10 @@ class LhmReader:
         self._tree: list[SensorNode] = []
         self._tree_lock = threading.Lock()
         self._rails_logados = False
+        self.rails_vistos: list[tuple[str, float]] = []
+        """Trilhos de tensao da placa, para a interface poder oferecer a escolha."""
+        self.mem_rail = ""
+        """Trilho que o usuario elegeu como tensao da memoria."""
         self._rails: dict[str, tuple[float, float]] = {}
         """Minimo e maximo ja' vistos de cada voltagem da placa; ver _vcore."""
         self._spd_at = 0.0
@@ -501,6 +505,15 @@ class LhmReader:
             self._rails_logados = True
             _log.info("trilhos de tensao da placa: %s",
                       "; ".join(f"{n}={v:.3f}V" for _, n, v in rails))
+
+        self.rails_vistos = [(n, v) for _, n, v in rails]
+
+        escolhido = getattr(self, "mem_rail", "")
+        if escolhido:
+            for _, nome, valor in rails:
+                if nome == escolhido:
+                    result["ram_volts"] = round(valor, 3)
+                    break
 
         for _, nome, valor in rails:
             if any(t in nome.lower() for t in _VCORE_NOMES):

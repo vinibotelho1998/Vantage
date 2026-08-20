@@ -32,18 +32,16 @@ OVERLAY_METRICS = [
     ("engasgo", "Engasgos (% de quadros)"),
     ("temps_mem", "Temperatura das memórias"),
     ("mem_ctrl", "Uso da banda de VRAM"),
-    ("jogo_ram", "RAM do jogo"), ("jogo_ram_ws", "RAM do jogo (working set)"),
+    ("jogo_ram", "RAM do jogo"),
     ("mem_clock", "Clock das memórias"), ("teto_watts", "Limite de potência"),
     ("ping", "Ping"), ("clock", "Relógio"),
 ]
 _OVERLAY_KEYS = {k for k, _ in OVERLAY_METRICS}
 
-OVERLAY_OFF_BY_DEFAULT = frozenset({"jogo_ram_ws", "teto_watts", "mem_ctrl",
-                                    "mem_clock"})
+OVERLAY_OFF_BY_DEFAULT = frozenset({"teto_watts", "mem_ctrl", "mem_clock"})
 """Fora do padrao por atrapalharem mais do que informam no meio de uma partida.
 
-O working set ao lado do private bytes poe dois numeros na mesma celula e pede
-explicacao; o teto de potencia so' existe onde ha' sensor de limite real, e
+O teto de potencia so' existe onde ha' sensor de limite real, e
 inventar o teto seria pior que nao mostrar; e a banda do controlador de memoria
 e' um numero de perfilamento, nao de partida — quem esta' jogando nao decide
 nada com ele. O clock das memorias fica cravado o jogo inteiro e nao explica
@@ -191,6 +189,13 @@ class Settings:
     e' o tipo de atrito que faz a pessoa parar de usar o filtro.
     """
     display_default_profile: str = ""
+    mem_volt_rail: str = ""
+    """Nome do sensor de tensao que o usuario elegeu como o da memoria.
+
+    Placa sem perfil no LibreHardwareMonitor publica os trilhos como
+    "Voltage #7", sem dizer o que sao. O app nao adivinha — quem sabe qual e' o
+    da memoria e' quem montou a maquina, entao a escolha e' dele. Vazio
+    significa nao mostrar."""
     display_off_by_default: list = field(default_factory=list)
     """monitor_id das telas que devem nascer apagadas.
 

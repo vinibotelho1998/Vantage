@@ -172,6 +172,7 @@ class App:
         # Fotografia das telas antes de qualquer coisa: e' para onde tudo volta
         # quando o app fecha, para nao deixar a maquina num arranjo de TV.
         self._display_boot = dsp.snapshot()
+        self.lhm.mem_rail = self.settings.mem_volt_rail
         self.lhm.start()
         self.gpu.start_smi()
         self.ping.start()
@@ -1090,6 +1091,7 @@ class App:
         cfg = self.settings
         self.qt.setStyleSheet(style.build_qss(cfg.accent))
         self.collector.set_interval(cfg.update_interval)
+        self.lhm.mem_rail = cfg.mem_volt_rail
         self.ping.configure(cfg.ping_host, cfg.ping_port)
         self.fps.set_windows(cfg.fps_window, cfg.fps_now_window)
         self.history.resize(self._history_depth())

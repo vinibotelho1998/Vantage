@@ -107,10 +107,9 @@ _EXPLICACOES = {
                  "da placa-mãe expor o sensor.",
     "mem_ctrl": "Quanto da banda de memória da placa está em uso. Perto de 100% "
                 "significa que a VRAM é o caminho estreito, não a capacidade.",
-    "jogo_ram": "Memória privada do jogo — o que ele realmente reservou.",
-    "jogo_ram_ws": "Memória do jogo residente na RAM agora (working set). "
-                   "Costuma ser maior que a privada porque inclui o que é "
-                   "compartilhado com o sistema.",
+    "jogo_ram": "Toda a memória que o jogo reservou para si, esteja ela na RAM "
+                "física ou não. Um número só: o par com o working set punha "
+                "dois valores sem rótulo na mesma célula e nao se explicava.",
     "mem_clock": "Clock das memórias.",
     "teto_watts": "Limite de potência da placa, ao lado do consumo. Consumo "
                   "colado no teto explica clock abaixo do esperado.",
@@ -412,12 +411,47 @@ class SettingsDialog(QDialog):
             grid.addWidget(chk, i // 3, i % 3)
         lay.addLayout(grid)
 
+        lay.addWidget(_header("Tensão da memória"))
+        lay.addWidget(self._montar_trilho())
+
         lay.addWidget(_header("Prévia"))
         lay.addWidget(self._montar_previa())
         lay.addStretch(1)
         self._ligar_previa()
         self._atualizar_previa()
         return area
+
+    def _montar_trilho(self) -> QWidget:
+        """Deixa o usuario dizer qual trilho da placa e' a tensao da memoria.
+
+        Placa sem perfil no LibreHardwareMonitor publica tudo como "Voltage #7",
+        sem dizer o que e'. O app nao adivinha: adivinhar trilho pelo valor foi
+        o erro do VID da CPU, que marcava 0,46 V com o processador a 98 W. Quem
+        sabe qual e' o da memoria e' quem montou a maquina.
+        """
+        caixa = QWidget()
+        col = QVBoxLayout(caixa)
+        col.setContentsMargins(0, 0, 0, 0)
+        rails = list(getattr(getattr(self._ctl, "lhm", None), "rails_vistos", []))
+        self.w_rail = QComboBox()
+        self.w_rail.addItem("Não mostrar", "")
+        for nome, valor in rails:
+            self.w_rail.addItem(f"{nome} — {valor:.3f} V", nome)
+        idx = self.w_rail.findData(self._cfg.mem_volt_rail)
+        self.w_rail.setCurrentIndex(max(0, idx))
+        self.w_rail.currentIndexChanged.connect(self._atualizar_previa)
+        col.addWidget(self.w_rail)
+        if rails:
+            dica = ("A placa publica os trilhos sem nome. Compare com o que a "
+                    "BIOS mostra: DDR5 costuma ficar entre 1,10 V e 1,45 V.")
+        else:
+            dica = ("Nenhum trilho visível. Abra o app como administrador — sem "
+                    "isso os sensores da placa-mãe nem aparecem.")
+        aviso = QLabel(dica)
+        aviso.setWordWrap(True)
+        aviso.setStyleSheet(f"color: {theme.MUTE}; background: transparent;")
+        col.addWidget(aviso)
+        return caixa
 
     # ── previa do overlay ────────────────────────────────────────────────────
     def _montar_previa(self) -> QWidget:
@@ -503,6 +537,7 @@ class SettingsDialog(QDialog):
             "overlay_graph_seconds": self.w_ograph.value(),
             "overlay_columns": self.w_ocols.currentData(),
             "overlay_metrics": [k for k, c in self.overlay_checks.items() if c.isChecked()],
+            "mem_volt_rail": self.w_rail.currentData() if hasattr(self, "w_rail") else "",
         }
 
     def _tab_alerts(self) -> QWidget:

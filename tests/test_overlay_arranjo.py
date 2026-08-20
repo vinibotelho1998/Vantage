@@ -246,7 +246,7 @@ def test_toda_metrica_do_arranjo_pode_ser_desligada():
     conhecidas = {k for k, _ in OVERLAY_METRICS}
     usadas = {"fps", "graph", "low1", "frametime", "limite", "cpu", "gpu", "watts",
               "volts", "vram", "ram", "temps_mem", "mem_ctrl", "jogo_ram",
-              "jogo_ram_ws", "mem_clock", "teto_watts", "ping", "clock"}
+              "engasgo", "mem_clock", "teto_watts", "ping", "clock"}
     assert usadas <= conhecidas
 
 

@@ -88,7 +88,7 @@ Mono no lugar da Consolas, quando ela existe na maquina) sem deixar de rebaixar
 quem realmente pediu um painel grande demais: na escala 1.6 ele ainda desce."""
 
 _CORTE_COMPACTO = frozenset({
-    "volts", "ram", "temps_mem", "jogo_ram", "jogo_ram_ws", "mem_clock",
+    "volts", "ram", "temps_mem", "jogo_ram", "mem_clock",
     "mem_ctrl", "teto_watts", "ping", "clock",
 })
 """O que sai no modo compacto: sobra FPS, traco, limite, CPU, GPU e VRAM."""
@@ -182,7 +182,7 @@ def _largura_cauda(metrics: set[str]) -> int:
     vram = (8 if "mem_ctrl" in metrics else 0) + (9 if "mem_clock" in metrics else 0)
     ram = 0
     if "jogo_ram" in metrics:
-        ram = 16 if "jogo_ram_ws" in metrics else 10
+        ram = 10
     if "mem_clock" in metrics:
         ram += 10
     return max(watts, vram, ram)
@@ -765,8 +765,6 @@ class GameOverlay(QWidget):
                 atual = self._cels[("ram", CARGA)].text()
                 self._set("ram", CARGA, f"{atual}&nbsp;&nbsp;{jogo_txt}")
             cauda = []
-            if "jogo_ram_ws" in metrics and d.get("game_ram_wset"):
-                cauda.append(f"residente {d['game_ram_wset'] / 1024:.1f}GB")
             if "mem_clock" in metrics and d.get("ram_freq"):
                 # MT/s, nunca GHz: "6.00GHz" logo abaixo de "5.20GHz" convida a
                 # comparar coisas que nao se comparam.
