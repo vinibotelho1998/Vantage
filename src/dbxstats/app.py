@@ -607,8 +607,7 @@ class App:
             self._session_off_pendente = self._bp_off
             self._bp_off = ""
         self._bp_voltar = True
-        if self._bigpicture is not None:
-            self._bigpicture.hide()
+        self._soltar_controle()
         ok, msg = self.play_item(item)
         if self._session_off_pendente:
             self._session_off = self._session_off_pendente
@@ -617,6 +616,18 @@ class App:
             self.notify("DBX Stats", msg)
             self._bp_voltar = False
             self.big_picture_abrir()
+
+    def _soltar_controle(self) -> None:
+        """Esconde a grade E devolve o controle a quem estava usando.
+
+        Esconder sem soltar deixava o consumidor preso: o Big Picture continuava
+        engolindo o controle de dentro de uma janela invisivel, e quem estava
+        com o modo mouse ligado via o cursor parar de responder sem entender por
+        que.
+        """
+        self.gamepad.set_consumer(None)
+        if self._bigpicture is not None:
+            self._bigpicture.hide()
 
     def _big_picture_fechar(self) -> None:
         self.gamepad.set_consumer(None)
@@ -929,7 +940,7 @@ class App:
                 and self.game_in_focus()):
             # Um jogo subiu por fora. Uma janela em tela cheia disputando o
             # primeiro plano com ele so' atrapalha.
-            self._bigpicture.hide()
+            self._soltar_controle()
         if not self.gamepad.connected and self._bigpicture is not None:
             self._bigpicture.sem_controle()
         self._vigiar_atalho_do_sofa()
@@ -1016,7 +1027,10 @@ class App:
         parts = [f"CPU {d.get('cpu_pct', 0):.0f}%"]
         if d.get("cpu_temp"):
             parts.append(f"{d['cpu_temp']:.0f}°C")
-        parts.append(f"GPU {gpu.get('usage', 0):.0f}%")
+        # Placa que nao publica carga entra com travessao: formatar o None
+        # derrubava a dica inteira, e um "0%" inventado seria pior ainda.
+        if gpu.get("usage") is not None:
+            parts.append(f"GPU {gpu['usage']:.0f}%")
         if gpu.get("temp"):
             parts.append(f"{gpu['temp']:.0f}°C")
         if self._stream is not None:

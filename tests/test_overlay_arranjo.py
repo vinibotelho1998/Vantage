@@ -8,6 +8,7 @@ um valor encolhe, e a cauda do jogo congelando no ultimo numero depois que o
 processo morreu.
 """
 import os
+import re
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -138,6 +139,22 @@ def test_peca_ausente_derruba_a_linha_inteira():
     assert not painel._cels[("cpu", ov.TAG)].isHidden()
 
 
+def test_gpu_sem_sensor_de_memoria_perde_a_linha_de_vram():
+    """Sem os dois sensores a linha some inteira, e nao vira "0.0/0.0GB" com barra.
+
+    A barra vazia e' o pior desfecho possivel: dez celulas de trilho se leem como
+    "VRAM sobrando" quando o certo e' "nao sei medir a VRAM desta placa".
+    """
+    d = _snapshot()
+    d["gpu"] = dict(d["gpu"], vram_used=None, vram_total=None, vram_pct=None,
+                    mem_ctrl=None, temp_vram=None)
+    painel = _montar(d, _Stream())
+    assert _texto(painel, "vram", ov.CARGA) == ""
+    assert painel._cels[("vram", ov.TAG)].isHidden()
+    # A linha da GPU continua viva: uso e temperatura essa placa publica.
+    assert not painel._cels[("gpu", ov.TAG)].isHidden()
+
+
 def test_nenhuma_celula_de_peca_mostra_travessao():
     """Numa maquina sem sensor nenhum, o painel fica vazio — nunca furado."""
     pelado = {"cpu_pct": 12.0, "ram_used": 7.8, "ram_total": 16.0, "gpu": None}
@@ -238,3 +255,243 @@ def test_desligar_tudo_menos_o_fps_nao_quebra_o_painel():
     painel = _montar(_snapshot(), _Stream(), overlay_metrics=["fps"])
     assert painel._fps.text() == "98"
     assert [w for w in painel.findChildren(QLabel) if w.text()]
+
+
+# ── rebaixamento automatico para o modo compacto ─────────────────────────────
+_ALTURAS_REAIS = {
+    "1280x720 (TV)": (203, 720),
+    "1366x768 (notebook)": (203, 768),
+    "1920x1080": (271, 1080),
+    "3440x1440 (ultrawide)": (352, 1440),
+    "3840x2160": (352, 2160),
+}
+"""(altura do painel, altura da tela) com TODAS as metricas ligadas na escala 1.0.
+
+Medido com a fonte real do sistema, fora do pytest: a plataforma offscreen do Qt
+nao tem familia de fonte nenhuma nesta maquina, mede todo glifo com o mesmo
+avanco e devolve um painel 41% mais baixo que o de verdade. Medir a altura aqui
+dentro daria um numero confortavel e falso — por isso o que se testa e' a
+decisao (`cabe_na_tela`), alimentada com as alturas que o painel tem mesmo.
+"""
+
+
+def test_o_conjunto_padrao_nunca_nasce_rebaixado():
+    """Rebaixar no padrao apaga metade das metricas de quem nao pediu nada.
+
+    O limiar era 26% da tela e o painel completo ocupa entre 24% e 27%: numa TV
+    de 720p o overlay ja' abria cortado, e a tela de Configuracoes continuava com
+    tudo marcado. Nao ha' como descobrir isso de dentro do jogo.
+    """
+    for tela, (painel, altura) in _ALTURAS_REAIS.items():
+        assert ov.cabe_na_tela(painel, altura), tela
+
+
+def test_ha_folga_para_o_painel_crescer_antes_de_rebaixar():
+    """Sem folga, uma linha nova ou uma fonte mais alta corta metricas em silencio.
+
+    A familia preferida (Cascadia Mono) nem esta' instalada em toda maquina: onde
+    ela entra no lugar da Consolas o painel cresce sozinho, sem ninguem mexer em
+    nada. Um quarto de folga absorve isso e ainda sobra para uma linha a mais.
+    """
+    for tela, (painel, altura) in _ALTURAS_REAIS.items():
+        assert ov.cabe_na_tela(painel * 1.25, altura), tela
+
+
+def test_escala_grande_em_tela_baixa_continua_rebaixando():
+    """O rebaixamento nao pode virar letra morta: e' ele que impede tapar o jogo."""
+    assert not ov.cabe_na_tela(203 * 1.6, 720)
+    assert not ov.cabe_na_tela(271 * 1.6, 1080)
+
+
+def test_o_painel_rebaixado_diz_que_esta_rebaixado():
+    """Dez metricas somem no compacto; sem uma palavra no rodape ninguem liga uma
+    coisa a' outra e a busca vai parar no sensor ou na configuracao."""
+    painel = _montar(_snapshot(), _Stream(), overlay_scale=2.5)
+    assert painel._compacto
+    assert painel._marca_compacto.text()
+    assert not painel._marca_compacto.isHidden()
+
+
+def test_painel_inteiro_nao_carrega_marca_de_compacto():
+    """Aviso permanente vira ruido e deixa de ser aviso."""
+    painel = _montar(_snapshot(), _Stream())
+    assert not painel._compacto
+    assert painel._marca_compacto.isHidden()
+
+
+def test_o_aviso_de_administrador_sobrevive_ao_corte_do_compacto(monkeypatch):
+    """O aviso explica colunas que sumiram; no compacto ele sumia junto com elas.
+
+    Sobrava a pior combinacao possivel: Configuracoes com "Tensao" marcada,
+    painel sem tensao nenhuma e nenhuma linha dizendo por que.
+    """
+    monkeypatch.setattr(ov.win, "is_admin", lambda: False)
+    painel = _montar(_snapshot(), _Stream(), overlay_scale=2.5)
+    assert painel._compacto
+    assert "volts" not in painel._metricas()
+    assert not painel._aviso.isHidden()
+
+
+# ── legibilidade por cima do jogo ────────────────────────────────────────────
+_CENA_CLARA = (255, 255, 255)
+"""Pior fundo possivel: neve, deserto, menu branco. O painel e' translucido, entao
+a cor por tras entra na conta — testar so' sobre preto testa o caso facil."""
+
+_MINIMO_CONTRASTE = 3.0
+"""Razao de contraste minima aceita para qualquer tinta do painel.
+
+E' o piso do WCAG para texto grande e para elemento grafico. Abaixo disso o
+rotulo GARGALO, o trilho da barra e a barra "/" entre as duas temperaturas
+simplesmente somem, e "69/82°C" passa a ser lido como "69 82°C" — erro de
+leitura, e nao feiura.
+"""
+
+_HEX = re.compile(r"#([0-9A-Fa-f]{6})")
+_RGBA = re.compile(r"rgba\(\s*(\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\s*\)")
+
+
+def _luminancia(cor) -> float:
+    def canal(v: float) -> float:
+        v /= 255.0
+        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+    return (0.2126 * canal(cor[0]) + 0.7152 * canal(cor[1]) + 0.0722 * canal(cor[2]))
+
+
+def _contraste(a, b) -> float:
+    la, lb = _luminancia(a), _luminancia(b)
+    return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+
+
+def _sobre(cor, alpha: float, fundo):
+    return tuple(round(c * alpha + f * (1 - alpha)) for c, f in zip(cor, fundo, strict=True))
+
+
+def _fundo_do_painel(painel, cena=_CENA_CLARA):
+    """Cor que o fundo do painel assume de fato com a cena atras dele.
+
+    Lido da folha de estilo que o painel declarou, e nao de uma constante copiada
+    para ca': o risco e' justamente o mapa de opacidade mudar e o teste continuar
+    medindo o painel de ontem.
+    """
+    r, g, b, a = _RGBA.search(painel._root.styleSheet()).groups()
+    return _sobre((int(r), int(g), int(b)), int(a) / 255.0, cena)
+
+
+def _tintas(painel, fundo) -> dict:
+    """Toda cor de texto que o painel pinta, ja' resolvida contra o fundo."""
+    cores = {}
+    for w in painel.findChildren(QLabel):
+        for fonte in (w.styleSheet(), w.text()):
+            for hexa in _HEX.findall(fonte):
+                cores[f"#{hexa.upper()}"] = tuple(
+                    int(hexa[i:i + 2], 16) for i in (0, 2, 4))
+            for r, g, b, a in _RGBA.findall(fonte):
+                cores[f"rgba({r},{g},{b},{a})"] = _sobre(
+                    (int(r), int(g), int(b)), float(a), fundo)
+    return cores
+
+
+def _paineis_variados(**opcoes):
+    """Um painel de cada caminho de pintura: e' onde cada tinta aparece."""
+    cap = _Stream()
+    cap.metrics.bottleneck = fr.BOTTLENECK_CAP
+    return [
+        _montar(_snapshot(), _Stream(), **opcoes),
+        # Barra pela metade: so' assim o trilho vazio e o meio-tom sao desenhados.
+        _montar(_snapshot(ram_used=12.0), _Stream(), **opcoes),
+        _montar(_snapshot(), None, **opcoes),
+        _montar(_snapshot(), cap, **opcoes),
+    ]
+
+
+def test_toda_tinta_do_painel_se_le_sobre_uma_cena_clara():
+    """Sobre fundo claro o painel compunha um cinza medio e engolia meio painel.
+
+    O cinza mais escuro da paleta caia para 1.02:1 — nao "dificil de ler",
+    invisivel. Levava junto a tag do gargalo, o trilho das barras de memoria e a
+    barra que separa as duas temperaturas.
+    """
+    for painel in _paineis_variados():
+        fundo = _fundo_do_painel(painel)
+        for nome, cor in _tintas(painel, fundo).items():
+            assert _contraste(cor, fundo) >= _MINIMO_CONTRASTE, (
+                f"{nome}: {_contraste(cor, fundo):.2f}:1")
+
+
+def test_a_opacidade_escolhida_e_a_opacidade_pintada():
+    """Sem um extremo opaco o controle de opacidade e' decoracao.
+
+    O mapa antigo parava em 165/255: quem nao conseguia ler arrastava o controle
+    ate' o fim e continuava sem ler, porque o jogo seguia atravessando o fundo.
+    Nao havia posicao boa, e a conclusao natural e' que o app esta' quebrado.
+    """
+    for escolhida in (0.30, 0.50, 0.88, 1.0):
+        assert ov._alpha_do_fundo(escolhida) == round(escolhida * 255), escolhida
+    assert ov._alpha_do_fundo(1.0) == 255
+
+
+_SPAN = re.compile(r"<span style='color:([^']+)'>([^<]*)</span>")
+
+
+def _hex(cor: str):
+    h = cor.lstrip("#")
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _cor_do_trecho(rico: str, trecho: str):
+    for cor, texto in _SPAN.findall(rico):
+        if trecho in texto:
+            return cor
+    return None
+
+
+def test_o_que_carrega_leitura_nao_fica_no_cinza_mais_apagado():
+    """Tres pedacos do painel viviam no cinza mais escuro da paleta.
+
+    Nenhum dos tres e' enfeite: a tag GARGALO rotula a linha mais assertiva do
+    painel; o trilho vazio e' a proporcao que a barra existe para mostrar (sem
+    ele sobra um bloco solto, sem escala); e a barra entre as duas temperaturas e'
+    o que separa "69/82°C" de "69 82°C", que ja' e' outro numero.
+    """
+    painel = _montar(_snapshot(ram_used=12.0), _Stream())
+    fundo = _fundo_do_painel(painel)
+    alvos = {
+        "tag do gargalo": _HEX.search(painel._limite_tag.styleSheet()).group(0),
+        "trilho da barra": _cor_do_trecho(_texto(painel, "ram", ov.CARGA), "░"),
+        "barra entre as temperaturas": _cor_do_trecho(_texto(painel, "cpu", ov.TEMP), "/"),
+    }
+    for nome, cor in alvos.items():
+        assert cor, nome
+        # 4.5:1 e' o piso de texto corrido: acima do cinza mais apagado da paleta,
+        # que sobre cena clara para nesta mesma conta em 3.3:1.
+        assert _contraste(_hex(cor), fundo) >= 4.5, f"{nome}: {cor}"
+
+
+# ── furo de sensor nao pode piscar ───────────────────────────────────────────
+def test_media_de_temperatura_sobrevive_a_um_ciclo_sem_leitura():
+    """O sensor de nucleo falha em ciclo solto.
+
+    Sem carencia, a celula piscava entre "61/78" e "78" varias vezes por minuto
+    — o que se le' como o app perdendo dado, nao como a temperatura mudando.
+    """
+    import dbxstats.ui.overlay as ov
+
+    painel = _montar(_snapshot(), _Stream())
+    painel._temps("cpu", 61.0, 78.0, lambda _v: "#fff")
+    com_par = _texto(painel, "cpu", ov.TEMP)
+
+    painel._temps("cpu", None, 78.0, lambda _v: "#fff")
+    assert _texto(painel, "cpu", ov.TEMP) == com_par, "piscou no furo de sensor"
+
+
+def test_media_some_quando_o_sensor_nao_volta():
+    """Segurar para sempre seria mostrar um numero velho como se fosse de agora."""
+    import time
+
+    import dbxstats.ui.overlay as ov
+
+    painel = _montar(_snapshot(), _Stream())
+    painel._temps("cpu", 61.0, 78.0, lambda _v: "#fff")
+    painel._media_recente["cpu"] = (61.0, time.monotonic() - ov._SEGURA_MEDIA_S - 1)
+    painel._temps("cpu", None, 78.0, lambda _v: "#fff")
+    assert "61" not in _texto(painel, "cpu", ov.TEMP)

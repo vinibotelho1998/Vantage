@@ -36,3 +36,50 @@ def test_nao_chama_de_local_cedo_demais():
 
 def test_depois_de_procurar_bastante_e_local():
     assert _app(pid=42, visto_ha=ONLINE_GRACE_S + 5).jogo_online() is False
+
+
+def test_rodape_nao_repete_o_nome_do_jogo():
+    """O rotulo do ping costuma SER o nome do processo do jogo.
+
+    A latencia sai do trafego dele, entao o rotulo vem com o nome do executavel
+    — e concatenar os dois escrevia "cs2.exe · cs2.exe" a partida inteira.
+    """
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from dbxstats.config import Settings
+    from dbxstats.core import frames as fr
+    from dbxstats.core.series import History
+    from dbxstats.ui.overlay import GameOverlay
+
+    QApplication.instance() or QApplication([])
+    m = fr.FrameMetrics()
+    m.fps_now = 144.0
+    m.frames = 5000
+
+    class _Ping:
+        target_label = "cs2.exe"
+        following_game = True
+
+    class _Stream:
+        app = "cs2.exe"
+        pid = 7
+        metrics = m
+
+    class _Ctl:
+        def __init__(self):
+            self.settings = Settings()
+            self.ping = _Ping()
+            self.history = History(50)
+
+        def last_data(self):
+            return {"ping_ms": 15, "gpu": {}}
+
+        def active_stream(self):
+            return _Stream()
+
+    o = GameOverlay(_Ctl())
+    o.refresh()
+    assert o._origem.text().count("cs2.exe") == 1, o._origem.text()

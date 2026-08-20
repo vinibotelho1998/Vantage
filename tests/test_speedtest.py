@@ -10,6 +10,7 @@ errado. Falha de um servidor nao pode virar frase generica sobre "conexao caida"
 resultado que ja' fechou nao pode ser apagado por uma fase que falhou depois, e
 medicao feita com metade dos fluxos mortos nao pode sair como se fosse boa.
 """
+import json
 import socket
 import threading
 import time
@@ -410,25 +411,28 @@ class RedeDirigida(sp.Rede):
     """Rede falsa com roteiro por host: quem falha, com o que, e quem entrega.
 
     `roteiro` mapeia host -> excecao a levantar (ou None para entregar bytes).
-    Serve para montar a fila de servidores sem tocar na internet.
+    `latencias` mapeia host -> ms (ou None para "essa casa nao responde"), que e'
+    como se monta um cenario de escolha automatica sem tocar na internet.
     """
 
     def __init__(self, roteiro=None, por_chamada=1_000_000, sonda=15.0,
-                 demora=0.0) -> None:
+                 demora=0.0, latencias=None) -> None:
         super().__init__()
         self.roteiro = dict(roteiro or {})
         self.por_chamada = por_chamada
         self.sonda = sonda
         self.demora = demora
+        self.latencias = dict(latencias or {})
         self.chamadas: list[tuple[str, str]] = []
         self._trava = threading.Lock()
         self.motor = None
         self.espiado: list[dict] = []
 
     def sondar(self, host, porta, timeout):
-        if self.sonda is None:
+        ms = self.latencias.get(host, self.sonda)
+        if ms is None:
             raise OSError("sem rota")
-        return self.sonda
+        return ms
 
     def _correr(self, fase, url, cancelado, contar):
         host = sp._host(url)
@@ -455,9 +459,14 @@ class RedeDirigida(sp.Rede):
 
 
 def _motor(rede, **kw):
-    """Motor com a mesma logica, so' que em escala de teste (frações de segundo)."""
+    """Motor com a mesma logica, so' que em escala de teste (frações de segundo).
+
+    `lista_publica=False` nao e' detalhe: com ela ligada o motor leria o servidor
+    fixado do disco e mandaria uma thread buscar a lista do LibreSpeed na
+    internet. Teste que toca a rede mede o dia, nao o codigo.
+    """
     padrao = dict(fluxos=2, duracao=0.4, aquecimento=0.1, janela_minima=0.05,
-                  sondas=2, timeout=1.0)
+                  sondas=2, timeout=1.0, lista_publica=False)
     padrao.update(kw)
     motor = sp.TesteDeVelocidade(rede=rede, **padrao)
     if isinstance(rede, RedeDirigida):
@@ -1208,3 +1217,595 @@ def test_transferencia_que_cai_em_todos_os_servidores_aponta_a_conexao():
     assert "enviaram dados" in aviso
     assert "sua conexão" in aviso
     assert "não responderam" not in aviso
+
+
+# ── escolha automatica do servidor ───────────────────────────────────────────
+def _prov(host, envio=False, **kw):
+    return sp.Provedor(f"https://{host}/down",
+                       envio=f"https://{host}/up" if envio else "", **kw)
+
+
+def test_fila_e_remontada_pela_latencia_medida():
+    """O coração da escolha automática: a ordem da semente é só um palpite.
+
+    Antes, a fila era fixa e o teste media pelo primeiro que aceitasse — se o
+    servidor da frente ficasse a 130 ms, era ele que media, e o número saía a um
+    oitavo do real sem ninguém perguntar se havia coisa melhor na lista.
+    """
+    escolha = sp.escolher((_prov("longe"), _prov("perto")), (),
+                          {"longe": 130.0, "perto": 12.4})
+    assert escolha.servidor.host == "perto"
+    assert escolha.latencia_ms == 12.4
+    assert [p.host for p in escolha.download] == ["perto", "longe"]
+
+
+def test_escolha_prefere_quem_mede_as_duas_fases_no_mesmo_lugar():
+    """Medido: Cachefly 15,3 ms só desce; Cloudflare 15,8 ms desce E sobe.
+
+    Meio milissegundo não paga o preço de a tela anunciar "via Cachefly" e o
+    número de upload ter vindo de outra casa — quem for conferir é enganado por
+    um campo que parece exato.
+    """
+    cdn, completo = _prov("cachefly"), _prov("cloudflare", envio=True)
+    escolha = sp.escolher((cdn, completo), (sp._como_upload(completo),),
+                          {"cachefly": 15.3, "cloudflare": 15.8})
+    assert escolha.servidor.host == "cloudflare"
+    assert escolha.download[0].host == "cloudflare"
+    assert escolha.upload[0].host == "cloudflare"
+    assert "cachefly" in [p.host for p in escolha.download]      # reserva continua
+
+
+def test_empate_de_latencia_mantem_a_ordem_da_semente():
+    """Sem casa nenhuma medida (ou todas iguais) a semente é que decide — e ela
+    foi escolhida a dedo, com número. Reordenar por acaso jogaria isso fora."""
+    fila = (_prov("um"), _prov("dois"), _prov("tres"))
+    escolha = sp.escolher(fila, (), {"um": 16.0, "dois": 16.0, "tres": 16.0})
+    assert [p.host for p in escolha.download] == ["um", "dois", "tres"]
+
+
+def test_casa_muda_vai_para_o_fim_da_fila_em_vez_de_sumir():
+    """Sonda perdida não é prova de servidor morto: pode ter sido um pacote.
+
+    Descartar quem não respondeu deixaria a fila vazia numa rede que bloqueia
+    connect solto — e fila vazia mede menos que fila duvidosa.
+    """
+    escolha = sp.escolher((_prov("mudo"), _prov("vivo")), (),
+                          {"mudo": None, "vivo": 20.0})
+    assert [p.host for p in escolha.download] == ["vivo", "mudo"]
+    assert escolha.responderam == 1 and escolha.sondados == 2
+
+
+def test_ninguem_respondeu_ainda_devolve_uma_fila_para_tentar():
+    """Todas mudas: o teste continua, e é o download que decide se há internet."""
+    escolha = sp.escolher((_prov("um"), _prov("dois")), (),
+                          {"um": None, "dois": None})
+    assert [p.host for p in escolha.download] == ["um", "dois"]
+    assert escolha.latencia_ms is None
+
+
+def test_fila_escolhida_tem_teto_de_tamanho():
+    """A lista pública tem 22 casas. Sem teto, um dia ruim seriam 22 tentativas
+    de 6 s cada — dois minutos de "medindo…" para não medir nada."""
+    fila = tuple(_prov(f"h{i}") for i in range(10))
+    escolha = sp.escolher(fila, (), {f"h{i}": float(i + 10) for i in range(10)})
+    assert len(escolha.download) == sp.FILA_MAXIMA
+    assert escolha.download[0].host == "h0"
+
+
+def test_servidor_fixado_ganha_da_medicao_e_mantem_reserva():
+    """Vontade declarada ganha de latência — mas fixar não pode ser o mesmo que
+    ficar sem teste no dia em que aquela casa estiver fora do ar."""
+    escolha = sp.escolher((_prov("rapido"), _prov("preferido")), (),
+                          {"rapido": 10.0, "preferido": 90.0}, fixado="preferido")
+    assert escolha.servidor.host == "preferido"
+    assert escolha.fixado is True
+    assert [p.host for p in escolha.download] == ["preferido", "rapido"]
+
+
+def test_servidor_fixado_que_sumiu_da_lista_nao_trava_o_teste():
+    """Host gravado meses atrás que não existe mais volta ao automático."""
+    escolha = sp.escolher((_prov("um"),), (), {"um": 16.0}, fixado="fantasma")
+    assert escolha.servidor.host == "um"
+    assert escolha.fixado is False
+
+
+# ── lista publica de servidores ──────────────────────────────────────────────
+_ITEM = {"name": "Atlanta", "server": "//speedtest.example.net/",
+         "dlURL": "backend/garbage.php", "ulURL": "backend/empty.php"}
+
+
+def test_lista_publica_normaliza_o_endereco_e_descarta_lixo():
+    """Dois detalhes medidos na lista real: `server` às vezes vem sem esquema
+    ("//host/") e o caminho pode ser na raiz ou em /backend conforme a
+    instalação. Item quebrado é ignorado: veio da internet, não há o que fazer."""
+    provs = sp.provedores_da_lista([_ITEM, {"server": "https://x/"}, "lixo", 42])
+    assert len(provs) == 1
+    assert provs[0].url == "https://speedtest.example.net/backend/garbage.php"
+    assert provs[0].envio == "https://speedtest.example.net/backend/empty.php"
+    assert provs[0].nome == "Atlanta"
+
+
+def test_servidor_da_lista_publica_nunca_se_apresenta_como_perto():
+    """Não há campo confiável de país na lista, e medido não há uma única casa
+    brasileira nela — a mais perto é Atlanta, a 134 ms. Prometer proximidade que
+    não existe é a mentira que este módulo inteiro existe para não contar."""
+    assert sp.provedores_da_lista([_ITEM])[0].perto is False
+
+
+class _RedeDeLista(sp.Rede):
+    """Servidor de lista de mentira: responde o que mandarem, e anota o ETag."""
+
+    def __init__(self, codigo=200, corpo="[]", etag="v1") -> None:
+        super().__init__()
+        self.codigo, self.corpo, self.etag = codigo, corpo, etag
+        self.pedidos: list = []
+
+    def texto(self, url, timeout, etag=None):
+        self.pedidos.append(etag)
+        return self.codigo, self.corpo, self.etag
+
+
+def _sandbox(tmp_path, monkeypatch):
+    """Estado em disco num diretório só deste teste."""
+    monkeypatch.setenv("DBXSTATS_DATA_DIR", str(tmp_path))
+
+
+def test_lista_e_guardada_em_disco_e_nao_e_pedida_de_novo(tmp_path, monkeypatch):
+    """A lista muda em meses. Perguntar a cada teste seria gastar rede e tempo
+    do usuário para receber o mesmo arquivo de sempre."""
+    _sandbox(tmp_path, monkeypatch)
+    rede = _RedeDeLista(corpo=json.dumps([_ITEM]))
+    assert sp.atualizar_lista(rede) == 1
+    assert [p.host for p in sp.lista_em_cache()] == ["speedtest.example.net"]
+    assert sp.atualizar_lista(rede) == 0
+    assert len(rede.pedidos) == 1, "pediu a lista de novo com o cache fresco"
+
+
+def test_lista_sem_novidade_renova_a_validade_com_o_etag(tmp_path, monkeypatch):
+    """304 custa ~300 bytes contra os 6.115 da resposta cheia — e o cache não
+    pode ser apagado por uma resposta que justamente diz "nada mudou"."""
+    _sandbox(tmp_path, monkeypatch)
+    sp.atualizar_lista(_RedeDeLista(corpo=json.dumps([_ITEM]), etag="v1"))
+    sp.gravar_estado({"lista_quando": time.time() - sp.LISTA_TTL_S - 1})
+    assert sp.lista_vencida() is True
+
+    rede = _RedeDeLista(codigo=304, corpo="")
+    assert sp.atualizar_lista(rede) == 0
+    assert rede.pedidos == ["v1"], "não mandou o ETag que já tinha"
+    assert sp.lista_vencida() is False
+    assert len(sp.lista_em_cache()) == 1, "o 304 apagou a lista que já estava boa"
+
+
+def test_lista_que_nao_responde_nao_atrapalha_ninguem(tmp_path, monkeypatch):
+    """Sem lista o app mede com a semente embutida — que é o que ele fazia antes
+    de existir lista nenhuma. Falhar o teste por causa disso seria trocar um
+    bônus por um defeito."""
+    _sandbox(tmp_path, monkeypatch)
+
+    class Muda(sp.Rede):
+        def texto(self, url, timeout, etag=None):
+            raise TimeoutError("nem responde")
+
+    assert sp.atualizar_lista(Muda()) == 0
+    assert sp.lista_em_cache() == ()
+
+
+def test_lista_em_formato_estranho_nao_vira_excecao(tmp_path, monkeypatch):
+    _sandbox(tmp_path, monkeypatch)
+    assert sp.atualizar_lista(_RedeDeLista(corpo="<html>não sou json</html>")) == 0
+    assert sp.atualizar_lista(_RedeDeLista(corpo='{"servidores": []}')) == 0
+    assert sp.lista_em_cache() == ()
+
+
+def test_servidor_fixado_sobrevive_ao_fechar_o_app(tmp_path, monkeypatch):
+    _sandbox(tmp_path, monkeypatch)
+    assert sp.servidor_fixado() is None
+    sp.fixar_servidor("speed.cloudflare.com")
+    assert sp.servidor_fixado() == "speed.cloudflare.com"
+    sp.fixar_servidor(None)
+    assert sp.servidor_fixado() is None
+
+
+def test_estado_corrompido_nao_impede_o_app_de_medir(tmp_path, monkeypatch):
+    """JSON truncado por queda de energia é arquivo, não sentença."""
+    _sandbox(tmp_path, monkeypatch)
+    (tmp_path / sp.ARQUIVO_ESTADO).write_text("{isto não fecha", encoding="utf-8")
+    assert sp.ler_estado() == {}
+    assert sp.servidor_fixado() is None
+    assert sp.lista_em_cache() == ()
+
+
+# ── escolha automatica, fim a fim ────────────────────────────────────────────
+def test_motor_mede_pelo_servidor_de_menor_latencia():
+    """Fim a fim: quem sonda melhor é quem mede, e a tela diz quem foi."""
+    rede = RedeDirigida(latencias={"longe": 130.0, "perto": 12.4})
+    motor = _motor(rede, urls_download=("https://longe/a", "https://perto/b"),
+                   urls_upload=("https://perto/c",))
+    motor.start()
+    assert motor.aguardar(20.0)
+    s = motor.snapshot()
+    assert s["servidor"] == "perto"
+    assert s["servidor_ms"] == 12.4
+    assert s["ping"] == 12.4, "o ping ficou do servidor errado"
+    assert [h for f, h in rede.chamadas if f == "download"][0] == "perto"
+
+
+def test_ping_e_jitter_saem_de_sondas_no_mesmo_servidor():
+    """Jitter calculado com amostras de casas diferentes mede diversidade de
+    caminho, não oscilação da rede — e pinta de instável uma conexão que oscila
+    1 ms. A varredura compara casas; o ping descreve a conexão."""
+    rede = RedeDirigida(latencias={"a": 90.0, "b": 20.0})
+    motor = _motor(rede, sondas=4, urls_download=("https://a/x", "https://b/y"),
+                   urls_upload=("https://b/z",))
+    motor.start()
+    assert motor.aguardar(20.0)
+    s = motor.snapshot()
+    assert s["ping"] == 20.0
+    assert s["jitter"] == 0.0, "misturou sondas de servidores diferentes"
+
+
+def test_motor_respeita_o_servidor_fixado_pelo_usuario():
+    rede = RedeDirigida(latencias={"rapido": 10.0, "meu": 40.0})
+    motor = _motor(rede, urls_download=("https://rapido/a", "https://meu/b"),
+                   urls_upload=("https://meu/c",))
+    motor.fixar("meu")
+    motor.start()
+    assert motor.aguardar(20.0)
+    s = motor.snapshot()
+    assert s["servidor"] == "meu"
+    assert s["fixado"] == "meu"
+    assert [h for f, h in rede.chamadas if f == "download"][0] == "meu"
+
+
+def test_a_tela_diz_qual_casa_mediu_o_upload():
+    """O campo que enganava: `servidor` era preenchido só na fase de download,
+    então o relatório dizia "via fulano" sem nunca contar de onde veio o upload —
+    e as duas fases podem perfeitamente estar em casas diferentes."""
+    rede = RedeDirigida()
+    motor = _motor(rede, urls_download=("https://dl/a",), urls_upload=("https://ul/b",))
+    motor.start()
+    assert motor.aguardar(20.0)
+    s = motor.snapshot()
+    assert s["servidor"] == "dl"
+    assert s["servidor_envio"] == "ul"
+
+
+def test_a_busca_da_lista_publica_nao_segura_o_teste(tmp_path, monkeypatch):
+    """A regra que evita o pior dos dois mundos: o teste de hoje anda com o que
+    já está no disco, e o que chegar agora só enriquece o de amanhã. Esperar
+    seria atrasar a medição para acrescentar candidatos a 134 ms."""
+    _sandbox(tmp_path, monkeypatch)
+
+    class Lerda(RedeDirigida):
+        def texto(self, url, timeout, etag=None):
+            time.sleep(5.0)
+            raise TimeoutError("lista lerda")
+
+    rede = Lerda()
+    motor = _motor(rede, lista_publica=True, urls_download=("https://dl/a",),
+                   urls_upload=("https://ul/b",))
+    inicio = time.monotonic()
+    motor.start()
+    assert motor.aguardar(20.0)
+    assert time.monotonic() - inicio < 3.0, "o teste esperou a lista de servidores"
+    assert motor.snapshot()["download"] > 0
+
+
+def test_lista_em_disco_entra_como_candidata_no_proximo_teste(tmp_path, monkeypatch):
+    """Para que serve guardar a lista: no teste seguinte a casa nova é sondada
+    junto com a semente, e ganha se for melhor."""
+    _sandbox(tmp_path, monkeypatch)
+    sp.gravar_estado({"lista": [{"name": "Vizinha", "server": "https://vizinha/",
+                                 "dlURL": "garbage.php", "ulURL": "empty.php"}],
+                      "lista_quando": time.time()})
+    rede = RedeDirigida(latencias={"semente": 40.0, "vizinha": 8.0})
+    motor = _motor(rede, lista_publica=True, urls_download=("https://semente/a",),
+                   urls_upload=("https://semente/b",))
+    motor.start()
+    assert motor.aguardar(20.0)
+    s = motor.snapshot()
+    assert s["servidor"] == "vizinha"
+    assert s["candidatos"] == 2
+
+
+def test_servidor_fora_do_pais_avisa_mesmo_sendo_o_primeiro_da_fila():
+    """Antes a ressalva só saía quando a casa distante era reserva. Com escolha
+    automática e lista pública (que não tem uma casa brasileira sequer), a casa
+    distante pode ser a primeira — e aí o número baixo sairia sem explicação."""
+    rede = RedeDirigida()
+    motor = _motor(rede, urls_download=(sp.Provedor("https://longe/a", perto=False),),
+                   urls_upload=("https://ul/b",))
+    motor.start()
+    assert motor.aguardar(20.0)
+    s = motor.snapshot()
+    assert s["download"] > 0
+    assert "fora do país" in s["aviso"]
+
+
+# ── upload: a janela de envio e os tetos honestos ────────────────────────────
+def test_teto_da_janela_reproduz_o_defeito_medido():
+    """A conta que explica os 118,5 Mbps: 65536 x 8 / 0,016 = 32,8 Mbps por
+    fluxo, 131 com quatro. Não é a banda do link, é o buffer dividido pelo RTT."""
+    assert sp.teto_da_janela(65536, 16.0, 4) == pytest.approx(131.07, abs=0.1)
+    assert sp.teto_da_janela(4 << 20, 16.0, 4) > 8000
+    assert sp.teto_da_janela(0, 16.0, 4) is None
+    assert sp.teto_da_janela(65536, None, 4) is None
+
+
+def test_teto_do_processo_e_medida_e_nao_estimativa():
+    """Bytes movidos divididos pelo tempo de CPU que as threads gastaram: é o que
+    este Python empurra com um núcleo."""
+    assert sp.teto_do_processo(1_000_000_000, 0.59) == pytest.approx(13559, abs=1)
+    assert sp.teto_do_processo(0, 1.0) is None
+    assert sp.teto_do_processo(1000, 0.0) is None
+
+
+def test_upload_pede_janela_de_envio_maior_no_socket_cru():
+    """O conserto de uma linha, verificado onde ele acontece.
+
+    Nenhum byte sai da máquina: o servidor é 127.0.0.1. O que se prova aqui é que
+    o SO_SNDBUF é pedido ANTES do TLS, no socket recém-criado, e que o sistema
+    concedeu bem mais que os 65536 padrão — o número que limitava o upload a um
+    oitavo do link.
+    """
+    padrao = socket.socket().getsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF)
+    servidor = _ServidorLocal(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+    try:
+        rede = sp.Rede()
+        rede.enviar(servidor.url("/up"), lambda: False, lambda n: None, 5.0, 50_000)
+        concedido = rede.buffer_de_envio()
+    finally:
+        servidor.fechar()
+    assert concedido >= 1 << 20, f"o sistema concedeu só {concedido} bytes de envio"
+    assert concedido > padrao
+
+
+def test_download_nao_mexe_na_janela_de_envio():
+    """No download o Windows já auto-ajusta a janela de RECEPÇÃO sozinho; pedir
+    buffer de envio ali seria enfeite com ar de conserto."""
+    servidor = _ServidorLocal(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\nabcd")
+    try:
+        rede = sp.Rede()
+        rede.baixar(servidor.url(), lambda: False, lambda n: None, 5.0)
+        assert rede.buffer_de_envio() == 0
+    finally:
+        servidor.fechar()
+
+
+def test_conexao_de_upload_escreve_em_blocos_grandes():
+    """8 KB é o padrão do http.client e custa 3,01 s de CPU por GB contra 0,59 s
+    com 64 KB. Não muda Mbps; muda quanto de núcleo um app de MONITORAMENTO
+    queima enquanto mostra os próprios números na tela."""
+    class Base:
+        def __init__(self, host, **kw):
+            self.recebido = kw
+
+        def connect(self):
+            pass
+
+    conexao = sp._conexao_rastreada(Base, lambda s: None, None)("host")
+    assert conexao.recebido["blocksize"] == sp.BLOCO
+
+
+def test_buffer_de_envio_fica_com_o_fluxo_mais_apertado():
+    """O teto da subida é ditado pelo pior socket, não pelo último a conectar."""
+    rede = sp.Rede()
+    rede._anotar_buffer(4 << 20)
+    rede._anotar_buffer(65536)
+    rede._anotar_buffer(1 << 20)
+    assert rede.buffer_de_envio() == 65536
+    rede.esquecer_buffer()
+    assert rede.buffer_de_envio() == 0
+
+
+class _ComBuffer(RedeDirigida):
+    """Rede falsa que também finge o buffer de envio concedido pelo sistema."""
+
+    def __init__(self, buffer_, **kw) -> None:
+        super().__init__(**kw)
+        self._buffer = buffer_
+
+    def buffer_de_envio(self):
+        return self._buffer
+
+
+def test_upload_no_teto_da_janela_nao_e_apresentado_como_velocidade_do_link():
+    """A promessa central: número que encostou no teto do envio deixou de falar
+    sobre a internet. Reportar 118 Mbps calado foi exatamente o defeito que este
+    módulo tinha — o app media a si mesmo e chamava de "sua velocidade"."""
+    rede = _ComBuffer(65536, sonda=16.0)
+    motor = _motor(rede, urls_download=("https://dl/a",), urls_upload=("https://ul/b",))
+    motor.start()
+    assert motor.aguardar(20.0)
+    s = motor.snapshot()
+    assert s["upload"] > 0
+    assert s["teto_janela"] == pytest.approx(65.54, abs=0.1)   # 65536 x 8 x 2 / 0,016
+    assert "teto da janela de envio" in s["aviso"]
+    assert "Mbps" in s["aviso"], "disse que bateu no teto e escondeu o número"
+
+
+def test_upload_com_folga_de_janela_nao_ganha_ressalva_nenhuma():
+    """Ressalva falsa custa tanto quanto número falso: se o teto não morde, a
+    medida é do link e não há nada a dizer."""
+    rede = _ComBuffer(4 << 20, sonda=16.0)
+    motor = _motor(rede, urls_download=("https://dl/a",), urls_upload=("https://ul/b",))
+    motor.start()
+    assert motor.aguardar(20.0)
+    s = motor.snapshot()
+    assert s["upload"] > 0
+    assert s["teto_janela"] > 4000
+    assert s["aviso"] is None
+
+
+def test_janela_curta_com_buffer_grande_sai_com_ressalva():
+    """A armadilha que nasce junto com o conserto: o contador soma o que foi
+    entregue ao SOCKET. Com 4 MB por fluxo isso são megabytes que o servidor
+    ainda não viu; em regime o excesso cancela, mas numa janela curta ele vira a
+    medida inteira — medido, +323%."""
+    rede = _ComBuffer(8 << 20, por_chamada=10_000, sonda=16.0)
+    motor = _motor(rede, urls_download=("https://dl/a",), urls_upload=("https://ul/b",))
+    motor.start()
+    assert motor.aguardar(20.0)
+    s = motor.snapshot()
+    assert s["upload"] > 0
+    assert "acima do real" in s["aviso"]
+
+
+def test_ressalva_do_teto_do_app_diz_o_numero():
+    """Quando o Python é o gargalo, a tela precisa dizer QUANTO ele aguenta — sem
+    o número, "o app é o limite" não ajuda ninguém a decidir nada."""
+    medida = sp._Medida(taxa=900.0, provedor=sp.Provedor("https://x/y"),
+                        teto_processo=950.0)
+    texto = " ".join(sp._ressalvas("Upload", medida))
+    assert "teto deste app" in texto and "950 Mbps" in texto
+    assert sp._ressalvas("Upload", medida._replace(teto_processo=9000.0)) == []
+
+
+def test_teto_acima_de_mil_sai_em_gigabit():
+    assert sp._texto_taxa(13559.0) == "13,6 Gbps"
+    assert sp._texto_taxa(931.8) == "932 Mbps"
+
+
+# ── a tela do teste ──────────────────────────────────────────────────────────
+def _tela(tmp_path, monkeypatch):
+    """Monta a tela de rede de verdade, sem janela e sem tocar no disco do app.
+
+    Qt entra tarde e dentro da função de propósito: o resto deste arquivo mede o
+    motor, que não depende de interface nenhuma, e não deveria pagar o preço de
+    carregar a biblioteca gráfica para isso.
+    """
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    monkeypatch.setenv("DBXSTATS_DATA_DIR", str(tmp_path))
+    from PySide6.QtWidgets import QApplication
+
+    from dbxstats.config import Settings
+    from dbxstats.core.series import Accumulator, History
+    from dbxstats.ui.views import network
+
+    QApplication.instance() or QApplication([])
+
+    class _App:
+        def __init__(self):
+            self.settings = Settings()
+            self.stats = Accumulator()
+            self.history = History(60)
+
+    return network, network.NetworkView(_App())
+
+
+def test_a_tela_oferece_os_servidores_que_o_motor_usaria(tmp_path, monkeypatch):
+    """Não adianta oferecer uma casa que o motor não conhece: a lista sai dele."""
+    _, v = _tela(tmp_path, monkeypatch)
+    try:
+        assert v.test_srv.itemData(0) == ""              # automático é o padrão
+        assert v.test_srv.currentIndex() == 0
+        hosts = [v.test_srv.itemData(i) for i in range(1, v.test_srv.count())]
+        assert hosts == [p.host for p in v._teste.candidatos()]
+        assert "speed.cloudflare.com" in hosts
+    finally:
+        v._encerrar_teste()
+
+
+def test_escolher_um_servidor_na_tela_fixa_ele_no_motor(tmp_path, monkeypatch):
+    """A escolha manual precisa chegar ao motor E ao disco — senão ela vale até o
+    app fechar, que é o mesmo que não valer."""
+    _, v = _tela(tmp_path, monkeypatch)
+    try:
+        v.test_srv.setCurrentIndex(v.test_srv.findData("speed.cloudflare.com"))
+        assert v._teste.fixado == "speed.cloudflare.com"
+        assert sp.servidor_fixado() == "speed.cloudflare.com"
+        v.test_srv.setCurrentIndex(0)
+        assert v._teste.fixado is None
+        assert sp.servidor_fixado() is None
+    finally:
+        v._encerrar_teste()
+
+
+def test_servidor_fixado_reaparece_selecionado_na_proxima_abertura(tmp_path, monkeypatch):
+    _, v = _tela(tmp_path, monkeypatch)
+    v._encerrar_teste()
+    sp.fixar_servidor("speedtest.gru1.linode.com")
+    _, outra = _tela(tmp_path, monkeypatch)
+    try:
+        assert outra.test_srv.currentData() == "speedtest.gru1.linode.com"
+    finally:
+        outra._encerrar_teste()
+
+
+def test_casa_nova_da_lista_publica_aparece_sem_reabrir_o_app(tmp_path, monkeypatch):
+    """A busca da lista roda em segundo plano e só termina depois que o teste já
+    começou — o que ela traz nunca está na tela no instante em que chega."""
+    _, v = _tela(tmp_path, monkeypatch)
+    try:
+        antes = v.test_srv.count()
+        sp.gravar_estado({"lista": [{"name": "Vizinha", "server": "https://vizinha/",
+                                     "dlURL": "garbage.php"}],
+                          "lista_quando": time.time()})
+        v._atualizar_teste()
+        assert v.test_srv.count() == antes + 1
+        assert v.test_srv.itemData(v.test_srv.count() - 1) == "vizinha"
+    finally:
+        v._encerrar_teste()
+
+
+def test_linha_do_servidor_diz_onde_ele_fica_e_a_que_distancia(tmp_path, monkeypatch):
+    rede, _ = _tela(tmp_path, monkeypatch)
+    texto = rede._texto_servidor({"servidor": "gru1.linode.com",
+                                  "servidor_nome": "Linode São Paulo",
+                                  "servidor_ms": 15.8, "fixado": None})
+    assert "Linode São Paulo" in texto and "gru1.linode.com" in texto
+    assert "15.8 ms" in texto
+    assert "fixado" not in texto
+    fixo = rede._texto_servidor({"servidor": "x", "servidor_nome": "x",
+                                 "servidor_ms": None, "fixado": "x"})
+    assert fixo == "x · fixado"
+    assert rede._texto_servidor({}) == units.DASH
+
+
+def test_a_tela_mostra_o_menor_teto_e_de_quem_ele_e(tmp_path, monkeypatch):
+    """A resposta para "isso é a minha internet ou é o app?" precisa dizer QUAL
+    limite é, e não só um número solto."""
+    rede, _ = _tela(tmp_path, monkeypatch)
+    assert "janela de envio" in rede._texto_teto({"teto_janela": 131.0,
+                                                  "teto_processo": 13559.0})
+    assert "este app" in rede._texto_teto({"teto_janela": 8949.0,
+                                           "teto_processo": 2008.0})
+    assert rede._texto_teto({}) == units.DASH
+    assert rede._taxa(13559.0) == "13,6 Gbps"
+
+
+def test_linhas_sem_conteudo_ficam_escondidas(tmp_path, monkeypatch):
+    """Travessão fixo numa linha diz "isto quebrou"; linha ausente diz "ainda não
+    houve medição", que é a verdade antes do primeiro teste."""
+    _, v = _tela(tmp_path, monkeypatch)
+    try:
+        assert not v.test_rows.row("teto").isVisibleTo(v)
+        assert not v.test_rows.row("envio").isVisibleTo(v)
+        v._teste._publicar(servidor="dl.exemplo", servidor_envio="ul.exemplo",
+                           teto_janela=131.0)
+        v._atualizar_teste()
+        assert v.test_rows.row("envio").isVisibleTo(v)
+        assert v.test_rows.row("teto").isVisibleTo(v)
+        v._teste._publicar(servidor_envio="dl.exemplo")
+        v._atualizar_teste()
+        assert not v.test_rows.row("envio").isVisibleTo(v), \
+            "repetiu o mesmo host em duas linhas"
+    finally:
+        v._encerrar_teste()
+
+
+def test_lista_de_servidores_trava_durante_a_medicao(tmp_path, monkeypatch):
+    """Trocar de servidor no meio não teria efeito nenhum sobre a medição em
+    curso; deixar clicável seria um botão que não faz o que parece."""
+    _, v = _tela(tmp_path, monkeypatch)
+    try:
+        v._teste._publicar(rodando=True, fase=sp.FASE_DOWNLOAD)
+        v._atualizar_teste()
+        assert not v.test_srv.isEnabled()
+        v._teste._publicar(rodando=False, fase=sp.FASE_PRONTO)
+        v._atualizar_teste()
+        assert v.test_srv.isEnabled()
+    finally:
+        v._encerrar_teste()

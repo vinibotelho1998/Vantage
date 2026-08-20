@@ -294,7 +294,9 @@ class MainWindow(QWidget):
         items = [
             (f"CPU {d.get('cpu_pct', 0):.0f}%", theme.load_color(d.get("cpu_pct"))),
             (f"{units.temp(d.get('cpu_temp'))}", theme.temp_color(d.get("cpu_temp"))),
-            (f"GPU {gpu.get('usage', 0):.0f}%", theme.load_color(gpu.get("usage"))),
+            # Sem sensor de carga o chip mostra travessao: formatar o None
+            # estourava, e "GPU 0%" seria uma medida que ninguem fez.
+            (f"GPU {units.percent(gpu.get('usage'))}", theme.load_color(gpu.get("usage"))),
             (f"{units.temp(gpu.get('temp'))}", theme.temp_color(gpu.get("temp"))),
             (f"RAM {d.get('ram_pct', 0):.0f}%", theme.load_color(d.get("ram_pct"))),
         ]

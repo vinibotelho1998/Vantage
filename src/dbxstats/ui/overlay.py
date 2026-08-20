@@ -69,13 +69,23 @@ _LOW_AFUNDOU = 0.5
 """Fracao da media abaixo da qual o 1% low ganha a seta. E' texto, e nao cor,
 porque cerca de 8% dos homens nao separam verde de vermelho."""
 
-_ALTURA_MAXIMA = 0.26
+_ALTURA_MAXIMA = 0.36
 """Fracao da tela a partir da qual o painel cai sozinho para o modo compacto.
 
-Medido: o arranjo completo da' 256 px na escala 1.0 de um 1080p, contra os 280
-px do limite — ou seja, na configuracao mais comum ele passa inteiro. O
-rebaixamento existe para escala alta e tela baixa, onde a torre de numeros comeca
-a tapar justamente o jogo que ela deveria estar medindo."""
+O rebaixamento existe para escala alta em tela baixa, onde a torre de numeros
+comeca a tapar justamente o jogo que ela deveria estar medindo. Ele nao pode
+disparar no padrao de fabrica: la' dentro do jogo ninguem descobre que metade
+das metricas marcadas foi cortada.
+
+Medido com a fonte real do sistema (a plataforma offscreen do Qt nao tem
+familia nenhuma e devolve caixas de 13 px, o que subestimava a altura em 40%):
+o arranjo completo ocupa entre 24% e 27% da tela em todas as resolucoes, porque
+_auto_scale ja' encolhe o painel pela largura da tela. Em 0.26 sobravam menos de
+4% de folga — qualquer linha nova rebaixava o padrao, e numa TV 720p ele ja'
+nascia rebaixado. Em 0.36 a folga vai de 27% (720p, o pior caso) a 43% (1080p),
+que e' o que absorve tanto uma linha a mais quanto uma fonte mais alta (Cascadia
+Mono no lugar da Consolas, quando ela existe na maquina) sem deixar de rebaixar
+quem realmente pediu um painel grande demais: na escala 1.6 ele ainda desce."""
 
 _CORTE_COMPACTO = frozenset({
     "volts", "ram", "temps_mem", "jogo_ram", "jogo_ram_ws", "mem_clock",
@@ -86,6 +96,34 @@ _CORTE_COMPACTO = frozenset({
 
 def rect_center(rect) -> tuple[int, int]:
     return ((rect[0] + rect[2]) // 2, (rect[1] + rect[3]) // 2)
+
+
+def _alpha_do_fundo(opacidade: float) -> int:
+    """Opacidade escolhida (0.30 a 1.00) -> alpha 0..255 do fundo do painel.
+
+    O mapa antigo era `opacidade * 165`: o controle no maximo pintava 65% de
+    opacidade. Sobre uma cena clara — neve, deserto, menu branco — o fundo
+    compunha para um cinza medio em que nem o vermelho de alarme aparecia, e nao
+    havia posicao do controle que resolvesse. Um controle sem posicao boa e'
+    decoracao, e ainda faz a pessoa concluir que o app e' que esta' quebrado.
+
+    Aqui o mapa e' o obvio: 88% no controle sao 88% de opacidade na tela, e o fim
+    do curso e' solido de verdade. Quem baixar continua vendo o jogo atraves do
+    painel — a diferenca e' que agora isso e' uma escolha, e nao o unico estado
+    possivel.
+    """
+    return round(max(0.0, min(1.0, opacidade)) * 255)
+
+
+def cabe_na_tela(altura_painel: float, altura_tela: float) -> bool:
+    """Decide sozinho se o painel completo ainda cabe, sem depender de Qt.
+
+    Separado de `place` porque o custo de errar aqui e' alto e invisivel: um
+    "nao cabe" indevido apaga dez metricas no meio da partida. Assim a decisao
+    pode ser conferida com as alturas medidas em fonte de verdade, sem depender
+    de qual plataforma grafica o teste conseguiu abrir.
+    """
+    return altura_painel <= altura_tela * _ALTURA_MAXIMA
 
 
 def _ghz(mhz: float | None) -> str:
@@ -185,7 +223,11 @@ def _barra(usado: float | None, total: float | None, cor: str,
         marcadas = max(0, min(cheias, round(_CELULAS_BARRA * destaque / total)))
     # Meio tom solido em vez de alpha: rich text de QLabel nao mistura com o
     # fundo translucido do overlay, entao a transparencia sairia como cor chapada.
-    meio = theme.mix(cor, theme.BG_SUNKEN, 0.55)
+    # Escurece pouco (0.25): a 0.55 o "resto do sistema" caia para 2:1 contra um
+    # fundo claro atravessando o painel, e a fatia do meio sumia — sobrava so' o
+    # pedaco do jogo, que e' o contrario do que a barra quer dizer. O degrau para
+    # a fatia do jogo continua visivel porque ela e' a unica com a cor cheia.
+    meio = theme.mix(cor, theme.BG_SUNKEN, 0.25)
     partes = []
     if marcadas:
         partes.append(f"<span style='color:{cor}'>{'█' * marcadas}</span>")
@@ -193,9 +235,21 @@ def _barra(usado: float | None, total: float | None, cor: str,
         partes.append(f"<span style='color:{meio if marcadas else cor}'>"
                       f"{'█' * (cheias - marcadas)}</span>")
     if _CELULAS_BARRA - cheias:
-        partes.append(f"<span style='color:{theme.FAINT}'>"
+        # Trilho em MUTE, nao no cinza FAINT: o '░' ja' cobre um quarto da celula,
+        # entao ele sai discreto de qualquer jeito. No FAINT ele sumia sobre cena
+        # clara e a barra perdia exatamente a proporcao que ela existe para
+        # mostrar — sobrava um bloco solto, sem escala.
+        partes.append(f"<span style='color:{theme.MUTE}'>"
                       f"{'░' * (_CELULAS_BARRA - cheias)}</span>")
     return "".join(partes)
+
+
+_SEGURA_MEDIA_S = 6.0
+"""Quanto tempo a temperatura media sobrevive a um furo de sensor.
+
+Sensor de nucleo falha em ciclo solto. Sem essa carencia a celula piscava
+entre "61/78" e "78" varias vezes por minuto, o que se le' como o app
+perdendo dado, e nao como a temperatura mudando."""
 
 
 class GameOverlay(QWidget):
@@ -220,6 +274,8 @@ class GameOverlay(QWidget):
         self._built_for: tuple = ()
         self._painted = 0.0
         self._compacto = False
+        self._media_recente: dict[str, tuple[float, float]] = {}
+        """Ultima temperatura media por linha; ver _temps."""
         self._build()
 
     # ── tamanho ──────────────────────────────────────────────────────────────
@@ -257,8 +313,7 @@ class GameOverlay(QWidget):
         cfg = self._ctl.settings
         self._built_for = self._screen_key()
         scale = cfg.overlay_scale * self._auto_scale()
-        # Fundo mais leve: por cima do jogo o painel tem que informar, nao tapar.
-        alpha = int(cfg.overlay_opacity * 165)
+        alpha = _alpha_do_fundo(cfg.overlay_opacity)
         metrics = self._metricas()
 
         outer = QVBoxLayout(self)
@@ -330,7 +385,7 @@ class GameOverlay(QWidget):
         # jogadores — dois nomes para a mesma coisa so' confundiam.
         self._limite_tag = QLabel("GARGALO")
         self._limite_tag.setFont(_mono(8, QFont.Weight.Bold, scale))
-        self._limite_tag.setStyleSheet(f"color: {theme.FAINT};")
+        self._limite_tag.setStyleSheet(f"color: {theme.MUTE};")
         self._limite = QLabel("")
         self._limite.setFont(_mono(9.5, QFont.Weight.DemiBold, scale))
         self._engasgo = QLabel("")
@@ -446,10 +501,21 @@ class GameOverlay(QWidget):
         self._hora = QLabel("")
         self._hora.setFont(pequena)
         self._hora.setStyleSheet(f"color: {theme.rgba(theme.TXT, 0.5)};")
-        # Assinatura discreta: identifica sem disputar espaco com o dado.
+        # Assinatura discreta: identifica sem disputar espaco com o dado. Discreta
+        # ate' o piso de legibilidade e nem um passo alem: a 0.45 ela ficava
+        # abaixo de 3:1 sobre cena clara, e marca que nao se le' nao identifica.
         marca = QLabel("dbx")
         marca.setFont(_mono(6.5, QFont.Weight.Bold, scale))
-        marca.setStyleSheet(f"color: {theme.rgba(theme.accent_color(cfg.accent), 0.45)};")
+        marca.setStyleSheet(f"color: {theme.rgba(theme.accent_color(cfg.accent), 0.55)};")
+
+        # O rebaixamento apaga metade das metricas marcadas, e quem esta' jogando
+        # nao tem como saber que foi o painel que cortou — procuraria o defeito no
+        # sensor ou na configuracao. Uma palavra no rodape e' o suficiente para
+        # ligar "liguei Tensao e nao apareceu" ao unico motivo que existe.
+        self._marca_compacto = QLabel("compacto")
+        self._marca_compacto.setFont(pequena)
+        self._marca_compacto.setStyleSheet(f"color: {theme.MUTE};")
+        self._marca_compacto.setVisible(self._compacto)
 
         self._ping.setVisible("ping" in metrics)
         self._perda.setVisible(False)
@@ -457,6 +523,7 @@ class GameOverlay(QWidget):
         for w in (self._ping, self._perda, self._origem):
             rodape.addWidget(w)
         rodape.addStretch(1)
+        rodape.addWidget(self._marca_compacto)
         rodape.addWidget(self._hora)
         rodape.addWidget(marca)
         lay.addLayout(rodape)
@@ -465,10 +532,16 @@ class GameOverlay(QWidget):
         # a tensao do processador e a temperatura dos pentes nem aparecem na
         # arvore do LHM: some a coluna inteira, e o motivo tem que caber em algum
         # lugar ou a pessoa conclui que a maquina nao tem os sensores.
+        #
+        # A pergunta e' sobre o que a pessoa marcou, e nao sobre o que sobrou do
+        # corte: no compacto as duas chaves ja' foram removidas de `metrics`, e
+        # olhar so' para elas fazia o aviso sumir junto com as colunas que ele
+        # explica — restando uma tela de opcoes toda marcada e nenhuma pista.
+        pedidas = set(cfg.overlay_metrics)
         self._aviso = QLabel("Vcore e temp dos pentes pedem administrador")
         self._aviso.setFont(pequena)
         self._aviso.setStyleSheet(f"color: {theme.WARN};")
-        self._aviso.setVisible(bool(metrics & {"volts", "temps_mem"})
+        self._aviso.setVisible(bool(pedidas & {"volts", "temps_mem"})
                                and not win.is_admin())
         lay.addWidget(self._aviso)
 
@@ -510,7 +583,7 @@ class GameOverlay(QWidget):
         if screen is None:
             return
         area = screen.geometry()
-        if not self._compacto and self.height() > area.height() * _ALTURA_MAXIMA:
+        if not self._compacto and not cabe_na_tela(self.height(), area.height()):
             # So' desce, nunca sobe de volta sozinho: alternar entre os dois
             # arranjos daria um painel piscando entre dois tamanhos, ja' que o
             # compacto sempre cabe onde o completo nao coube.
@@ -572,7 +645,7 @@ class GameOverlay(QWidget):
         if stream is None:
             self._fps.setText("—")
             self._fps.setStyleSheet(f"color: {theme.MUTE};")
-            self._sub.setText(f"<span style='color:{theme.FAINT}'>sem captura</span>")
+            self._sub.setText(f"<span style='color:{theme.MUTE}'>sem captura</span>")
             self._limite_box.setVisible(False)
             return
 
@@ -645,13 +718,14 @@ class GameOverlay(QWidget):
             if "temps_mem" in metrics and g.get("temp_vram") is not None:
                 self._set("vram", TEMP, units.temp(g["temp_vram"]).replace(" ", ""),
                           theme.vram_temp_color(g["temp_vram"]))
+            # O clock da VRAM vai para a MESMA coluna do clock da CPU e da GPU.
+            # Na cauda ele ficava solto na direita, longe dos numeros com que se
+            # compara — clock se le' em coluna, um debaixo do outro.
+            self._set("vram", CLOCK,
+                      _ghz(g.get("mem_freq")) if "mem_clock" in metrics else "")
             cauda = []
             if "mem_ctrl" in metrics and g.get("mem_ctrl") is not None:
-                # "ctrl" nao dizia nada. O numero e' quanto da banda de
-                # memoria da placa esta' em uso — e' assim que ele se le'.
                 cauda.append(f"banda {g['mem_ctrl']:.0f}%")
-            if "mem_clock" in metrics and g.get("mem_freq"):
-                cauda.append(_ghz(g.get("mem_freq")))
             self._set("vram", CAUDA, " ".join(cauda))
 
         if "ram" in self._dados:
@@ -710,7 +784,11 @@ class GameOverlay(QWidget):
         # passou a seguir o servidor da partida; repetir "8.8.8.8" a partida
         # inteira ao lado do numero de ping nao acrescenta nada.
         alvo = getattr(self._ctl.ping, "target_label", "")
-        if origem and alvo and getattr(self._ctl.ping, "following_game", False):
+        # O rotulo do ping costuma SER o nome do processo do jogo, porque a
+        # latencia sai do trafego dele. Concatenar os dois escrevia "cs2.exe ·
+        # cs2.exe" no rodape a partida inteira.
+        if (origem and alvo and alvo.strip().lower() != origem.strip().lower()
+                and getattr(self._ctl.ping, "following_game", False)):
             origem = f"{origem}  ·  {alvo}"
         # Sem jogo o rodape fica vazio: o "sem captura" ja' esta' no lugar do
         # sub, ao lado do numero grande, e dizer duas vezes so' gasta linha.
@@ -737,6 +815,16 @@ class GameOverlay(QWidget):
         travessao ao lado de um numero: placa e processador variam muito no que
         publicam, e furo de sensor nao pode virar buraco no overlay.
         """
+        agora = time.monotonic()
+        if media is not None:
+            self._media_recente[linha] = (media, agora)
+        else:
+            guardado = self._media_recente.get(linha)
+            if guardado and agora - guardado[1] <= _SEGURA_MEDIA_S:
+                media = guardado[0]      # cobre o furo sem inventar leitura
+            else:
+                self._media_recente.pop(linha, None)
+
         valores = [v for v in (media, pico) if v is not None]
         if not valores:
             self._set(linha, TEMP, "")
@@ -759,7 +847,7 @@ class GameOverlay(QWidget):
         # largura que o overlay nao tem de sobra e nao esclarece nada.
         self._set(linha, TEMP,
                   f"<span style='color:{cor(media)}'>{media:.0f}</span>"
-                  f"<span style='color:{theme.FAINT}'>/</span>"
+                  f"<span style='color:{theme.MUTE}'>/</span>"
                   f"<span style='color:{cor(pico)}'>{pico:.0f}°C</span>")
 
     def _aplicar_grade(self) -> None:
@@ -811,7 +899,7 @@ def _veredito(m) -> tuple[str, str]:
     if m.bottleneck == fr.BOTTLENECK_CPU:
         return _com_pct("CPU", m.cpu_bound_pct, theme.CPU)
     if m.bottleneck == fr.BOTTLENECK_CAP:
-        return _com_pct("cap/VSync", m.capped_pct, theme.FAINT)
+        return _com_pct("cap/VSync", m.capped_pct, theme.MUTE)
     if m.bottleneck == fr.BOTTLENECK_BALANCED:
         return "os dois", theme.TXT
-    return "", theme.FAINT
+    return "", theme.MUTE

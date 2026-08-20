@@ -1,4 +1,4 @@
-"""Desenha o overlay sem tela e imprime o arranjo como texto.
+"""Desenha o overlay sem abrir janela e imprime o arranjo como texto.
 
 Conferir o overlay abrindo um jogo a cada mexida e' caro e nao repete: aqui ele
 e' montado de verdade (a mesma classe do app), o Qt faz o layout, e a geometria
@@ -15,7 +15,12 @@ import re
 import sys
 import tempfile
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# Fonte real, como em preview.py e make_installer_art.py: a plataforma offscreen
+# do Qt neste Windows nao tem familia de fonte nenhuma, mede todo glifo com o
+# mesmo avanco de 13 px e devolve um painel 12% mais estreito e 41% mais baixo
+# que o de verdade. Como e' a altura que decide o rebaixamento para o modo
+# compacto, medir no offscreen calibrava o limiar por um painel que nao existe.
+os.environ["QT_QPA_PLATFORM"] = "windows"
 # Dados isolados: script de desenvolvimento nunca pode gravar por cima do
 # settings.json de verdade.
 os.environ.setdefault("DBXSTATS_DATA_DIR",
@@ -28,6 +33,7 @@ from PySide6.QtWidgets import QApplication, QLabel  # noqa: E402
 
 from dbxstats.config import OVERLAY_METRICS, Settings  # noqa: E402
 from dbxstats.core import frames as fr  # noqa: E402
+from dbxstats.ui import overlay as ov_mod  # noqa: E402
 from dbxstats.ui.charts import Sparkline  # noqa: E402
 from dbxstats.ui.overlay import GameOverlay  # noqa: E402
 
@@ -163,6 +169,15 @@ def texto_do_overlay(ov: GameOverlay) -> str:
         saida.append("│" + "".join(grade) + "│")
     saida.append("└" + "─" * largura + "┘")
     saida.append(f"   {ov.width()} x {ov.height()} px")
+    # A folga ate' o rebaixamento e' o numero que ninguem estava olhando: quando
+    # ela zera, dez metricas marcadas somem do painel sem aviso nenhum.
+    tela = ov._screen()
+    if tela is not None:
+        alt = tela.geometry().height()
+        teto = alt * ov_mod._ALTURA_MAXIMA
+        saida.append(f"   tela {alt} px · teto {teto:.0f} px · "
+                     f"folga {100 * (teto - ov.height()) / teto:+.0f}% · "
+                     f"{'COMPACTO (metricas cortadas)' if ov._compacto else 'completo'}")
     return "\n".join(saida)
 
 

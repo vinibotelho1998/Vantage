@@ -61,7 +61,7 @@ class GpuView(View):
         bottom = QHBoxLayout()
         bottom.setSpacing(theme.scaled(theme.GAP))
 
-        card_vram = Card("Memória de vídeo", theme.RAM)
+        self.card_vram = card_vram = Card("Memória de vídeo", theme.RAM)
         self.vram_label = label("—", 20, family=theme.FONT_DISPLAY)
         card_vram.add(self.vram_label)
         self.vram_bar = BarMeter(theme.RAM, 8)
@@ -151,12 +151,20 @@ class GpuView(View):
         self.power_chart.set_values("watts", h.values("gpu_watts"))
         self.power_chart.refresh()
 
-        used, total = g.get("vram_used", 0), max(1, g.get("vram_total", 1))
-        self.vram_label.setText(f"{used / 1024:.1f} / {total / 1024:.1f} GB")
+        # Placa que nao publica os sensores de memoria (as iGPUs chamam essas
+        # leituras de outra coisa) nao tem card de VRAM: um "0.0 / 0.0 GB" com
+        # "Livre 1 MB" embaixo e' medida inventada, e uma barra zerada ainda se
+        # le' como "memoria sobrando".
+        used, total = g.get("vram_used"), g.get("vram_total")
+        tem_vram = used is not None and bool(total)
+        self.card_vram.setVisible(tem_vram)
+        self.kpi.show_only([k for k, _c, _u in _KPIS if k != "vram" or tem_vram])
+        if tem_vram:
+            self.vram_label.setText(f"{used / 1024:.1f} / {total / 1024:.1f} GB")
+            self.vram_rows.set("used", f"{used} MB")
+            self.vram_rows.set("free", f"{total - used} MB")
         self.vram_label.setStyleSheet(f"color: {theme.load_color(vram_pct)};")
         self.vram_bar.set_value(vram_pct, theme.load_color(vram_pct))
-        self.vram_rows.set("used", f"{used} MB")
-        self.vram_rows.set("free", f"{total - used} MB")
         self.vram_rows.set("ctrl", units.percent(g.get("mem_ctrl")))
         # Linha some sem sensor: nesta maquina AMD nao ha NVML, e a temperatura da
         # VRAM so' existe em parte das placas. Travessao fixo faz parecer defeito.

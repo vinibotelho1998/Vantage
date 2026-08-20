@@ -117,6 +117,16 @@ class LauncherView(View):
         page, self.lay = scroll_page()
         root.addWidget(page, 1)
 
+        barra = QHBoxLayout()
+        barra.setSpacing(theme.scaled(8))
+        self.btn_bp = PillButton("Abrir Big Picture", theme.FPS, filled=True)
+        self.btn_bp.clicked.connect(self._abrir_big_picture)
+        self.btn_bp.setToolTip("Tela cheia navegavel so' com o controle. "
+                               "Também abre segurando Back por 1 s, ou com Ctrl+Alt+G.")
+        barra.addWidget(self.btn_bp)
+        barra.addStretch(1)
+        self.lay.addLayout(barra)
+
         card_como = Card("Como funciona", theme.CPU)
         texto = label(_COMO_FUNCIONA, 9, color=theme.TXT)
         texto.setWordWrap(True)
@@ -141,6 +151,15 @@ class LauncherView(View):
         self.lay.addStretch(1)
 
         self._refresh()
+
+    def _abrir_big_picture(self) -> None:
+        abrir = getattr(self.app, "big_picture_abrir", None)
+        if abrir is None:
+            return
+        try:
+            abrir()
+        except Exception as e:                                   # noqa: BLE001
+            self.notify(f"não consegui abrir: {e}", theme.BAD)
 
     def _descrever_telas(self) -> str:
         """Uma linha dizendo como as telas estao agora."""

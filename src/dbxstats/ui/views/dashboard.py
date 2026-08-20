@@ -317,8 +317,11 @@ class DashboardView(View):
         self.gpu_rows.set("watts", ("~" if gpu.get("watts_estimated") else "")
                           + units.watts(gw, 0))
         _linha(self.gpu_rows, "volts", gpu.get("volts"), lambda v: f"{v:.3f} V", theme.TXT)
-        self.gpu_rows.set("vram", units.mib_pair(gpu.get("vram_used"), gpu.get("vram_total")),
-                          theme.load_color(gpu.get("vram_pct")))
+        # Mesma regra do tile: sem os dois sensores de memoria a linha some, em
+        # vez de repetir um travessao que se le' como defeito da placa.
+        _linha(self.gpu_rows, "vram", gpu.get("vram_pct"),
+               lambda _v: units.mib_pair(gpu.get("vram_used"), gpu.get("vram_total")),
+               theme.load_color)
         _linha(self.gpu_rows, "vram_temp", gpu.get("temp_vram"), units.temp,
                theme.vram_temp_color)
         self.gpu_spark.set_values(h.values("gpu_pct"))

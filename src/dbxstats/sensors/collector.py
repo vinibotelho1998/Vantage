@@ -188,21 +188,26 @@ class Collector:
 
         gpu: dict = {}
         if lhm.get("gpu_ok"):
+            # Toda leitura ausente sai como None, nunca como 0 nem como 1. Zero e'
+            # uma medida ("a placa esta' parada") e 1 MiB de VRAM total e' truthy:
+            # os dois derrotam as guardas de "esta maquina nao publica isso" la' na
+            # frente e viram "0.0/0.0GB" e "Livre 1 MB" numa iGPU, que nomeia os
+            # sensores de memoria de outro jeito e nunca casa com estas chaves.
             gpu = {
                 "name": lhm.get("gpu_name", "GPU"),
-                "usage": lhm.get("gpu_usage", 0),
+                "usage": lhm.get("gpu_usage"),
                 "temp": lhm.get("gpu_temp"),
                 "temp_hotspot": lhm.get("gpu_temp_hotspot"),
                 "temp_vram": lhm.get("gpu_temp_vram"),
                 "fan_rpm": lhm.get("gpu_fan_rpm"),
                 "fan_pct": lhm.get("gpu_fan_pct"),
-                "freq": lhm.get("gpu_freq", 0),
-                "mem_freq": lhm.get("gpu_mem_freq", 0),
+                "freq": lhm.get("gpu_freq"),
+                "mem_freq": lhm.get("gpu_mem_freq"),
                 "mem_ctrl": lhm.get("gpu_mem_ctrl"),
                 "video_engine": lhm.get("gpu_video_engine"),
                 "volts": lhm.get("gpu_volts"),
-                "vram_used": lhm.get("gpu_vram_used", 0),
-                "vram_total": lhm.get("gpu_vram_total", 1),
+                "vram_used": lhm.get("gpu_vram_used"),
+                "vram_total": lhm.get("gpu_vram_total"),
             }
         if nvml:
             for key, value in nvml.items():
@@ -229,7 +234,9 @@ class Collector:
         vram = self._gpu.vram()
         if vram:
             gpu["vram_used"], gpu["vram_total"] = vram
-        gpu["vram_pct"] = 100.0 * gpu.get("vram_used", 0) / max(1, gpu.get("vram_total", 1))
+        usado, total = gpu.get("vram_used"), gpu.get("vram_total")
+        gpu["vram_pct"] = (100.0 * usado / total
+                           if usado is not None and total else None)
         gpu.setdefault("throttle", [])
         gpu.setdefault("name", "GPU")
         static = dict(self._gpu.static)

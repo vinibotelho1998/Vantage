@@ -3,7 +3,13 @@ from __future__ import annotations
 
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QApplication, QHBoxLayout, QProgressBar, QVBoxLayout
+from PySide6.QtWidgets import (
+    QApplication,
+    QComboBox,
+    QHBoxLayout,
+    QProgressBar,
+    QVBoxLayout,
+)
 
 from ... import theme
 from ...core import units
@@ -20,6 +26,53 @@ _KPIS = [
 _TESTE_KPIS = [
     ("dl", "Download", "Mbps"), ("ul", "Upload", "Mbps"), ("ping", "Latência", "ms"),
 ]
+
+_AUTOMATICO = "Automático (menor latência)"
+"""Primeira opção da lista de servidores — e o padrão, sempre."""
+
+
+def _taxa(mbps: float | None) -> str:
+    """Mbps ou Gbps conforme o tamanho: "13559 Mbps" ninguém lê de primeira."""
+    if not mbps:
+        return units.DASH
+    return f"{mbps / 1000:.1f} Gbps".replace(".", ",") if mbps >= 1000 else f"{mbps:.0f} Mbps"
+
+
+def _texto_servidor(s: dict) -> str:
+    """Quem está medindo, onde fica e a que distância — numa linha só.
+
+    A latência que sai aqui é a de QUEM ESTÁ MEDINDO, e não a do servidor
+    escolhido no começo: quando a fila desce para a reserva, casar o host de um
+    com o número do outro seria inventar uma medida que ninguém fez.
+    """
+    host = s.get("servidor")
+    if not host:
+        return units.DASH
+    nome = s.get("servidor_nome")
+    texto = host if not nome or nome == host else f"{nome} ({host})"
+    ms = s.get("servidor_ms")
+    if ms is not None:
+        texto += f" · {units.ms(ms, 1)}"
+    if s.get("fixado"):
+        texto += " · fixado"
+    return texto
+
+
+def _texto_teto(s: dict) -> str:
+    """O menor teto medido do envio, e de quem ele é.
+
+    Existe para responder à pergunta que um número alto de upload sempre levanta:
+    isso é a minha internet ou é o app? Quando o teto está muito acima do medido,
+    a resposta é "internet" e a linha serve de prova; quando não está, o aviso
+    logo abaixo diz que o número virou o limite do envio.
+    """
+    janela, processo = s.get("teto_janela"), s.get("teto_processo")
+    if janela and (not processo or janela <= processo):
+        return f"{_taxa(janela)} · janela de envio do sistema"
+    if processo:
+        return f"{_taxa(processo)} · este app, com um núcleo"
+    return units.DASH
+
 
 _ROTULO_FASE = {
     speedtest.FASE_OCIOSO: ("mede quando você mandar", theme.FAINT),
@@ -104,11 +157,27 @@ class NetworkView(View):
         accent = theme.accent_color(self.cfg.accent)
         card = Card("Teste de velocidade", accent, "download, upload e latência do link")
 
+        self._teste = speedtest.TesteDeVelocidade()
+
         barra = QHBoxLayout()
         barra.setSpacing(theme.scaled(8))
         self.test_btn = PillButton("Testar velocidade", accent, filled=True)
         self.test_btn.clicked.connect(self._alternar_teste)
         barra.addWidget(self.test_btn)
+        # Escolher servidor a mao e' opcional de proposito: no automatico o motor
+        # sonda todas as casas antes de medir e usa a mais proxima, que e' o certo
+        # em quase todo caso. A lista existe para quem tem um servidor melhor (o
+        # do proprio provedor, por exemplo) ou quer comparar com o Ookla usando a
+        # mesma casa — sem isso, "por que o numero deles e' outro?" nao tem
+        # resposta possivel.
+        self.test_srv = QComboBox()
+        self.test_srv.setMinimumWidth(theme.scaled(210))
+        self.test_srv.setToolTip("Servidor de teste. No automático o app mede a "
+                                 "latência de cada casa antes de começar e usa a "
+                                 "mais próxima.")
+        self._montar_servidores()
+        self.test_srv.currentIndexChanged.connect(self._fixar_servidor)
+        barra.addWidget(self.test_srv)
         barra.addStretch(1)
         self.test_badge = Badge(_ROTULO_FASE[speedtest.FASE_OCIOSO][0], theme.FAINT)
         barra.addWidget(self.test_badge)
@@ -134,10 +203,17 @@ class NetworkView(View):
         card.add_layout(numeros)
 
         self.test_rows = MetricList([
-            ("servidor", "Servidor de teste"), ("jitter", "Jitter"),
+            ("servidor", "Servidor de teste"), ("envio", "Servidor de upload"),
+            ("jitter", "Jitter"), ("teto", "Teto do envio"),
             ("quando", "Última medição"),
         ])
         card.add(self.test_rows)
+        # Duas linhas que so' aparecem quando tem o que dizer: o servidor de
+        # upload, quando ele nao e' o mesmo do download, e o teto do envio, que
+        # so' existe depois de uma medicao de upload. Travessao fixo numa linha
+        # diz "isto quebrou" — e nao e' o caso.
+        for chave in ("envio", "teto"):
+            self.test_rows.row(chave).setVisible(False)
 
         # Recado do motor (erro ou ressalva). Fica escondido quando nao ha' nada
         # a dizer para o card nao carregar uma linha vazia o tempo todo.
@@ -146,7 +222,6 @@ class NetworkView(View):
         self.test_msg.setVisible(False)
         card.add(self.test_msg)
 
-        self._teste = speedtest.TesteDeVelocidade()
         self._teste_timer = QTimer(self)
         self._teste_timer.setInterval(120)
         self._teste_timer.timeout.connect(self._atualizar_teste)
@@ -157,6 +232,49 @@ class NetworkView(View):
             qt.aboutToQuit.connect(self._encerrar_teste)
         self._atualizar_teste()
         return card
+
+    def _montar_servidores(self) -> None:
+        """Preenche a lista de servidores com o que o motor de fato usaria.
+
+        Nao adianta oferecer uma casa que o motor nao conhece, entao a lista sai
+        dele: semente embutida mais o que a lista publica ja' deixou no disco. Um
+        servidor fixado que sumiu da lista continua aparecendo — apagar da tela a
+        escolha que ainda esta' valendo seria mentir sobre o proprio estado.
+        """
+        fixado = self._teste.fixado
+        self.test_srv.blockSignals(True)
+        self.test_srv.clear()
+        self.test_srv.addItem(_AUTOMATICO, "")
+        for prov in self._teste.candidatos():
+            self.test_srv.addItem(f"{prov.rotulo} — {prov.host}", prov.host)
+        if fixado and self.test_srv.findData(fixado) < 0:
+            self.test_srv.addItem(f"{fixado} (fixado)", fixado)
+        self.test_srv.setCurrentIndex(max(0, self.test_srv.findData(fixado or "")))
+        self.test_srv.blockSignals(False)
+
+    def _servidores_esperados(self) -> list[str]:
+        hosts = [p.host for p in self._teste.candidatos()]
+        fixado = self._teste.fixado
+        if fixado and fixado not in hosts:
+            hosts.append(fixado)
+        return hosts
+
+    def _sincronizar_servidores(self) -> None:
+        """Casas novas da lista pública aparecem sem reabrir o app.
+
+        A busca da lista roda em segundo plano e só termina depois que o teste já
+        começou, então o que ela traz nunca está na tela no momento em que chega.
+        Reconstruir a lista custa nada e só acontece quando ela de fato mudou —
+        mexer no combo à toa roubaria a seleção de quem estivesse escolhendo.
+        """
+        atual = [self.test_srv.itemData(i) for i in range(1, self.test_srv.count())]
+        if atual != self._servidores_esperados():
+            self._montar_servidores()
+
+    def _fixar_servidor(self, _indice: int) -> None:
+        """Troca de servidor vale do proximo teste em diante, e fica gravada."""
+        self._teste.fixar(self.test_srv.currentData() or None)
+        self._atualizar_teste()
 
     def _encerrar_teste(self) -> None:
         """Fechar o app: manda parar e espera pouco, nunca o timeout do socket.
@@ -213,9 +331,31 @@ class NetworkView(View):
                                        "medindo…" if medindo else "")
         self.test_tiles["ping"].set(units.integer(s["ping"]), theme.ping_color(s["ping"]))
 
-        self.test_rows.set("servidor", s["servidor"] or units.DASH)
+        # Trocar de servidor no meio da medicao nao teria efeito nenhum sobre ela;
+        # deixar a lista clicavel seria oferecer um botao que nao faz o que
+        # parece.
+        self.test_srv.setEnabled(not rodando)
+        if not rodando:
+            self._sincronizar_servidores()
+
+        self.test_rows.set("servidor", _texto_servidor(s))
         self.test_rows.set("jitter", units.ms(s["jitter"], 1))
         self.test_rows.set("quando", s["quando"] or units.DASH)
+
+        # O upload so' ganha linha propria quando mediu em outra casa: repetir o
+        # mesmo host duas vezes seguidas nao informa nada.
+        envio = s.get("servidor_envio")
+        outro = bool(envio) and envio != s.get("servidor")
+        self.test_rows.row("envio").setVisible(outro)
+        if outro:
+            self.test_rows.set("envio", envio)
+
+        # O teto so' aparece depois que houve upload — e, quando o numero medido
+        # encosta nele, o recado ambar logo abaixo explica que o valor virou o
+        # limite do envio, e nao a velocidade do link.
+        teto = _texto_teto(s)
+        self.test_rows.row("teto").setVisible(teto != units.DASH)
+        self.test_rows.set("teto", teto, theme.MUTE)
 
         # O erro pode chegar com o teste ainda rodando — o download morre e o
         # upload continua —, e e' de proposito: esconder a falha ate o fim deixava

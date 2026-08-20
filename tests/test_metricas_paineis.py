@@ -148,6 +148,40 @@ def test_tela_da_gpu_mostra_tensao_e_esconde_temp_de_vram_ausente():
     assert _linha(v.vram_rows, "temp").isHidden()
 
 
+def test_tela_da_gpu_sem_sensor_de_memoria_esconde_o_card_de_vram():
+    """Placa que nao publica memoria mostrava "0.0 / 0.0 GB" e "Livre 1 MB".
+
+    Os dois numeros vinham de sentinelas do coletor, nao de sensor nenhum. Com a
+    leitura ausente virando None, o que precisa acontecer aqui e' o card inteiro
+    sair — barra zerada se le' como "sobrando memoria", que e' o oposto de "nao
+    sei medir isto".
+    """
+    d = _dados()
+    d["gpu"] = dict(d["gpu"], vram_used=None, vram_total=None, vram_pct=None,
+                    mem_freq=None, freq=None)
+    v = gpu_view.GpuView(_App())
+    v.on_system(d)
+    assert v.card_vram.isHidden()
+    assert "vram" in v.kpi._ocultos
+    # E o resto da tela continua de pe', com travessao onde o clock nao existe.
+    assert v.kpi.tiles["clock"]._value.text() == "—"
+
+    v.on_system(_dados())
+    assert not v.card_vram.isHidden()
+    assert "vram" not in v.kpi._ocultos
+    assert v.vram_rows.row("used")._value.text() == "15810 MB"
+
+
+def test_painel_sem_sensor_de_memoria_de_video_esconde_o_tile_e_a_linha():
+    """O tile de VRAM ja' tinha guarda; a sentinela de 1 MiB e' que passava por ela."""
+    d = _dados()
+    d["gpu"] = dict(d["gpu"], vram_used=None, vram_total=None, vram_pct=None)
+    v = dash_view.DashboardView(_App())
+    v.on_system(d)
+    assert "vram" in v.kpi._ocultos
+    assert _linha(v.gpu_rows, "vram").isHidden()
+
+
 # ── memoria ──────────────────────────────────────────────────────────────────
 def test_tela_de_memoria_lista_um_pente_por_linha_com_o_limite_de_fabrica():
     v = mem_view.MemoryView(_App())

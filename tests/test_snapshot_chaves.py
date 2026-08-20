@@ -100,3 +100,37 @@ def test_ram_do_jogo_entra_e_sai_com_o_jogo(coletor, monkeypatch):
     assert "game_pid" not in fechado
     assert "game_ram_private" not in fechado
     assert "game_ram_wset" not in fechado
+
+
+_IGPU = {"gpu_ok": True, "gpu_name": "AMD Radeon(TM) Graphics", "gpu_usage": 7,
+         "gpu_temp": 44}
+"""Placa que o LHM enxerga mas cujos sensores de memoria nao existem com esses
+nomes — e' o caso das iGPUs, que publicam "D3D Dedicated Memory Used" em vez de
+"GPU Memory Used"."""
+
+
+def test_gpu_sem_sensor_de_memoria_nao_inventa_um_total_de_1_mib(coletor):
+    """Sentinela numerica derrota as guardas de "esta maquina nao mede isso".
+
+    Um total de 1 MiB e' truthy: passa por todo `if vram_total` escrito para
+    esconder a VRAM em maquina sem GPU dedicada, e o painel exibia "0.0 / 0.0 GB"
+    com "Livre 1 MB" embaixo — numeros que ninguem mediu, com cara de medida.
+    Mesma armadilha no zero de carga e de clock.
+    """
+    gpu = coletor._collect_gpu(dict(_IGPU))
+    assert gpu["vram_used"] is None
+    assert gpu["vram_total"] is None
+    assert gpu["vram_pct"] is None
+    assert gpu["freq"] is None
+    assert gpu["mem_freq"] is None
+    # O que a placa realmente publica continua chegando inteiro.
+    assert gpu["usage"] == 7
+    assert gpu["temp"] == 44
+
+
+def test_gpu_com_sensor_de_memoria_continua_calculando_a_porcentagem(coletor):
+    """A correcao nao pode custar a leitura de quem tem o sensor."""
+    gpu = coletor._collect_gpu(dict(_LHM))
+    assert gpu["vram_used"] == 2512
+    assert gpu["vram_total"] == 16304
+    assert 15.0 < gpu["vram_pct"] < 16.0
