@@ -76,3 +76,28 @@ def _num(value, decimals: int = 2) -> str:
     if v != v:  # NaN
         return ""
     return f"{v:.{decimals}f}".replace(".", ",")
+
+
+_SESSAO_COLUNAS = (
+    ("quando", "Quando"), ("game", "Jogo"), ("duracao_s", "Duração (s)"),
+    ("frames", "Frames"), ("fps_avg", "FPS médio"), ("fps_min", "FPS mínimo"),
+    ("fps_max", "FPS máximo"), ("low_1", "1% low"), ("ft_avg", "Frametime médio (ms)"),
+    ("ft_max", "Frametime máximo (ms)"), ("hitches", "Travadas"),
+    ("stutters", "Engasgos"), ("stutter_pct", "Engasgos (%)"),
+    ("cpu", "CPU (%)"), ("cpu_temp", "CPU temp (°C)"), ("cpu_watts", "CPU (W)"),
+    ("gpu", "GPU (%)"), ("gpu_temp", "GPU temp (°C)"), ("gpu_watts", "GPU (W)"),
+    ("ram", "RAM (%)"), ("vram", "VRAM (%)"),
+)
+
+
+def export_sessions(sessions: list[dict], name: str = "sessoes") -> Path | None:
+    """Grava as partidas gravadas num CSV.
+
+    Colunas fixas, e nao as chaves que por acaso existirem: sessao antiga nao tem
+    as metricas que entraram depois, e deixar o cabecalho variar por linha faria
+    a planilha abrir torta. O que faltar sai vazio.
+    """
+    limpo = "".join(c for c in (name or "sessao") if c.isalnum() or c in "-_ ").strip()
+    rows = [[s.get(chave, "") for chave, _rotulo in _SESSAO_COLUNAS] for s in sessions]
+    return _write(f"sessoes-{limpo or 'jogo'}-{_stamp()}.csv",
+                  [rotulo for _chave, rotulo in _SESSAO_COLUNAS], rows)

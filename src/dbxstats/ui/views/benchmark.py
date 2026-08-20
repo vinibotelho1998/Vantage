@@ -1,20 +1,23 @@
 """Tela de benchmark: captura uma corrida, resume e exporta."""
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QTimer
+from PySide6.QtCore import QPoint, Qt, QTimer
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QMenu,
     QPlainTextEdit,
     QProgressBar,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
 )
 
 from ... import theme
+from ...core import export
 from ...core import frames as fr
 from ...core import units
-from ..charts import FrameTimeChart, Histogram, PercentileChart
+from ..charts import FrameTimeChart, Histogram
 from ..components import Badge, Card, KpiStrip, MetricList, PillButton, label
 from .base import View, scroll_page
 
@@ -65,22 +68,48 @@ class BenchmarkView(View):
         page, lay = scroll_page()
         root.addWidget(page, 1)
 
+        # As sessoes vem primeiro porque sao o que a aba existe para mostrar: o
+        # jogo como ele foi, do inicio ao fim. A corrida cronometrada continua
+        # abaixo, para quando se quer comparar um trecho especifico.
+        self.card_sessoes = Card("Sessões de jogo", theme.FPS,
+                                 "gravadas do início ao fim ao abrir pelos Atalhos")
+        self.tabela = QTableWidget(0, len(_COLUNAS_SESSAO))
+        self.tabela.setHorizontalHeaderLabels(_COLUNAS_SESSAO)
+        self.tabela.verticalHeader().setVisible(False)
+        self.tabela.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.tabela.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.tabela.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.tabela.setAlternatingRowColors(True)
+        self.tabela.setMinimumHeight(theme.scaled(190))
+        self.tabela.horizontalHeader().setStretchLastSection(True)
+        self.tabela.itemSelectionChanged.connect(self._sessao_escolhida)
+        self.card_sessoes.add(self.tabela, 1)
+
+        acoes = QHBoxLayout()
+        acoes.setSpacing(theme.scaled(8))
+        self.btn_exp_sessao = PillButton("Exportar esta sessão", theme.MUTE)
+        self.btn_exp_sessao.clicked.connect(self._exportar_sessao)
+        self.btn_exp_todas = PillButton("Exportar todas", theme.MUTE)
+        self.btn_exp_todas.clicked.connect(self._exportar_sessoes)
+        acoes.addWidget(self.btn_exp_sessao)
+        acoes.addWidget(self.btn_exp_todas)
+        acoes.addStretch(1)
+        self.aviso_sessao = label("", 8.5, color=theme.MUTE)
+        acoes.addWidget(self.aviso_sessao)
+        self.card_sessoes.add_layout(acoes)
+        lay.addWidget(self.card_sessoes, 2)
+
         card_ft = Card("Frametime da corrida", theme.FRAME)
         self.ft_chart = FrameTimeChart(height=200)
         card_ft.add(self.ft_chart, 1)
         lay.addWidget(card_ft, 3)
 
-        row = QHBoxLayout()
-        row.setSpacing(theme.scaled(theme.GAP))
-        card_hist = Card("Distribuição", theme.GPU)
+        # A curva de percentis saiu: ela conta a mesma historia da distribuicao,
+        # com outro desenho, e as duas juntas so' faziam a tela pedir rolagem.
+        card_hist = Card("Distribuição dos frametimes", theme.GPU)
         self.hist = Histogram(height=150)
         card_hist.add(self.hist, 1)
-        row.addWidget(card_hist, 1)
-        card_pct = Card("Percentis", theme.RAM)
-        self.pct = PercentileChart(height=150)
-        card_pct.add(self.pct, 1)
-        row.addWidget(card_pct, 1)
-        lay.addLayout(row, 2)
+        lay.addWidget(card_hist, 2)
 
         bottom = QHBoxLayout()
         bottom.setSpacing(theme.scaled(theme.GAP))
@@ -107,11 +136,8 @@ class BenchmarkView(View):
         card_sys.body.addStretch(1)
         bottom.addWidget(card_sys, 1)
 
-        card_hist_runs = Card("Corridas anteriores", theme.DISK)
-        self.runs = MetricList([(f"r{i}", "—") for i in range(8)])
-        card_hist_runs.add(self.runs)
-        card_hist_runs.body.addStretch(1)
-        bottom.addWidget(card_hist_runs, 1)
+        # "Corridas anteriores" saiu daqui: virou caso particular da tabela de
+        # sessoes, que ja' guarda o historico e ainda deixa exportar.
         lay.addLayout(bottom, 2)
 
         # Relatorio corrido: os cards de cima mostram cada numero no seu lugar,
@@ -134,34 +160,86 @@ class BenchmarkView(View):
         card_rel.add_layout(linha)
         lay.addWidget(card_rel, 2)
 
-        # Partidas inteiras, gravadas sozinhas quando o jogo abre pelo atalho.
-        # E' o numero que interessa de verdade: uma corrida de 60 s pega um
-        # trecho escolhido a dedo, a partida pega o jogo como ele e'.
-        self.card_sessoes = Card("Sessões de jogo", theme.FPS,
-                                 "gravadas do início ao fim, ao abrir pelos Atalhos")
-        self.sessoes = MetricList([(f"s{i}", "—") for i in range(10)])
-        self.card_sessoes.add(self.sessoes)
-        self.card_sessoes.body.addStretch(1)
-        lay.addWidget(self.card_sessoes, 1)
         lay.addStretch(0)
         self._fill_sessoes()
 
     def _fill_sessoes(self) -> None:
-        historico = list(getattr(self.app, "session_history", []))[-10:]
-        historico.reverse()
-        for i in range(10):
-            chave = f"s{i}"
-            if i >= len(historico):
-                self.sessoes.set_label(chave, "—")
-                self.sessoes.set(chave, "")
-                continue
-            s = historico[i]
-            minutos = (s.get("duracao_s") or 0) / 60.0
-            self.sessoes.set_label(chave, f"{s.get('quando', '')}  {s.get('game', '')}")
-            self.sessoes.set(
-                chave,
-                f"{minutos:.0f} min · {s.get('fps_avg', 0):.0f} fps · "
-                f"1% {s.get('low_1', 0):.0f} · {s.get('hitches', 0)} travadas")
+        """Redesenha a tabela de sessoes, da mais recente para a mais antiga."""
+        self._sessoes = list(reversed(getattr(self.app, "session_history", [])))
+        self.tabela.blockSignals(True)
+        self.tabela.setRowCount(len(self._sessoes))
+        for linha, s in enumerate(self._sessoes):
+            for coluna, texto in enumerate(_celulas(s)):
+                item = QTableWidgetItem(texto)
+                if coluna:
+                    item.setTextAlignment(int(Qt.AlignmentFlag.AlignRight
+                                              | Qt.AlignmentFlag.AlignVCenter))
+                self.tabela.setItem(linha, coluna, item)
+        self.tabela.blockSignals(False)
+        self.tabela.resizeColumnsToContents()
+        vazio = not self._sessoes
+        self.btn_exp_sessao.setVisible(not vazio)
+        self.btn_exp_todas.setVisible(not vazio)
+        if vazio:
+            self.aviso_sessao.setText("Abra um jogo pelos Atalhos com "
+                                      "“gravar métricas da partida” ligado.")
+        else:
+            self.aviso_sessao.setText("")
+
+    def _sessao_atual(self) -> dict | None:
+        linhas = self.tabela.selectionModel().selectedRows() if self.tabela.rowCount() else []
+        if not linhas:
+            return None
+        indice = linhas[0].row()
+        return self._sessoes[indice] if 0 <= indice < len(self._sessoes) else None
+
+    def _sessao_escolhida(self) -> None:
+        """Mostra a sessao escolhida nos cards de resultado.
+
+        A partida nao guarda frame a frame — sao horas de jogo, e caberia em
+        centenas de megabytes —, entao os graficos de frametime continuam sendo
+        da corrida cronometrada. O que a sessao tem sao os numeros, e e' isso que
+        aparece aqui.
+        """
+        s = self._sessao_atual()
+        if s is None:
+            return
+        self.kpi.set("avg", units.integer(s.get("fps_avg")),
+                     theme.fps_color(s.get("fps_avg")))
+        self.kpi.set("low1", units.integer(s.get("low_1")),
+                     theme.fps_color(s.get("low_1")))
+        self.kpi.set("ft", f"{s.get('ft_avg', 0):.2f}", theme.frametime_color(s.get("ft_avg")))
+        self.kpi.set("stutter", f"{s.get('stutter_pct', 0):.1f}",
+                     theme.stutter_color(s.get("stutter_pct")))
+        self.result_rows.set("game", s.get("game", "—"))
+        self.result_rows.set("frames", str(s.get("frames", 0)))
+        self.result_rows.set("duration", units.duration(s.get("duracao_s")))
+        self.result_rows.set("min", units.integer(s.get("fps_min")))
+        self.result_rows.set("max", units.integer(s.get("fps_max")))
+        self.result_rows.set("p1", units.integer(s.get("low_1")))
+        self.result_rows.set("ftmax", units.ms(s.get("ft_max"), 2))
+        self.result_rows.set("hitches", str(s.get("hitches", 0)),
+                             theme.BAD if s.get("hitches") else theme.OK)
+        self.relatorio.setPlainText(_texto_sessao(s))
+
+    def _exportar_sessao(self) -> None:
+        s = self._sessao_atual()
+        if s is None:
+            self.aviso_sessao.setText("Escolha uma sessão na lista primeiro.")
+            return
+        self._salvar([s], s.get("game", "sessao"))
+
+    def _exportar_sessoes(self) -> None:
+        if self._sessoes:
+            self._salvar(self._sessoes, "sessoes")
+
+    def _salvar(self, linhas: list[dict], nome: str) -> None:
+        try:
+            caminho = export.export_sessions(linhas, nome)
+        except Exception as e:                                   # noqa: BLE001
+            self.aviso_sessao.setText(f"Não consegui salvar: {e}")
+            return
+        self.aviso_sessao.setText(f"Salvo em {caminho}")
 
     def on_activate(self) -> None:
         self._fill_sessoes()
@@ -243,7 +321,6 @@ class BenchmarkView(View):
         self.ft_chart.set_data(ft)
         centers, counts = fr.histogram(ft)
         self.hist.set_data(centers, counts)
-        self.pct.set_points(fr.percentile_curve(ft))
 
         self.result_rows.set("game", result.get("game", "—"))
         self.result_rows.set("frames", str(m.frames))
@@ -271,19 +348,49 @@ class BenchmarkView(View):
             else:
                 self.sys_rows.set(key, units.DASH)
 
-        for i in range(8):
-            row = self.runs.row(f"r{i}")
-            history = self.app.bench_history
-            if row is None:
-                continue
-            if i < len(history):
-                run = history[-(i + 1)]
-                row.set_label(f"{run['time']}  {run['game'][:14]}")
-                row.set(f"{run['avg']:.0f} / {run['low1']:.0f} fps",
-                        theme.fps_color(run["avg"]))
-            else:
-                row.set_label("—")
-                row.set(units.DASH, theme.MUTE)
+        self._fill_sessoes()
+
+
+_COLUNAS_SESSAO = ("Quando", "Jogo", "Duração", "FPS médio", "1% low", "Travadas")
+
+
+def _celulas(s: dict) -> list[str]:
+    minutos = (s.get("duracao_s") or 0) / 60.0
+    return [
+        str(s.get("quando", "")),
+        str(s.get("game", "")),
+        f"{minutos:.0f} min",
+        f"{s.get('fps_avg', 0):.0f}",
+        f"{s.get('low_1', 0):.0f}",
+        str(s.get("hitches", 0)),
+    ]
+
+
+def _texto_sessao(s: dict) -> str:
+    """Relatorio de uma partida inteira, em texto, pronto para copiar."""
+    minutos = (s.get("duracao_s") or 0) / 60.0
+    linhas = [f"{s.get('game', 'jogo')} — {s.get('quando', '')}", ""]
+    linhas.append(_linha("Duração", f"{minutos:.0f} min"))
+    linhas.append(_linha("Frames", str(s.get("frames", 0))))
+    linhas.append(_linha("FPS médio", f"{s.get('fps_avg', 0):.1f}"))
+    linhas.append(_linha("FPS mínimo", f"{s.get('fps_min', 0):.1f}"))
+    linhas.append(_linha("FPS máximo", f"{s.get('fps_max', 0):.1f}"))
+    linhas.append(_linha("1% low", f"{s.get('low_1', 0):.1f}"))
+    linhas.append(_linha("Frametime médio", f"{s.get('ft_avg', 0):.2f} ms"))
+    linhas.append(_linha("Frametime máximo", f"{s.get('ft_max', 0):.2f} ms"))
+    linhas.append(_linha("Travadas", str(s.get("hitches", 0))))
+    linhas.append(_linha("Engasgos", f"{s.get('stutters', 0)} "
+                                     f"({s.get('stutter_pct', 0):.2f}%)"))
+    sistema = [(k, r) for k, r in (("cpu", "CPU"), ("cpu_temp", "CPU temp"),
+                                   ("cpu_watts", "CPU potência"), ("gpu", "GPU"),
+                                   ("gpu_temp", "GPU temp"), ("gpu_watts", "GPU potência"),
+                                   ("ram", "RAM"), ("vram", "VRAM")) if s.get(k) is not None]
+    if sistema:
+        linhas.append("")
+        linhas.append("Média do sistema durante a partida")
+        for chave, rotulo in sistema:
+            linhas.append(_linha(rotulo, str(s[chave])))
+    return "\n".join(linhas)
 
 
 def _linha(rotulo: str, valor: str) -> str:
