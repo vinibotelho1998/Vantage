@@ -299,6 +299,9 @@ def _clean_launch_item(raw) -> dict | None:
         "args": str(raw.get("args", "")),
         "target": target,
         "priority": _prioridade_valida(raw.get("priority", "")),
+        # Ligado por padrao: gravar a partida custa uma soma por quadro e 20 KB
+        # fixos, e o resumo no fim e' justamente o que o atalho existe para dar.
+        "bench": bool(raw.get("bench", True)),
         "restore": bool(raw.get("restore", True)),
     }
 

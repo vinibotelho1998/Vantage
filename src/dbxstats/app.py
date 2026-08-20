@@ -121,6 +121,8 @@ class App:
         self._session_name = ""
         self._session_bench_pid = 0
         """Processo que o gravador da partida esta' seguindo agora."""
+        self._session_bench = False
+        """O atalho aberto pediu para gravar a partida."""
         self._session_priority = ""
         self.session_history: list[dict] = _load_session_history()
         self._game_pid = 0
@@ -288,10 +290,12 @@ class App:
         if not devolver:
             self._session_off = ""
         self._session_name = item.get("name") or Path(item["path"]).stem
-        # Grava a partida inteira desde ja'. O pid do jogo ainda nao existe —
-        # quem descobre e' o proprio motor de FPS — entao o gravador comeca
-        # solto e passa a seguir o processo assim que ele aparece.
-        self.fps.session_start(0)
+        # Grava a partida inteira desde ja', quando o atalho pede. O pid do jogo
+        # ainda nao existe — quem descobre e' o proprio motor de FPS — entao o
+        # gravador comeca solto e passa a seguir o processo assim que ele aparece.
+        self._session_bench = bool(item.get("bench", True))
+        if self._session_bench:
+            self.fps.session_start(0)
         self._session_bench_pid = 0
         self._session_priority = str(item.get("priority", ""))
         aviso = f"{self._session_name} abrindo"
@@ -500,6 +504,9 @@ class App:
         lista de linhas inuteis.
         """
         self._session_bench_pid = 0
+        if not self._session_bench:
+            return
+        self._session_bench = False
         resumo = self.fps.session_stop()
         if not resumo or resumo.get("frames", 0) < MIN_SESSION_FRAMES:
             return
@@ -732,7 +739,8 @@ class App:
             pid = self._stream.pid
             if pid != self._session_bench_pid:
                 self._session_bench_pid = pid
-                self.fps.session_follow(pid)
+                if self._session_bench:
+                    self.fps.session_follow(pid)
                 self._apply_launch_priority(pid)
         if self.window.isVisible():
             self.window.tick_fps()

@@ -253,6 +253,14 @@ class LauncherView(View):
             lambda _i, idx=index, w=prio: self._set(idx, "priority", w.currentData()))
         meio.addWidget(prio)
 
+        gravar = QCheckBox("gravar métricas da partida")
+        gravar.setToolTip("Acompanha o jogo do início ao fim e guarda o resumo em "
+                          "Benchmark › Sessões de jogo. Custa uma soma por quadro e "
+                          "20 KB fixos — não cresce com a duração da partida.")
+        gravar.setChecked(bool(item.get("bench", True)))
+        gravar.toggled.connect(lambda on, i=index: self._set(i, "bench", bool(on)))
+        meio.addWidget(gravar)
+
         voltar = QCheckBox("voltar ao normal quando o jogo fechar")
         voltar.setToolTip("O app acompanha o processo do jogo e desfaz a troca "
                           "sozinho quando ele fecha.")
