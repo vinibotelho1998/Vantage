@@ -447,9 +447,11 @@ class GameOverlay(QWidget):
             if key in _PECAS:
                 colunas_linha = (CARGA, CLOCK, VOLT, TEMP, CAUDA)
             else:
-                # Par + barra num label so', ocupando as colunas de clock e
-                # tensao: mantem a temperatura na coluna compartilhada sem criar
-                # alinhamento falso entre "1.118V" e uma barra de blocos.
+                # Par, barra e a fatia do jogo num label so', esticado pelas
+                # colunas de clock e tensao. Dar celula propria a cada um
+                # obrigava as colunas a caber o texto mais longo das quatro
+                # linhas, e abria um vao entre o clock e a tensao da CPU e da
+                # GPU — o alinhamento certo de uma linha estragava o das outras.
                 colunas_linha = (CARGA, TEMP, CAUDA)
             for c in colunas_linha:
                 cel = QLabel("")
@@ -717,19 +719,16 @@ class GameOverlay(QWidget):
             usado, total = _gb(g.get("vram_used")), _gb(g.get("vram_total"))
             par = f"{usado:.1f}/{total:.1f}GB" if total else ""
             barra = _barra(usado, total, theme.DISK)
+            if volts_mem and g.get("vram_volts"):
+                barra = f"{barra}&nbsp;&nbsp;{_volt(g['vram_volts'])}"
             self._set("vram", CARGA, f"{par}&nbsp;&nbsp;{barra}" if par else "")
             self._set("vram", TEMP, "")
-            self._set("vram", VOLT,
-                      _volt(g.get("vram_volts")) if volts_mem else "")
             if "temps_mem" in metrics and g.get("temp_vram") is not None:
                 self._set("vram", TEMP, units.temp(g["temp_vram"]).replace(" ", ""),
                           theme.vram_temp_color(g["temp_vram"]))
-            # O clock da VRAM vai para a MESMA coluna do clock da CPU e da GPU.
-            # Na cauda ele ficava solto na direita, longe dos numeros com que se
-            # compara — clock se le' em coluna, um debaixo do outro.
-            self._set("vram", CLOCK,
-                      _ghz(g.get("mem_freq")) if "mem_clock" in metrics else "")
             cauda = []
+            if "mem_clock" in metrics and g.get("mem_freq"):
+                cauda.append(_ghz(g.get("mem_freq")))
             if "mem_ctrl" in metrics and g.get("mem_ctrl") is not None:
                 cauda.append(f"banda {g['mem_ctrl']:.0f}%")
             self._set("vram", CAUDA, " ".join(cauda))
@@ -744,21 +743,30 @@ class GameOverlay(QWidget):
             par = f"{usado:.1f}/{total:.1f}GB" if total else ""
             barra = _barra(usado, total, theme.RAM,
                            destaque=(jogo or 0) / 1024.0 if jogo else None)
+            # A fatia do jogo entra na MESMA celula da barra, logo a seguir:
+            # ela e' um pedaco do numero que a barra desenha, e leitura que se
+            # compara precisa ficar ao lado do que se compara com ela — na ponta
+            # direita ficava solta, parecendo outro assunto.
             self._set("ram", CARGA, f"{par}&nbsp;&nbsp;{barra}" if par else "")
             self._set("ram", TEMP, "")
-            self._set("ram", VOLT, _volt(d.get("ram_volts")) if volts_mem else "")
+            # A RAM do jogo fica logo depois da barra, e nao la' na ponta
+            # direita: ela e' uma fatia do numero que esta' na barra, e leitura
+            # que se compara precisa ficar perto do que se compara com ela. A
+            # coluna e' a mesma da tensao, que nesta linha quase sempre esta'
+            # vazia — trilho de memoria com nome identificavel e' raro.
+            jogo_txt = (f"jogo {jogo / 1024:.1f}GB"
+                        if "jogo_ram" in metrics and jogo else "")
+            if volts_mem and d.get("ram_volts"):
+                jogo_txt = f"{_volt(d['ram_volts'])}&nbsp;&nbsp;{jogo_txt}".strip()
             if "temps_mem" in metrics and d.get("ram_temp") is not None:
                 self._set("ram", TEMP, units.temp(d["ram_temp"]).replace(" ", ""),
                           dimm_color(d))
+            if jogo_txt:
+                atual = self._cels[("ram", CARGA)].text()
+                self._set("ram", CARGA, f"{atual}&nbsp;&nbsp;{jogo_txt}")
             cauda = []
-            if "jogo_ram" in metrics and jogo:
-                # Um numero so'. O par privada/working set escrevia "9.2/7.9G",
-                # que nao se explica sozinho e ainda parecia "usado/total" — com
-                # o segundo MENOR que o primeiro, o que nao faz sentido nenhum
-                # nessa leitura.
-                cauda.append(f"jogo {jogo / 1024:.1f}GB")
-                if "jogo_ram_ws" in metrics and d.get("game_ram_wset"):
-                    cauda.append(f"na RAM {d['game_ram_wset'] / 1024:.1f}GB")
+            if "jogo_ram_ws" in metrics and d.get("game_ram_wset"):
+                cauda.append(f"residente {d['game_ram_wset'] / 1024:.1f}GB")
             if "mem_clock" in metrics and d.get("ram_freq"):
                 # MT/s, nunca GHz: "6.00GHz" logo abaixo de "5.20GHz" convida a
                 # comparar coisas que nao se comparam.

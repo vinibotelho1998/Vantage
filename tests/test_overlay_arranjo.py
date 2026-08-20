@@ -495,3 +495,29 @@ def test_media_some_quando_o_sensor_nao_volta():
     painel._media_recente["cpu"] = (61.0, time.monotonic() - ov._SEGURA_MEDIA_S - 1)
     painel._temps("cpu", None, 78.0, lambda _v: "#fff")
     assert "61" not in _texto(painel, "cpu", ov.TEMP)
+
+
+def test_fatia_do_jogo_fica_colada_na_barra():
+    """Na ponta direita ela ficava solta, parecendo outro assunto.
+
+    A memoria do jogo e' um PEDACO do numero que a barra desenha, e leitura que
+    se compara precisa ficar ao lado do que se compara com ela.
+    """
+    import dbxstats.ui.overlay as ov
+
+    d = _snapshot()
+    painel = _montar(d, _Stream())
+    carga = _texto(painel, "ram", ov.CARGA)
+    assert "jogo" in carga, carga
+    assert "jogo" not in _texto(painel, "ram", ov.CAUDA)
+
+
+def test_linha_de_memoria_nao_estica_as_colunas_das_pecas():
+    """Celula propria para cada numero da memoria abria um vao entre o clock e a
+    tensao da CPU e da GPU: o alinhamento certo de uma linha estragava o das
+    outras."""
+    import dbxstats.ui.overlay as ov
+
+    painel = _montar(_snapshot(), _Stream())
+    assert ("ram", ov.CLOCK) not in painel._cels
+    assert ("vram", ov.VOLT) not in painel._cels
