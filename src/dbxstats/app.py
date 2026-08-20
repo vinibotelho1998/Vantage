@@ -102,6 +102,8 @@ class App:
         self._hotkeys: HotkeyManager | None = None
         self._t_sys: QTimer | None = None
         self._display_boot: list[dict] = []
+        self._displays_seen: frozenset[str] | None = None
+        """Monitores conectados no ultimo tique; ver _watch_displays."""
         self._session: GameSession | None = None
         self._session_restore: list[dict] | None = None
         self._session_primary = ""
@@ -312,6 +314,7 @@ class App:
 
     def _tick_session(self) -> None:
         """Vigia o jogo — o que abrimos e o que o usuario abriu por fora."""
+        self._watch_displays()
         self._watch_any_game()
         self._follow_game_server()
         session = self._session
@@ -349,6 +352,39 @@ class App:
                 self.notify("DBX Stats", f"{self._session_name} fechou — telas de volta")
         except Exception:
             _log.exception("falha devolvendo as telas depois do jogo")
+
+    def _watch_displays(self) -> None:
+        """Reimpoe o arranjo padrao quando um monitor e' conectado.
+
+        O Windows guarda, para cada conjunto de monitores, a ultima topologia
+        usada com aquele conjunto. Como a ultima vez que a TV esteve junto foi
+        num perfil que apaga os monitores de mesa, plugar a TV de volta apagava
+        os dois — sem o app ter feito nada. Aqui a gente devolve o padrao assim
+        que percebe a mudanca.
+
+        So' reagimos a monitor entrando ou saindo, nunca a tela sendo ligada ou
+        promovida: isso o proprio app faz o tempo todo, e reagir a isso viraria
+        uma queda de braco com a troca que acabamos de pedir. Consultar as telas
+        custa 0,6 ms, entao cabe no tique de um segundo sem pesar.
+        """
+        try:
+            conectados = frozenset(d.monitor_id for d in dsp.list_displays(with_modes=False)
+                                   if d.monitor_id)
+        except Exception:
+            return
+        anterior, self._displays_seen = self._displays_seen, conectados
+        if anterior is None or anterior == conectados or self._session is not None:
+            return
+        alvo = self._normal_layout()
+        if alvo is None:
+            _log.info("conjunto de telas mudou; sem perfil padrao para reimpor")
+            return
+        if _same_layout(alvo, dsp.snapshot()):
+            return
+        ok, err = dsp.apply_profile(alvo, self._normal_topology())
+        _log.info("telas mudaram; padrao reimposto (%s)", "ok" if ok else err)
+        if ok:
+            self.notify("DBX Stats", "Monitor conectado — arranjo padrão de volta.")
 
     def _restore_primary(self, monitor_id: str, desligar: str = "") -> None:
         """Devolve a primaria e, se ligamos alguma tela para o jogo, apaga de novo.
