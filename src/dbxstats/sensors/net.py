@@ -94,8 +94,15 @@ class PingMonitor:
 
     @property
     def target_label(self) -> str:
+        """Nome do servidor do jogo, quando ha' um. Vazio no resto do tempo.
+
+        Nao devolve mais o alvo de reserva. Sem partida identificada o ping vai
+        para um DNS publico so' para ter alguma referencia de latencia, e mostrar
+        "8.8.8.8" no overlay dava a entender que aquele numero tinha a ver com o
+        jogo. Sem rotulo, sobra so' o ping — que e' o que ele e'.
+        """
         with self._lock:
-            return self._auto_label or self._host
+            return self._auto_label
 
     @property
     def following_game(self) -> bool:

@@ -7,10 +7,11 @@ ninguem esta' vendo o painel.
 from dbxstats.app import BACKGROUND_INTERVAL_S, App
 
 
-def _app(janela_visivel, tela_cheia, overlay_visivel, base=1.0, hz=3.0):
+def _app(janela_visivel, jogo_na_frente, overlay_visivel, base=1.0, hz=3.0):
     a = App.__new__(App)
     a._load_now = ""
-    a._fg_fullscreen = tela_cheia
+    a._fg_fullscreen = jogo_na_frente
+    a.game_in_focus = lambda: jogo_na_frente
     a.window = type("W", (), {"isVisible": lambda self: janela_visivel})()
     if overlay_visivel is None:
         a._overlay = None
@@ -71,3 +72,17 @@ def test_nao_reaplica_sem_mudanca():
     a._apply_load_profile()
     a._apply_load_profile()
     assert len(a.aplicados) == 1
+
+
+def test_janela_grande_na_frente_nao_e_jogo():
+    """Tela cheia sozinha nao serve de criterio.
+
+    Com um terminal maximizado por cima, o app caia para o ritmo de fundo — e o
+    painel, aberto na outra tela, passava a atualizar a cada tres segundos sem
+    ninguem ter saido dele.
+    """
+    a = _app(True, False, None)
+    a._fg_fullscreen = True          # ha' uma janela cobrindo o monitor...
+    a.game_in_focus = lambda: False  # ...mas nao e' jogo
+    a._apply_load_profile()
+    assert a._load_now == "painel"

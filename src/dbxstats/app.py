@@ -750,7 +750,11 @@ class App:
         ninguem esta' vendo o painel. Entao o ritmo passa a seguir quem esta'
         de fato olhando: a janela aberta, o overlay, ou ninguem.
         """
-        if self.window.isVisible() and not self._fg_fullscreen:
+        # A condicao e' "tem jogo na frente", nao "tem janela grande na frente".
+        # Usar tela cheia como criterio fazia o app cair para o ritmo de fundo
+        # com um terminal maximizado por cima — e ai' o painel, aberto na outra
+        # tela, atualizava a cada tres segundos sem motivo.
+        if self.window.isVisible() and not self.game_in_focus():
             return "painel"
         if self._overlay is not None and self._overlay.isVisible():
             return "overlay"

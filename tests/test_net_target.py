@@ -116,3 +116,27 @@ def test_medida_passiva_vale_sozinha_quando_a_sonda_nao_responde():
     p = PingMonitor("8.8.8.8", 53)
     p.set_measured(16.4, 1.1, "cs2.exe")
     assert p.read()["ms"] == 16.4
+
+
+def test_sem_jogo_nao_mostra_o_dns_de_reserva():
+    """"8.8.8.8" aparecia no overlay como se fosse o servidor da partida.
+
+    Sem partida identificada o ping vai para um DNS publico so' para ter alguma
+    referencia de latencia. Esse endereco nao diz nada sobre o jogo, entao nao
+    tem por que carregar um rotulo.
+    """
+    m = PingMonitor("8.8.8.8", 53)
+    assert m.target_label == ""
+
+
+def test_com_servidor_do_jogo_o_rotulo_aparece():
+    m = PingMonitor("8.8.8.8", 53)
+    m.set_auto_target("155.133.227.42", 27015, "cs2")
+    assert m.target_label == "cs2"
+
+
+def test_medida_pelo_trafego_tambem_ganha_rotulo():
+    """Aqui nem ha' servidor descoberto: o numero vem do trafego do proprio jogo."""
+    m = PingMonitor("8.8.8.8", 53)
+    m.set_measured(15.2, 1.4, "cs2.exe")
+    assert m.target_label == "cs2.exe"
