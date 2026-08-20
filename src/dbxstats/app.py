@@ -675,24 +675,35 @@ class App:
             return
         # Fechar com jogo aberto volta para o estado de antes do jogo, que e' mais
         # recente que o do boot — e' o que o usuario reconhece como "o normal".
-        alvo = self._normal_layout() or self._session_restore or self._display_boot
-        if not alvo:
+        # A ordem tambem e' a de preferencia quando um alvo nao da' para aplicar.
+        candidatos = [c for c in (self._normal_layout(), self._session_restore,
+                                  self._display_boot) if c]
+        if not candidatos:
             return
         try:
             atual = dsp.snapshot()
-            if _same_layout(alvo, atual):
-                return
-            # Se a unica diferenca e' quem manda, trocar a primaria basta. Mandar
-            # o perfil inteiro por causa disso apagava as tres telas por varios
-            # segundos — justo na hora em que o app esta' sumindo e nao tem mais
-            # como desfazer nada.
-            so_primaria = _only_primary_differs(alvo, atual)
-            if so_primaria:
-                self._restore_primary(so_primaria)
-                return
-            ok, err = dsp.apply_profile(alvo)
-            _log.info("telas restauradas ao fechar" if ok
-                      else f"nao consegui restaurar as telas: {err}")
+            erros = []
+            for alvo in candidatos:
+                if _same_layout(alvo, atual):
+                    return
+                # Se a unica diferenca e' quem manda, trocar a primaria basta.
+                # Mandar o perfil inteiro por causa disso apagava as tres telas
+                # por varios segundos — justo na hora em que o app esta' sumindo
+                # e nao tem mais como desfazer nada.
+                so_primaria = _only_primary_differs(alvo, atual)
+                if so_primaria:
+                    self._restore_primary(so_primaria)
+                    return
+                ok, err = dsp.apply_profile(alvo)
+                if ok:
+                    _log.info("telas restauradas ao fechar")
+                    return
+                erros.append(err)
+            # Perfil salvo envelhece: basta trocar um monitor de porta para ele
+            # apontar para telas que nao existem mais. Antes o app parava na
+            # primeira recusa e fechava deixando o arranjo de TV na maquina;
+            # agora ele tenta o retrato do proprio boot antes de desistir.
+            _log.warning("nao consegui restaurar as telas: %s", "; ".join(erros))
         except Exception:
             _log.exception("falha restaurando as telas ao fechar")
 

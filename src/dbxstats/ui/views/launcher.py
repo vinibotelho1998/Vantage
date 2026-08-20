@@ -89,6 +89,15 @@ def _paths_from(mime) -> list[str]:
             if u.isLocalFile() and u.toLocalFile().lower().endswith(_EXTS)]
 
 
+_COMO_FUNCIONA = """Escolha em que tela o jogo abre — inclusive uma que esteja desligada.
+
+Ao clicar em Jogar, o DBX Stats liga essa tela se preciso, coloca ela como principal,
+abre o jogo e passa a acompanhar o processo. Quando o jogo fecha, as telas voltam
+sozinhas para como estavam.
+
+Os outros monitores continuam ligados o tempo todo: só muda quem manda."""
+
+
 class LauncherView(View):
     key = "launcher"
     title = "Atalhos"
@@ -108,8 +117,19 @@ class LauncherView(View):
         page, self.lay = scroll_page()
         root.addWidget(page, 1)
 
+        card_como = Card("Como funciona", theme.CPU)
+        texto = label(_COMO_FUNCIONA, 9, color=theme.TXT)
+        texto.setWordWrap(True)
+        card_como.add(texto)
+        # Mostrar o arranjo de agora e' o que torna a promessa verificavel: e'
+        # exatamente para este estado que as telas voltam quando o jogo fecha.
+        self.estado_telas = label("", 8.5, color=theme.MUTE)
+        self.estado_telas.setWordWrap(True)
+        card_como.add(self.estado_telas)
+        self.lay.addWidget(card_como)
+
         card_drop = Card("Adicionar", theme.FPS,
-                         "o atalho guarda a tela; o jogo abre já do jeito certo")
+                         "arraste o .exe ou o atalho do jogo para cá")
         card_drop.add(DropZone(self._add_files))
         self.lay.addWidget(card_drop)
 
@@ -122,14 +142,33 @@ class LauncherView(View):
 
         self._refresh()
 
+    def _descrever_telas(self) -> str:
+        """Uma linha dizendo como as telas estao agora."""
+        try:
+            telas = D.list_displays(with_modes=False)
+        except Exception:                                    # noqa: BLE001
+            return ""
+        if not telas:
+            return ""
+        partes = []
+        for d in telas:
+            if d.primary:
+                partes.append(f"{d.name} (principal)")
+            elif d.active:
+                partes.append(d.name)
+            else:
+                partes.append(f"{d.name} (desligada)")
+        return "Ao fechar o jogo, volta para:  " + "   ·   ".join(partes)
+
     # ── dados ────────────────────────────────────────────────────────────────
     def _targets(self) -> list[tuple[str, str]]:
         """Opcoes de tela para o combo.
 
-        Trocar a principal vem antes dos perfis de proposito: e' a acao que o
-        atalho de jogo quer quase sempre ("abre na TV"), custa uma chamada so' e
-        se desfaz sozinha no fim. Perfil mexe na topologia inteira e faz as telas
-        apagarem por segundos — util quando e' mesmo o caso, exagero como padrao.
+        So' telas. Perfil de tela saiu daqui: ele mexe na topologia inteira,
+        apaga monitor que ninguem pediu para apagar e faz as tres telas piscarem
+        por segundos. O atalho de jogo quer uma coisa so' — abrir naquela tela —
+        e isso e' uma troca de primaria, que se desfaz sozinha no fim. Perfil
+        continua existindo na aba Telas, para quem precisa mesmo dele.
         """
         opcoes = [("Não mexer nas telas", "")]
         for disp in D.list_displays(with_modes=False):
@@ -144,9 +183,6 @@ class LauncherView(View):
             else:
                 marca = ""
             opcoes.append((f"Abrir na {disp.name}{marca}", f"primary:{disp.monitor_id}"))
-        for profile in self.cfg.display_profiles:
-            opcoes.append((f"Aplicar o perfil '{profile['name']}'",
-                           f"profile:{profile['name']}"))
         return opcoes
 
     def _add_files(self, paths: list[str]) -> None:
@@ -185,6 +221,7 @@ class LauncherView(View):
 
     def _refresh(self) -> None:
         _clear(self.items_box)
+        self.estado_telas.setText(self._descrever_telas())
 
         itens = self.cfg.launch_items
         if not itens:
