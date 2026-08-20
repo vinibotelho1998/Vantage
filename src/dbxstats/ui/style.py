@@ -102,14 +102,20 @@ QPushButton#Danger {{
     border: 1px solid {theme.rgba(theme.BAD, 0.4)};
 }}
 
+/* Duas pistas de estado, nao uma. Numa grade de vinte opcoes em tema escuro,
+   quadradinho cheio contra quadradinho vazio some — os dois viram "um quadrado".
+   O texto apagado quando desmarcado da' a leitura de relance, e o preenchimento
+   confirma de perto. */
 QCheckBox, QRadioButton {{
-    color: {theme.TXT}; font-size: 12px; spacing: 8px; background: transparent;
+    color: {theme.MUTE}; font-size: 12px; spacing: 8px; background: transparent;
 }}
+QCheckBox:checked, QRadioButton:checked {{ color: {theme.TXT}; }}
 QCheckBox::indicator, QRadioButton::indicator {{ width: 16px; height: 16px; }}
 QCheckBox::indicator {{
-    border: 1px solid {theme.LINE_HI}; border-radius: 4px; background: {theme.SURFACE};
+    border: 2px solid {theme.LINE_HI}; border-radius: 4px; background: transparent;
 }}
 QCheckBox::indicator:checked {{ background: {a}; border-color: {a}; }}
+QCheckBox::indicator:hover {{ border-color: {a}; }}
 QRadioButton::indicator {{
     border: 1px solid {theme.LINE_HI}; border-radius: 8px; background: {theme.SURFACE};
 }}
