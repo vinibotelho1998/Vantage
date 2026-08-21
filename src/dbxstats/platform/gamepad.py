@@ -356,15 +356,20 @@ DEFAULT_BINDINGS: dict[str, str] = {
     # padrao anterior, e fechar a janela sem querer e' o pior jeito de descobrir
     # isso. Quem quiser pode escolher uma na tela do controle.
     "Back": "",
-    "LT": "task_view",
-    "RT": "desktop",
+    # Os gatilhos sozinhos ficam livres de proposito. Win+D e' um INTERRUPTOR:
+    # aperta uma vez e a area de trabalho aparece, aperta de novo e as janelas
+    # voltam — o jogo junto. Num gatilho, que e' analogico e dispara com um
+    # roçar, isso virava "o jogo volta sozinho toda hora".
+    "LT": "",
+    "RT": "",
+    "LT+RT": "desktop",
     "Direcional ↑": "key_up",
     "Direcional ↓": "key_down",
     "Direcional ←": "key_left",
     "Direcional →": "key_right",
 }
 
-TRIGGERS = ("LT", "RT")
+TRIGGERS = ("LT", "RT", "LT+RT")
 """Gatilhos: analogicos, mas tratados como botao a partir de um limiar."""
 
 BUTTON_NAMES = {
@@ -377,7 +382,7 @@ BUTTON_NAMES = {
 
 MASK_BY_NAME = {nome: mask for mask, nome in BUTTON_NAMES.items()}
 
-BUTTON_ORDER = ("A", "B", "X", "Y", "LB", "RB", "LT", "RT",
+BUTTON_ORDER = ("A", "B", "X", "Y", "LB", "RB", "LT", "RT", "LT+RT",
                 "L3", "R3", "Back", "Start",
                 "Direcional ↑", "Direcional ↓", "Direcional ←", "Direcional →")
 """Ordem em que os botoes aparecem na tela de configuracao."""
@@ -658,9 +663,18 @@ class GamepadMouse(QObject):
             self._apply(nome, bool(buttons & mask))
 
     def _triggers(self, pad: XINPUT_GAMEPAD) -> None:
-        """Gatilhos viram botao a partir de um limiar, e valem como qualquer outro."""
-        self._apply("LT", pad.bLeftTrigger > TRIGGER_THRESHOLD)
-        self._apply("RT", pad.bRightTrigger > TRIGGER_THRESHOLD)
+        """Gatilhos viram botao a partir de um limiar, e valem como qualquer outro.
+
+        Os dois juntos formam um terceiro gesto, e quando ele acontece os dois
+        sozinhos ficam calados: senao apertar o par dispararia tres acoes de uma
+        vez, e ainda deixaria a de cada gatilho presa quando o par se desfizesse.
+        """
+        esq = pad.bLeftTrigger > TRIGGER_THRESHOLD
+        dir_ = pad.bRightTrigger > TRIGGER_THRESHOLD
+        juntos = esq and dir_
+        self._apply("LT+RT", juntos)
+        self._apply("LT", esq and not juntos)
+        self._apply("RT", dir_ and not juntos)
 
     def _apply(self, nome: str, pressed: bool) -> None:
         """Executa a acao do botao conforme o tipo dela.

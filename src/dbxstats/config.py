@@ -464,6 +464,9 @@ def _clean_launch_item(raw) -> dict | None:
         # Ligado por padrao: gravar a partida custa uma soma por quadro e 20 KB
         # fixos, e o resumo no fim e' justamente o que o atalho existe para dar.
         "bench": bool(raw.get("bench", True)),
+        # Quem joga do sofa nao alcanca o teclado para reabrir a grade: voltar
+        # para ela e' o fim natural da partida, e nao voltar para a mesa.
+        "voltar_bp": bool(raw.get("voltar_bp", False)),
         "restore": bool(raw.get("restore", True)),
     }
 

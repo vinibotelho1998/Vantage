@@ -317,6 +317,14 @@ class LauncherView(View):
         gravar.toggled.connect(lambda on, i=index: self._set(i, "bench", bool(on)))
         meio.addWidget(gravar)
 
+        bp = QCheckBox("voltar ao Big Picture quando o jogo fechar")
+        bp.setToolTip("Em vez da janela normal, a grade de jogos reaparece na "
+                      "tela onde você estava jogando. Quem está no sofá não "
+                      "alcança o teclado para reabrir.")
+        bp.setChecked(bool(item.get("voltar_bp", False)))
+        bp.toggled.connect(lambda on, i=index: self._set(i, "voltar_bp", bool(on)))
+        meio.addWidget(bp)
+
         voltar = QCheckBox("voltar ao normal quando o jogo fechar")
         voltar.setToolTip("O app acompanha o processo do jogo e desfaz a troca "
                           "sozinho quando ele fecha.")

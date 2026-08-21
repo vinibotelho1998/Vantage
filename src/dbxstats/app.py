@@ -308,6 +308,7 @@ class App:
         # ainda nao existe — quem descobre e' o proprio motor de FPS — entao o
         # gravador comeca solto e passa a seguir o processo assim que ele aparece.
         self._session_bench = bool(item.get("bench", True))
+        self._bp_voltar = bool(item.get("voltar_bp", False))
         if self._session_bench:
             self.fps.session_start(0)
         self._session_bench_pid = 0
@@ -371,7 +372,9 @@ class App:
         self._close_session_bench()
         if self._bp_voltar:
             # Voltou do jogo: a grade reaparece na TV, e nao a janela de mesa —
-            # quem esta' no sofa nao alcanca o teclado para reabrir.
+            # quem esta' no sofa nao alcanca o teclado para reabrir. So' acontece
+            # nos atalhos marcados para isso; quem abre o jogo da mesa espera a
+            # janela normal de volta.
             self._bp_voltar = False
             QTimer.singleShot(1200, self.big_picture_abrir)
         restore = self._session_restore
@@ -667,7 +670,6 @@ class App:
         if self._bp_off:
             self._session_off_pendente = self._bp_off
             self._bp_off = ""
-        self._bp_voltar = True
         self._soltar_controle()
         ok, msg = self.play_item(item)
         if self._session_off_pendente:
