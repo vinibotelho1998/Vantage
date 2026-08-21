@@ -608,6 +608,15 @@ class App:
                     f"1% low {registro.get('low_1', 0):.0f}")
         self.show_view("benchmark")
 
+    def save_session_history(self) -> None:
+        """Grava o historico como esta' agora.
+
+        Existe para a aba Benchmark poder excluir partidas: ela mexe na lista em
+        memoria, e sem um jeito de mandar gravar a exclusao voltaria sozinha na
+        proxima abertura do app.
+        """
+        _save_session_history(self.session_history)
+
     # ── big picture ──────────────────────────────────────────────────────────
     def big_picture_toggle(self) -> None:
         if self._bigpicture is not None and self._bigpicture.isVisible():
@@ -638,8 +647,22 @@ class App:
         self._bigpicture.abrir(tela)
 
     def _acender_tela_de_jogo(self):
-        """Liga a tela marcada para nascer apagada e devolve o QScreen dela."""
-        alvo_id = next(iter(self.settings.display_off_by_default), "")
+        """Liga a tela onde o Big Picture deve abrir e devolve o QScreen dela.
+
+        A escolha e' do usuario, como e' a de cada jogo: `bigpicture_target`
+        guarda a tela, no mesmo formato do atalho. Antes a grade sempre nascia na
+        tela marcada para ficar apagada — servia para a TV da sala, e nao servia
+        para mais nada: quem quisesse a grade no monitor de cima nao tinha onde
+        dizer isso.
+
+        Vazio mantem o comportamento antigo, que continua sendo o certo para o
+        caso mais comum: a grade acompanha a TV que so' acorda para jogar.
+        """
+        escolhido = str(getattr(self.settings, "bigpicture_target", "") or "")
+        if escolhido.startswith("screen:"):
+            alvo_id = escolhido.split(":", 1)[1]
+        else:
+            alvo_id = next(iter(self.settings.display_off_by_default), "")
         if not alvo_id:
             return None
         alvo = next((d for d in dsp.list_displays(with_modes=False)
@@ -699,14 +722,47 @@ class App:
         if self._bigpicture is not None:
             self._bigpicture.hide()
         apagar, self._bp_off = self._bp_off, ""
-        if apagar:
-            tela = next((d for d in dsp.list_displays(with_modes=False)
-                         if d.monitor_id == apagar and d.active and not d.primary), None)
-            if tela is not None:
-                dsp.set_enabled(tela.device, False)
         self._bp_voltar = False
+        self._voltar_ao_padrao(apagar)
         self.window.show()
         self.window.raise_()
+
+    def _voltar_ao_padrao(self, apagar: str = "") -> None:
+        """Fecha a cascata do sofa: sair da grade devolve a mesa como ela era.
+
+        O caminho de volta tem tres degraus — jogo, grade, mesa — e o ultimo
+        faltava. Quando o jogo devolve para a grade (`voltar_bp`), quem acendeu a
+        TV foi a sessao, e nao esta abertura do Big Picture: `_bp_off` ja' foi
+        entregue para a sessao la' em `_big_picture_disparar`. Chegava aqui vazio,
+        nao havia o que apagar, e a TV ficava ligada com a grade fechada.
+
+        Por isso a volta e' pelo perfil padrao inteiro, e nao pela tela que esta
+        abertura por acaso acendeu: o perfil ja' descreve o estado certo da mesa,
+        TV apagada inclusive, venha a TV de onde vier.
+        """
+        alvo = self._normal_layout()
+        if alvo is None:
+            # Sem perfil padrao nao ha' estado conhecido para voltar. Resta
+            # desfazer o que esta abertura fez, que e' o comportamento antigo.
+            if apagar:
+                tela = next((d for d in dsp.list_displays(with_modes=False)
+                             if d.monitor_id == apagar and d.active and not d.primary),
+                            None)
+                if tela is not None:
+                    dsp.set_enabled(tela.device, False)
+            return
+        try:
+            # Abrir a grade da mesa e fechar sem jogar nao pode fazer as telas
+            # piscarem por segundos a' toa.
+            if _same_layout(alvo, dsp.snapshot()):
+                return
+            ok, err = dsp.apply_profile(alvo, self._normal_topology())
+            if ok:
+                _log.info("Big Picture fechou; telas de volta ao padrao")
+            else:
+                _log.warning("nao consegui voltar ao perfil padrao: %s", err)
+        except Exception:
+            _log.exception("falha devolvendo as telas ao fechar o Big Picture")
 
     def _restore_primary(self, monitor_id: str, desligar: str = "") -> None:
         """Devolve a primaria e, se ligamos alguma tela para o jogo, apaga de novo.

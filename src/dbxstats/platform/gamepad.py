@@ -84,6 +84,12 @@ VK_MEDIA_PREV = 0xB1
 VK_MEDIA_PLAY_PAUSE = 0xB3
 
 TRIGGER_THRESHOLD = 40
+STUCK_S = 30.0
+"""Tempo apertado a partir do qual um botao vira suspeita de preso.
+
+Trinta segundos e' folgado de proposito: ninguem segura um botao tanto tempo
+sem querer, e um limiar curto acusaria quem so' esta' rolando uma pagina longa
+com o gatilho."""
 _POLL_MS = 8
 _IDLE_POLL_MS = 1000
 
@@ -439,6 +445,12 @@ class GamepadMouse(QObject):
     def __init__(self, settings, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self.cfg = settings
+        # Import tardio: o modulo do DualSense traduz para as estruturas daqui,
+        # entao importar ele no topo fecharia um ciclo.
+        from .dualsense import Conjunto
+
+        self._sony = Conjunto()
+        """Controles da Sony, lidos por HID porque o XInput nao os enxerga."""
         self._timer = QTimer(self)
         self._timer.setTimerType(Qt.TimerType.PreciseTimer)
         self._timer.timeout.connect(self._tick)
@@ -451,6 +463,8 @@ class GamepadMouse(QObject):
         self._bindings = bindings_from(settings)
         self._combo_held = False
         """Back+Start ainda esta' pressionado; segura a borda ate' soltar."""
+        self._preso_desde: dict[str, float] = {}
+        """Desde quando cada botao esta' apertado; ver stuck()."""
         self._last_packet = 0
         self._scroll_carry = 0.0
         self._hscroll_carry = 0.0
@@ -463,8 +477,10 @@ class GamepadMouse(QObject):
     # ── ciclo ────────────────────────────────────────────────────────────────
     def start(self) -> None:
         if not available():
-            _log.warning("XInput indisponivel, controle como mouse desligado")
-            return
+            # Segue de pe' mesmo assim: o caminho HID le' os controles da Sony
+            # sem depender do XInput, e desligar tudo aqui deixaria um DualSense
+            # perfeitamente conectado sem servir para nada.
+            _log.warning("XInput indisponivel; so' os controles lidos por HID")
         self._timer.start(_IDLE_POLL_MS)
 
     def stop(self) -> None:
@@ -472,6 +488,7 @@ class GamepadMouse(QObject):
         self._release_all()
         self._combo_held = False
         self._set_active(False)
+        self._sony.parar()
 
     def set_consumer(self, fn) -> None:
         """Entrega o controle inteiro para outra tela, ou devolve com None.
@@ -557,7 +574,7 @@ class GamepadMouse(QObject):
         que todo o resto do laco junto.
         """
         now = time.monotonic()
-        if now - self._last_seek >= 1.0:
+        if _xinput is not None and now - self._last_seek >= 1.0:
             self._last_seek = now
             encontrados = []
             for slot in range(4):
@@ -574,9 +591,42 @@ class GamepadMouse(QObject):
                 pads.append(state.Gamepad)
                 vivos.append(slot)
         self.slots = vivos
+
+        # Os da Sony entram na mesma fusao dos de XInput. Para tudo que vem
+        # depois — modo mouse, grade, desenho da tela — nao ha' diferenca entre
+        # um DualSense e um Xbox: quem estiver na mao manda no cursor.
+        pads.extend(self._sony.estados())
+
         if not pads:
             return None
         return pads[0] if len(pads) == 1 else _merge(pads)
+
+    def stuck(self) -> list[tuple[str, float]]:
+        """Botoes reportados apertados ha' tempo demais, com ha' quanto tempo.
+
+        Existe por causa de um sintoma dificil de atribuir: o foco andando
+        sozinho pelo Windows inteiro, como se alguem batesse nas setas. Quando o
+        modo mouse esta' ligado, um direcional preso em QUALQUER controle
+        conectado vira exatamente isso — o mapeamento manda o direcional para as
+        setas do teclado, e elas mexem o foco de qualquer aplicativo.
+
+        Nada aqui adivinha defeito: so' relata o que o controle esta' dizendo. Um
+        botao legitimamente segurado por mais de meio minuto nesta tela nao
+        acontece, e o aviso some sozinho quando o botao solta.
+        """
+        agora = time.monotonic()
+        return sorted(((nome, agora - inicio)
+                       for nome, inicio in self._preso_desde.items()
+                       if agora - inicio >= STUCK_S),
+                      key=lambda par: -par[1])
+
+    def _vigiar_presos(self, buttons: int) -> None:
+        """Anota desde quando cada botao esta' pressionado, sem parar de soltar."""
+        for mask, nome in BUTTON_NAMES.items():
+            if buttons & mask:
+                self._preso_desde.setdefault(nome, time.monotonic())
+            else:
+                self._preso_desde.pop(nome, None)
 
     def _tick(self) -> None:
         pad = self._read()
@@ -591,10 +641,14 @@ class GamepadMouse(QObject):
             self._timer.setInterval(_POLL_MS if self._connected else _IDLE_POLL_MS)
             if not self._connected:
                 self._set_active(False)
+                self._preso_desde.clear()
         if pad is None:
             return
 
         buttons = pad.wButtons
+        # Antes de qualquer saida antecipada: um botao preso importa mesmo com o
+        # modo mouse desligado, ou com outra tela dona do controle.
+        self._vigiar_presos(buttons)
         # Quem assumiu o controle recebe o estado cru e o laco para por aqui.
         # A checagem vem ANTES do combo de proposito: o combo roda mesmo com o
         # modo mouse desligado, e sem essa ordem apertar Back+Start dentro de uma

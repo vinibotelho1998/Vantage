@@ -1,22 +1,23 @@
 """Tela de benchmark: captura uma corrida, resume e exporta."""
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, Qt, QTimer
-from PySide6.QtGui import QFont
+from PySide6.QtCore import QPoint, QRectF, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
+    QFrame,
     QHBoxLayout,
     QMenu,
     QPlainTextEdit,
     QProgressBar,
-    QTableWidget,
-    QTableWidgetItem,
     QVBoxLayout,
+    QWidget,
 )
 
 from ... import theme
 from ...core import export, units
 from ...core import frames as fr
 from ..charts import FrameTimeChart, Histogram
+from ..confirm import confirmar
 from ..components import Badge, Card, KpiStrip, MetricList, PillButton, label
 from .base import View, scroll_page
 
@@ -24,6 +25,132 @@ _KPIS = [
     ("avg", "FPS médio", ""), ("low1", "1% Low", ""),
     ("ft", "Frametime", "ms"), ("stutter", "Stutter", "%"), ("smooth", "Fluidez", ""),
 ]
+
+
+class SessaoCard(QFrame):
+    """Uma partida na lista: capa, jogo, quando, e os numeros que decidem.
+
+    Substitui a linha de tabela. Numa tabela todas as partidas tem o mesmo peso
+    visual e o jogo e' uma palavra no meio de seis colunas — para achar "aquela
+    vez que o Palworld travou" era preciso ler linha por linha. Com a capa e os
+    numeros grandes, a lista se percorre de relance.
+    """
+
+    escolhida = Signal(dict)
+
+    LARGURA_CAPA = 92
+    ALTURA_CAPA = 52
+
+    def __init__(self, sessao: dict, itens=None, parent=None) -> None:
+        super().__init__(parent)
+        self.sessao = sessao
+        self._ativa = False
+        self.setObjectName("SessaoCard")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        raiz = QHBoxLayout(self)
+        raiz.setContentsMargins(*(theme.scaled(8),) * 4)
+        raiz.setSpacing(theme.scaled(10))
+
+        self._capa = self._carregar_capa(sessao.get("game", ""), itens)
+        raiz.addWidget(_Miniatura(self._capa, self.LARGURA_CAPA, self.ALTURA_CAPA), 0)
+
+        col = QVBoxLayout()
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(theme.scaled(2))
+        topo = QHBoxLayout()
+        topo.setSpacing(theme.scaled(6))
+        topo.addWidget(label(sessao.get("game", "jogo"), 9.5, QFont.Weight.DemiBold))
+        topo.addStretch(1)
+        topo.addWidget(label(str(sessao.get("quando", "")), 7.5, color=theme.FAINT))
+        col.addLayout(topo)
+
+        numeros = QHBoxLayout()
+        numeros.setSpacing(theme.scaled(12))
+        for valor, rotulo, cor in self._destaques(sessao):
+            caixa = QVBoxLayout()
+            caixa.setSpacing(0)
+            caixa.addWidget(label(valor, 10.5, QFont.Weight.Bold, cor))
+            caixa.addWidget(label(rotulo, 7, color=theme.FAINT))
+            numeros.addLayout(caixa)
+        numeros.addStretch(1)
+        col.addLayout(numeros)
+        raiz.addLayout(col, 1)
+        self._pintar()
+
+    @staticmethod
+    def _destaques(s: dict) -> list[tuple[str, str, str]]:
+        """Os quatro numeros que fazem escolher uma partida em vez de outra."""
+        return [
+            (units.integer(s.get("fps_avg")), "fps médio", theme.fps_color(s.get("fps_avg"))),
+            (units.integer(s.get("low_1")), "1% low", theme.fps_color(s.get("low_1"))),
+            (f"{float(s.get('stutter_pct') or 0):.1f}%", "engasgo",
+             theme.stutter_color(s.get("stutter_pct"))),
+            (units.duration(s.get("duracao_s")), "duração", theme.MUTE),
+        ]
+
+    @staticmethod
+    def _carregar_capa(nome: str, itens):
+        """Capa pelo NOME do jogo, e nao pelo caminho.
+
+        A sessao guarda so' o nome; o caminho vive no atalho. A lista de atalhos
+        vem de fora justamente para nao reler o settings.json uma vez por card.
+        """
+        from ...platform import art
+
+        try:
+            return art.artwork_by_name(nome, itens)
+        except OSError:
+            return None
+
+    def set_ativa(self, ativa: bool) -> None:
+        if ativa != self._ativa:
+            self._ativa = ativa
+            self._pintar()
+
+    def _pintar(self) -> None:
+        borda = theme.FPS if self._ativa else theme.LINE
+        fundo = theme.SURFACE_2 if self._ativa else theme.SURFACE
+        self.setStyleSheet(
+            f"#SessaoCard {{ background: {fundo}; border: 1px solid {borda};"
+            f" border-radius: {theme.scaled(9)}px; }}")
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.escolhida.emit(self.sessao)
+        event.accept()
+
+
+class _Miniatura(QWidget):
+    """Capa pequena da sessao, ou as iniciais quando o jogo saiu da lista."""
+
+    def __init__(self, caminho, largura: int, altura: int, parent=None) -> None:
+        super().__init__(parent)
+        self.setFixedSize(theme.scaled(largura), theme.scaled(altura))
+        self._pix = QPixmap(str(caminho)) if caminho else QPixmap()
+
+    def paintEvent(self, _event) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect = self.rect().adjusted(0, 0, -1, -1)
+        raio = theme.scaled(6)
+        caminho = QPainterPath()
+        caminho.addRoundedRect(QRectF(rect), raio, raio)
+        p.fillPath(caminho, QColor(theme.BG_SUNKEN))
+        if not self._pix.isNull():
+            p.setClipPath(caminho)
+            quadrado = abs(self._pix.width() / max(1, self._pix.height()) - 1.0) < 0.15
+            if quadrado:
+                lado = int(rect.height() * 0.86)
+                esc = self._pix.scaled(lado, lado, Qt.AspectRatioMode.KeepAspectRatio,
+                                       Qt.TransformationMode.SmoothTransformation)
+            else:
+                esc = self._pix.scaled(rect.size(),
+                                       Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                                       Qt.TransformationMode.SmoothTransformation)
+            p.drawPixmap(rect.x() + (rect.width() - esc.width()) // 2,
+                         rect.y() + (rect.height() - esc.height()) // 2, esc)
+        p.end()
 
 
 class BenchmarkView(View):
@@ -64,51 +191,58 @@ class BenchmarkView(View):
         self.kpi = KpiStrip(_KPIS, columns=6)
         root.addWidget(self.kpi)
 
-        page, lay = scroll_page()
-        root.addWidget(page, 1)
+        # Duas colunas: a esquerda e' a biblioteca de partidas, a direita e' a
+        # partida escolhida. Empilhado em coluna unica, o Resultado e o Relatorio
+        # ficavam abaixo da dobra — existiam, mas ninguem via.
+        colunas = QHBoxLayout()
+        colunas.setSpacing(theme.scaled(theme.GAP))
+        root.addLayout(colunas, 1)
 
-        # As sessoes vem primeiro porque sao o que a aba existe para mostrar: o
-        # jogo como ele foi, do inicio ao fim. A corrida cronometrada continua
-        # abaixo, para quando se quer comparar um trecho especifico.
         self.card_sessoes = Card("Sessões de jogo", theme.FPS,
                                  "gravadas do início ao fim ao abrir pela aba Jogos")
-        self.tabela = QTableWidget(0, len(_COLUNAS_SESSAO))
-        self.tabela.setHorizontalHeaderLabels(_COLUNAS_SESSAO)
-        self.tabela.verticalHeader().setVisible(False)
-        self.tabela.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.tabela.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-        self.tabela.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.tabela.setAlternatingRowColors(True)
-        self.tabela.setMinimumHeight(theme.scaled(190))
-        self.tabela.horizontalHeader().setStretchLastSection(True)
-        self.tabela.itemSelectionChanged.connect(self._sessao_escolhida)
-        self.card_sessoes.add(self.tabela, 1)
+        lista_page, self.lista_box = scroll_page()
+        self.lista_box.setSpacing(theme.scaled(6))
+        self.card_sessoes.add(lista_page, 1)
 
         acoes = QHBoxLayout()
         acoes.setSpacing(theme.scaled(8))
+        self.btn_del_sessao = PillButton("Excluir esta", theme.BAD)
+        self.btn_del_sessao.clicked.connect(self._excluir_sessao)
+        self.btn_del_todas = PillButton("Excluir todas", theme.BAD)
+        self.btn_del_todas.clicked.connect(self._excluir_todas)
         self.btn_exp_sessao = PillButton("Exportar esta sessão", theme.MUTE)
         self.btn_exp_sessao.clicked.connect(self._exportar_sessao)
         self.btn_exp_todas = PillButton("Exportar todas", theme.MUTE)
         self.btn_exp_todas.clicked.connect(self._exportar_sessoes)
         acoes.addWidget(self.btn_exp_sessao)
+        acoes.addWidget(self.btn_del_sessao)
+        acoes.addWidget(self.btn_del_todas)
         acoes.addWidget(self.btn_exp_todas)
         acoes.addStretch(1)
         self.aviso_sessao = label("", 8.5, color=theme.MUTE)
         acoes.addWidget(self.aviso_sessao)
         self.card_sessoes.add_layout(acoes)
-        lay.addWidget(self.card_sessoes, 2)
 
-        card_ft = Card("Frametime da corrida", theme.FRAME)
+        esquerda = QVBoxLayout()
+        esquerda.setSpacing(theme.scaled(theme.GAP))
+        esquerda.addWidget(self.card_sessoes, 1)
+        colunas.addLayout(esquerda, 4)
+
+        page, lay = scroll_page()
+        colunas.addWidget(page, 6)
+
+        self.card_ft = Card("Frametime da corrida", theme.FRAME)
         self.ft_chart = FrameTimeChart(height=200)
-        card_ft.add(self.ft_chart, 1)
-        lay.addWidget(card_ft, 3)
+        self.card_ft.add(self.ft_chart, 1)
+        self.card_ft.setVisible(False)
+        lay.addWidget(self.card_ft, 3)
 
         # A curva de percentis saiu: ela conta a mesma historia da distribuicao,
         # com outro desenho, e as duas juntas so' faziam a tela pedir rolagem.
-        card_hist = Card("Distribuição dos frametimes", theme.GPU)
+        self.card_hist = Card("Distribuição dos frametimes", theme.GPU)
         self.hist = Histogram(height=150)
-        card_hist.add(self.hist, 1)
-        lay.addWidget(card_hist, 2)
+        self.card_hist.add(self.hist, 1)
+        lay.addWidget(self.card_hist, 2)
 
         bottom = QHBoxLayout()
         bottom.setSpacing(theme.scaled(theme.GAP))
@@ -163,21 +297,37 @@ class BenchmarkView(View):
         self._fill_sessoes()
 
     def _fill_sessoes(self) -> None:
-        """Redesenha a tabela de sessoes, da mais recente para a mais antiga."""
+        """Redesenha a lista de partidas, da mais recente para a mais antiga."""
         self._sessoes = list(reversed(getattr(self.app, "session_history", [])))
-        self.tabela.blockSignals(True)
-        self.tabela.setRowCount(len(self._sessoes))
-        for linha, s in enumerate(self._sessoes):
-            for coluna, texto in enumerate(_celulas(s)):
-                item = QTableWidgetItem(texto)
-                if coluna:
-                    item.setTextAlignment(int(Qt.AlignmentFlag.AlignRight
-                                              | Qt.AlignmentFlag.AlignVCenter))
-                self.tabela.setItem(linha, coluna, item)
-        self.tabela.blockSignals(False)
-        self.tabela.resizeColumnsToContents()
+        escolhida = getattr(self, "_escolhida", None)
+
+        while self.lista_box.count():
+            item = self.lista_box.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+
+        itens = list(getattr(self.cfg, "launch_items", []) or [])
+        self._cards: list[SessaoCard] = []
+        for s in self._sessoes:
+            card = SessaoCard(s, itens)
+            card.escolhida.connect(self._escolher)
+            self.lista_box.addWidget(card)
+            self._cards.append(card)
+        self.lista_box.addStretch(1)
+
+        # A escolha sobrevive ao redesenho enquanto a partida existir: apagar
+        # uma sessao nao pode mudar qual das outras estava aberta a' direita.
+        if escolhida not in self._sessoes:
+            escolhida = None
+        self._escolhida = escolhida
+        self._marcar_ativo()
+
         vazio = not self._sessoes
         self.btn_exp_sessao.setVisible(not vazio)
+        self.btn_del_sessao.setVisible(not vazio)
+        self.btn_del_todas.setVisible(not vazio)
         self.btn_exp_todas.setVisible(not vazio)
         if vazio:
             self.aviso_sessao.setText("Abra um jogo pela aba Jogos com "
@@ -185,12 +335,17 @@ class BenchmarkView(View):
         else:
             self.aviso_sessao.setText("")
 
+    def _escolher(self, sessao: dict) -> None:
+        self._escolhida = sessao
+        self._marcar_ativo()
+        self._sessao_escolhida()
+
+    def _marcar_ativo(self) -> None:
+        for card in getattr(self, "_cards", []):
+            card.set_ativa(card.sessao is self._escolhida)
+
     def _sessao_atual(self) -> dict | None:
-        linhas = self.tabela.selectionModel().selectedRows() if self.tabela.rowCount() else []
-        if not linhas:
-            return None
-        indice = linhas[0].row()
-        return self._sessoes[indice] if 0 <= indice < len(self._sessoes) else None
+        return getattr(self, "_escolhida", None)
 
     def _sessao_escolhida(self) -> None:
         """Mostra a sessao escolhida nos cards de resultado.
@@ -202,6 +357,10 @@ class BenchmarkView(View):
         """
         s = self._sessao_atual()
         if s is None:
+            # Nada escolhido: os paineis tem de esvaziar junto. Deixar a ultima
+            # sessao ali depois de apagar ela da lista mostra numeros de uma
+            # partida que nao existe mais, e nao ha' nada na tela dizendo isso.
+            self._limpar_resultado()
             return
         self.kpi.set("avg", units.integer(s.get("fps_avg")),
                      theme.fps_color(s.get("fps_avg")))
@@ -220,6 +379,118 @@ class BenchmarkView(View):
         self.result_rows.set("hitches", str(s.get("hitches", 0)),
                              theme.BAD if s.get("hitches") else theme.OK)
         self.relatorio.setPlainText(_texto_sessao(s))
+        self._graficos_da_sessao(s)
+
+    def _limpar_resultado(self) -> None:
+        """Zera tudo que descreve uma partida: KPIs, tabelas, graficos e texto.
+
+        Um painel so' esquecido ja' basta para enganar — o card de Resultado
+        continuava dizendo "Palworld, 138820 frames" com a lista vazia.
+        """
+        for chave in ("avg", "low1", "ft", "stutter", "smooth"):
+            self.kpi.set(chave, units.DASH, theme.FAINT)
+        for chave in ("game", "frames", "duration", "min", "max", "p1",
+                      "ftmax", "hitches", "consistency", "bottleneck"):
+            self.result_rows.set(chave, units.DASH, theme.FAINT)
+        for chave in ("cpu", "cpu_temp", "cpu_watts", "gpu", "gpu_temp",
+                      "gpu_watts", "ram", "vram"):
+            self.sys_rows.set(chave, units.DASH)
+        self.verdict.setText("")
+        self.relatorio.setPlainText("")
+        self.ft_chart.set_data([])
+        self.hist.set_data([], [])
+        self.card_ft.setVisible(False)
+        self.card_hist.set_hint("", theme.FAINT)
+
+    def _graficos_da_sessao(self, s: dict) -> None:
+        """Desenha o que a partida guardou, e diz o que ela nao guardou.
+
+        A distribuicao sai do histograma gravado junto com a sessao. A curva de
+        frametime nao existe: seriam milhoes de amostras por partida, e o
+        gravador e' de memoria constante justamente para nao mante-las. Antes os
+        dois graficos ficavam com a corrida cronometrada anterior na tela, e a
+        leitura obvia era que a sessao escolhida tinha aqueles numeros.
+        """
+        hist = s.get("hist") or {}
+        contagens = hist.get("c") or []
+        if contagens:
+            largura = float(hist.get("w", 0.1))
+            inicio = int(hist.get("i0", 0)) * 0.1
+            centros = [inicio + (i + 0.5) * largura for i in range(len(contagens))]
+            self.hist.set_data(centros, list(contagens))
+        else:
+            # Sessao gravada antes desta versao: nao tem histograma nenhum.
+            self.hist.set_data([], [])
+
+        # O card sai da tela em vez de mostrar um grafico vazio dizendo
+        # "aguardando frames do jogo": nao ha' nada a aguardar, a partida
+        # simplesmente nunca teve essa curva. Grafico vazio le' como travado.
+        self.ft_chart.set_data([])
+        self.card_ft.setVisible(False)
+        self.card_hist.set_hint(
+            "" if contagens else "esta sessão foi gravada antes deste gráfico existir",
+            theme.FAINT)
+
+    def _excluir_sessao(self) -> None:
+        """Apaga a partida escolhida.
+
+        Sem confirmacao: e' UMA linha, o usuario acabou de escolher ela na lista,
+        e o estrago cabe numa frase. Pedir "tem certeza?" para cada exclusao de
+        item unico so' ensina a clicar em sim sem ler.
+        """
+        s = self._sessao_atual()
+        if s is None:
+            self.aviso_sessao.setText("Escolha uma sessão na lista primeiro.")
+            return
+        historico = getattr(self.app, "session_history", None)
+        if historico is None:
+            return
+        try:
+            historico.remove(s)
+        except ValueError:
+            return
+        self._escolhida = None
+        self._salvar_historico()
+        nome = s.get("game", "sessão")
+        self.aviso_sessao.setText(f"'{nome}' removida.")
+
+    def _excluir_todas(self) -> None:
+        """Apaga o historico inteiro — este sim pergunta antes.
+
+        Aqui o estrago e' de todas as partidas ja' gravadas, e nao ha' desfazer:
+        o arquivo e' reescrito na hora.
+        """
+        historico = getattr(self.app, "session_history", None)
+        if not historico:
+            return
+        quantas = len(historico)
+        if not confirmar("Excluir todas as sessões?",
+                         f"As {quantas} partidas gravadas serão apagadas. "
+                         "Não dá para desfazer.",
+                         rotulo_ok="Excluir tudo", perigo=True, parent=self):
+            return
+        historico.clear()
+        self._escolhida = None
+        self._salvar_historico()
+        self.aviso_sessao.setText(f"{quantas} sessões apagadas.")
+
+    def _salvar_historico(self) -> None:
+        """Grava o historico, redesenha a tabela e esvazia o que ficou orfao.
+
+        A limpeza mora aqui, e nao em `_fill_sessoes`, porque aquele metodo
+        tambem roda quando uma partida ACABA de ser gravada — limpar la' apagaria
+        da tela o resultado que o usuario acabou de produzir.
+
+        `_fill_sessoes` bloqueia os sinais da tabela enquanto a redesenha, entao
+        `itemSelectionChanged` nao dispara e ninguem mais avisaria que a sessao
+        que estava aberta nos paineis deixou de existir.
+        """
+        salvar = getattr(self.app, "save_session_history", None)
+        if callable(salvar):
+            salvar()
+        self._fill_sessoes()
+        if self._sessao_atual() is None:
+            self._limpar_resultado()
 
     def _exportar_sessao(self) -> None:
         s = self._sessao_atual()
@@ -317,6 +588,8 @@ class BenchmarkView(View):
         self.kpi.set("smooth", f"{m.smoothness:.0f}" if m.smoothness is not None
                      else units.DASH, theme.score_color(m.smoothness))
 
+        # A corrida cronometrada E' quadro a quadro: aqui o card faz sentido.
+        self.card_ft.setVisible(True)
         self.ft_chart.set_data(ft)
         centers, counts = fr.histogram(ft)
         self.hist.set_data(centers, counts)

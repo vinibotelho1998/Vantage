@@ -150,3 +150,121 @@ def test_gatilho_sozinho_continua_valendo():
     eng._triggers(pad)
     assert ("LT", True) in disparos
     assert ("LT+RT", False) in disparos
+
+
+# ── silhueta conforme o controle conectado ───────────────────────────────────
+def test_diagrama_usa_layout_sony_quando_pedido():
+    """DualSense tem o direcional em cima e os dois analogicos embaixo. Desenhar
+    sempre o Xbox obriga o dono a traduzir a posicao de cada botao de cabeca."""
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from dbxstats.ui.views.gamepad import ControllerDiagram
+
+    QApplication.instance() or QApplication([])
+    d = ControllerDiagram()
+    assert d.kind == "xbox"
+    xbox = dict((k, (x, y)) for k, x, y, _r, _w in d.controles)
+
+    d.set_kind("sony")
+    sony = dict((k, (x, y)) for k, x, y, _r, _w in d.controles)
+
+    # o que muda de lugar e' exatamente o par direcional/analogico esquerdo
+    assert sony["dpad"][1] < sony["lstick"][1]
+    assert xbox["lstick"][1] < xbox["dpad"][1]
+
+
+def test_todo_botao_desenhado_tem_geometria():
+    """`_GEOM` alimenta os rotulos; uma peca fora dele quebraria o desenho."""
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from dbxstats.ui.views.gamepad import ControllerDiagram
+
+    QApplication.instance() or QApplication([])
+    d = ControllerDiagram()
+    for kind in ("xbox", "sony"):
+        d.set_kind(kind)
+        chaves = {k for k, *_ in d.controles}
+        assert set(d._GEOM) == chaves
+        assert chaves == {"lt", "lb", "lstick", "dpad", "back", "start",
+                          "y", "x", "b", "a", "rb", "rt", "rstick"}
+
+
+# ── botao preso: a causa do foco andando sozinho ─────────────────────────────
+def _mouse_mode():
+    """GamepadMouse sem Qt: so' o que `stuck` precisa."""
+    from dbxstats.platform.gamepad import GamepadMouse
+
+    m = GamepadMouse.__new__(GamepadMouse)
+    m._preso_desde = {}
+    return m
+
+
+def test_botao_recem_apertado_nao_e_preso(monkeypatch):
+    """Apertar um botao nao pode virar acusacao imediata."""
+    from dbxstats.platform import gamepad as G
+
+    m = _mouse_mode()
+    monkeypatch.setattr(G.time, "monotonic", lambda: 1000.0)
+    m._vigiar_presos(G.BTN_DPAD_RIGHT)
+    assert m.stuck() == []
+
+
+def test_botao_apertado_alem_do_limiar_e_denunciado(monkeypatch):
+    """O caso real: o direcional vai para as setas do teclado, e as setas mexem
+    o foco de QUALQUER aplicativo do Windows."""
+    from dbxstats.platform import gamepad as G
+
+    m = _mouse_mode()
+    monkeypatch.setattr(G.time, "monotonic", lambda: 1000.0)
+    m._vigiar_presos(G.BTN_DPAD_RIGHT)
+
+    monkeypatch.setattr(G.time, "monotonic", lambda: 1000.0 + G.STUCK_S + 1)
+    presos = m.stuck()
+    assert [nome for nome, _ in presos] == ["Direcional →"]
+    assert presos[0][1] > G.STUCK_S
+
+
+def test_soltar_o_botao_limpa_a_acusacao(monkeypatch):
+    from dbxstats.platform import gamepad as G
+
+    m = _mouse_mode()
+    monkeypatch.setattr(G.time, "monotonic", lambda: 1000.0)
+    m._vigiar_presos(G.BTN_A)
+    monkeypatch.setattr(G.time, "monotonic", lambda: 1100.0)
+    assert m.stuck()
+
+    m._vigiar_presos(0)
+    assert m.stuck() == []
+
+
+def test_varios_presos_saem_do_mais_antigo(monkeypatch):
+    from dbxstats.platform import gamepad as G
+
+    m = _mouse_mode()
+    monkeypatch.setattr(G.time, "monotonic", lambda: 1000.0)
+    m._vigiar_presos(G.BTN_DPAD_UP)
+    monkeypatch.setattr(G.time, "monotonic", lambda: 1010.0)
+    m._vigiar_presos(G.BTN_DPAD_UP | G.BTN_B)
+    monkeypatch.setattr(G.time, "monotonic", lambda: 1100.0)
+
+    presos = m.stuck()
+    assert [nome for nome, _ in presos] == ["Direcional ↑", "B"]
+
+
+def test_apertar_de_novo_reinicia_a_contagem(monkeypatch):
+    """Soltar e apertar e' uso normal; a contagem nao pode acumular entre os dois."""
+    from dbxstats.platform import gamepad as G
+
+    m = _mouse_mode()
+    monkeypatch.setattr(G.time, "monotonic", lambda: 1000.0)
+    m._vigiar_presos(G.BTN_A)
+    monkeypatch.setattr(G.time, "monotonic", lambda: 1100.0)
+    m._vigiar_presos(0)
+    m._vigiar_presos(G.BTN_A)
+    assert m.stuck() == []

@@ -13,8 +13,9 @@ E' por isso que 4K 144 aparece aqui mesmo quando some das Configuracoes.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect, Qt, QTimer, Signal
-from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen
+from PySide6.QtCore import QPoint, QPointF, QRect, Qt, QTimer, Signal
+from PySide6.QtGui import (QBrush, QColor, QFont, QLinearGradient, QPainter,
+                           QPen, QRadialGradient)
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -28,7 +29,7 @@ from ... import theme
 from ...platform import ccd
 from ...platform import displays as D
 from ...platform import win as winapi
-from ..components import Badge, Card, KpiStrip, PillButton, divider, label
+from ..components import Badge, Card, IconButton, KpiStrip, PillButton, divider, label
 from ..confirm import confirm_or_revert as ask_confirm
 from .base import View, scroll_page
 
@@ -85,6 +86,9 @@ class ArrangeCanvas(QWidget):
         self.setMouseTracking(True)
         self.rects: dict[str, QRect] = {}
         self.names: dict[str, str] = {}
+        self.hz: dict[str, int] = {}
+        """Taxa de cada tela. Duas telas de mesma resolucao so' se distinguem por
+        ela, e e' o numero que se confere depois de trocar de modo."""
         self.primary: str = ""
         self._drag: str | None = None
         self._grab = QPoint()
@@ -103,12 +107,14 @@ class ArrangeCanvas(QWidget):
         """
         self.rects.clear()
         self.names.clear()
+        self.hz.clear()
         self.apagadas.clear()
         ligadas = [d for d in displays if d.active and d.mode]
         for disp in ligadas:
             self.rects[disp.monitor_id] = QRect(disp.position[0], disp.position[1],
                                                 disp.mode.width, disp.mode.height)
             self.names[disp.monitor_id] = disp.name
+            self.hz[disp.monitor_id] = int(getattr(disp.mode, "refresh", 0) or 0)
             if disp.primary:
                 self.primary = disp.monitor_id
 
@@ -244,44 +250,131 @@ class ArrangeCanvas(QWidget):
     def paintEvent(self, event) -> None:
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self._guias(p)
         for key, rect in self.rects.items():
-            box = self._to_screen(rect)
-            apagada = key in self.apagadas
-            principal = key == self.primary and not apagada
-            cor = QColor(theme.RAM if principal else theme.FPS)
-            if apagada:
-                # Tracejado e cor apagada: a tela existe, esta' conectada, e nao
-                # esta' na area de trabalho. As tres coisas de relance.
-                cor = QColor(theme.FAINT)
-            p.setBrush(QBrush(QColor(theme.BG if apagada else theme.SURFACE)))
-            caneta = QPen(cor, 2)
-            if apagada:
-                caneta.setStyle(Qt.PenStyle.DashLine)
-            p.setPen(caneta)
-            p.drawRoundedRect(box, 6, 6)
-            # Cada linha ganha faixa propria a partir do centro. Centralizar as
-            # duas na mesma caixa imprimia uma por cima da outra.
-            meio = box.center().y()
-            linha = theme.scaled(15)
-            p.setPen(QPen(QColor(theme.MUTE if apagada else theme.TXT), 1))
-            p.setFont(QFont(theme.FONT_UI, 8, QFont.Weight.DemiBold))
-            p.drawText(QRect(box.x(), meio - linha, box.width(), linha),
-                       Qt.AlignmentFlag.AlignCenter, self.names.get(key, ""))
-            p.setPen(QPen(QColor(theme.FAINT), 1))
-            p.setFont(QFont(theme.FONT_UI, 7))
-            p.drawText(QRect(box.x(), meio + 1, box.width(), linha),
-                       Qt.AlignmentFlag.AlignCenter,
-                       f"{rect.width()} x {rect.height()}")
-            rodape, cor_rodape = "", theme.RAM
-            if apagada:
-                rodape, cor_rodape = "desligada", theme.FAINT
-            elif principal:
-                rodape = "primária"
-            if rodape:
-                p.setPen(QPen(QColor(cor_rodape), 1))
-                p.drawText(QRect(box.x(), box.bottom() - linha - 4, box.width(), linha),
-                           Qt.AlignmentFlag.AlignCenter, rodape)
+            self._monitor(p, key, rect)
         p.end()
+
+    def _guias(self, p: QPainter) -> None:
+        """Linhas de alinhamento enquanto se arrasta uma tela.
+
+        O arraste ja' colava nas vizinhas, mas em silencio: a tela pulava alguns
+        pixels e nao havia nada dizendo por que. A guia mostra COM QUEM ela
+        alinhou, que e' a informacao que faz o encaixe parecer intencional.
+        """
+        if self._drag is None:
+            return
+        movida = self.rects.get(self._drag)
+        if movida is None:
+            return
+        p.setPen(QPen(QColor(theme.FPS), 1, Qt.PenStyle.DashLine))
+        for key, outra in self.rects.items():
+            if key == self._drag:
+                continue
+            for a, b in ((movida.left(), outra.left()), (movida.left(), outra.right()),
+                         (movida.right(), outra.left()), (movida.right(), outra.right())):
+                if a == b:
+                    x = self._to_screen(QRect(a, movida.top(), 1, 1)).x()
+                    p.drawLine(x, 0, x, self.height())
+            for a, b in ((movida.top(), outra.top()), (movida.top(), outra.bottom()),
+                         (movida.bottom(), outra.top()), (movida.bottom(), outra.bottom())):
+                if a == b:
+                    y = self._to_screen(QRect(movida.left(), a, 1, 1)).y()
+                    p.drawLine(0, y, self.width(), y)
+
+    def _monitor(self, p: QPainter, key: str, rect: QRect) -> None:
+        """Desenha a tela como um monitor: pe', moldura e painel.
+
+        O retangulo chapado de antes obrigava a ler o rotulo para saber o que
+        aquilo era. Com pe' e moldura o mapa se reconhece de relance, e a
+        diferenca entre ligada e apagada deixa de depender so' do tracejado.
+        """
+        box = self._to_screen(rect)
+        apagada = key in self.apagadas
+        principal = key == self.primary and not apagada
+        cor = QColor(theme.FAINT if apagada else (theme.RAM if principal else theme.FPS))
+        raio = max(3, theme.scaled(5))
+
+        # Pe': so' quando ha' espaco. Em tela pequena no mapa ele viraria um
+        # borrao colado embaixo, atrapalhando em vez de ajudar.
+        if box.height() > theme.scaled(46):
+            largura_pe = max(theme.scaled(16), box.width() // 5)
+            pescoco = QRect(box.center().x() - theme.scaled(5), box.bottom(),
+                            theme.scaled(10), theme.scaled(7))
+            base = QRect(box.center().x() - largura_pe // 2,
+                         box.bottom() + theme.scaled(6), largura_pe, theme.scaled(4))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(QColor(theme.LINE_HI if not apagada else theme.LINE)))
+            p.drawRect(pescoco)
+            p.drawRoundedRect(base, 2, 2)
+
+        if principal:
+            # Halo da primaria: e' a unica tela que muda de comportamento, e
+            # merece ser achada sem procurar o rotulo.
+            halo = QRadialGradient(QPointF(box.center()), box.width() * 0.8)
+            halo.setColorAt(0.0, QColor(cor.red(), cor.green(), cor.blue(), 60))
+            halo.setColorAt(1.0, QColor(cor.red(), cor.green(), cor.blue(), 0))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(halo))
+            p.drawEllipse(QPointF(box.center()), box.width() * 0.8, box.width() * 0.8)
+
+        p.save()
+        p.translate(0, theme.scaled(3))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(QColor(0, 0, 0, 110)))
+        p.drawRoundedRect(box, raio, raio)
+        p.restore()
+
+        moldura = QLinearGradient(0, box.top(), 0, box.bottom())
+        moldura.setColorAt(0.0, QColor(theme.SURFACE_2))
+        moldura.setColorAt(1.0, QColor(theme.BG_SUNKEN))
+        p.setBrush(QBrush(moldura))
+        caneta = QPen(cor, 2 if principal else 1.5)
+        if apagada:
+            caneta.setStyle(Qt.PenStyle.DashLine)
+        p.setPen(caneta)
+        p.drawRoundedRect(box, raio, raio)
+
+        # Painel: recuado da moldura, e com luz propria quando esta' ligado.
+        recuo = max(2, theme.scaled(3))
+        tela = box.adjusted(recuo, recuo, -recuo, -recuo)
+        if tela.width() > 6 and tela.height() > 6:
+            if apagada:
+                p.setBrush(QBrush(QColor(theme.BG)))
+            else:
+                luz = QLinearGradient(0, tela.top(), 0, tela.bottom())
+                luz.setColorAt(0.0, QColor(cor.red(), cor.green(), cor.blue(), 46))
+                luz.setColorAt(1.0, QColor(cor.red(), cor.green(), cor.blue(), 12))
+                p.setBrush(QBrush(luz))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawRoundedRect(tela, max(2, raio - 2), max(2, raio - 2))
+
+        meio = box.center().y()
+        linha = theme.scaled(15)
+        p.setPen(QPen(QColor(theme.MUTE if apagada else theme.TXT), 1))
+        p.setFont(QFont(theme.FONT_UI, 8, QFont.Weight.DemiBold))
+        p.drawText(QRect(box.x(), meio - linha, box.width(), linha),
+                   Qt.AlignmentFlag.AlignCenter, self.names.get(key, ""))
+
+        taxa = self.hz.get(key, 0)
+        modo = f"{rect.width()} x {rect.height()}"
+        if taxa and not apagada:
+            modo += f"  ·  {taxa} Hz"
+        p.setPen(QPen(QColor(theme.FAINT), 1))
+        p.setFont(QFont(theme.FONT_UI, 7))
+        p.drawText(QRect(box.x(), meio + 1, box.width(), linha),
+                   Qt.AlignmentFlag.AlignCenter, modo)
+
+        rodape, cor_rodape = "", theme.RAM
+        if apagada:
+            rodape, cor_rodape = "desligada", theme.FAINT
+        elif principal:
+            rodape = "principal"
+        if rodape and box.height() > theme.scaled(52):
+            p.setPen(QPen(QColor(cor_rodape), 1))
+            p.setFont(QFont(theme.FONT_UI, 7, QFont.Weight.DemiBold))
+            p.drawText(QRect(box.x(), box.bottom() - linha - 4, box.width(), linha),
+                       Qt.AlignmentFlag.AlignCenter, rodape)
 
 
 class _DisplayCard(Card):
@@ -355,17 +448,44 @@ class _DisplayCard(Card):
         self.btn_default.clicked.connect(self._set_default_primary)
         self.btn_off_default = PillButton("", theme.MUTE)
         self.btn_off_default.clicked.connect(self._toggle_off_by_default)
+        # So' as duas acoes do dia a dia ficam a' vista. As outras cinco sao
+        # ajuste de arranjo — coisa que se mexe uma vez e nao se olha mais — e
+        # deixavam sete pilulas coloridas competindo por atencao em cada tela.
         actions.addWidget(self.btn_apply)
         actions.addWidget(self.btn_primary)
-        actions.addWidget(self.btn_default)
-        actions.addWidget(self.btn_off_default)
-        actions.addWidget(self.btn_windows)
-        actions.addWidget(self.btn_mirror)
-        actions.addWidget(self.btn_power)
+        self.btn_mais = IconButton("⋯", "mais opções desta tela")
+        self.btn_mais.clicked.connect(self._alternar_mais)
+        actions.addWidget(self.btn_mais)
         actions.addStretch(1)
         self.add_layout(actions)
 
+        # Segunda fileira, escondida ate' o "⋯". Fica numa fileira propria, e
+        # nao num menu suspenso, porque os botoes aqui mudam de texto e somem
+        # conforme o estado da tela — e `_sync_state` continua mandando neles
+        # exatamente como antes.
+        self.mais = QWidget()
+        extras = QHBoxLayout(self.mais)
+        extras.setContentsMargins(0, 0, 0, 0)
+        extras.setSpacing(theme.scaled(8))
+        extras.addWidget(self.btn_default)
+        extras.addWidget(self.btn_off_default)
+        extras.addWidget(self.btn_windows)
+        extras.addWidget(self.btn_mirror)
+        extras.addWidget(self.btn_power)
+        extras.addStretch(1)
+        self.mais.setVisible(False)
+        self.add(self.mais)
+
         self._sync_state()
+
+    def _alternar_mais(self) -> None:
+        aberto = not self.mais.isVisible()
+        self.mais.setVisible(aberto)
+        # O glifo vira a indicacao de estado: sem isso nao ha' nada dizendo que
+        # a fileira de baixo pertence a este botao.
+        self.btn_mais.setText("⋯" if not aberto else "×")
+        self.btn_mais.setToolTip("mais opções desta tela" if not aberto
+                                 else "esconder as opções")
 
     # ── dados ────────────────────────────────────────────────────────────────
     def _resolutions(self) -> list[tuple[str, object]]:

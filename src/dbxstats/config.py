@@ -226,6 +226,14 @@ class Settings:
     qualquer, que pode ter pego a maquina ja' fora do arranjo de sempre.
     """
 
+    bigpicture_target: str = ""
+    """Tela onde a grade do Big Picture abre: "" ou "screen:<monitor_id>".
+
+    Vazio segue a tela marcada para nascer apagada, que e' o caso da TV da sala.
+    Nao troca a primaria de proposito: quem manda continua sendo assunto do
+    atalho de cada jogo, e dois donos da mesma regra brigariam.
+    """
+
     # atalhos de jogo
     launch_items: list[dict] = field(default_factory=list)
     """Cada item e' {"name", "path", "args", "target", "restore"}. Ver ui/views/launcher.py."""
@@ -350,6 +358,8 @@ class Settings:
         self.gamepad_scroll_speed = round(_clamp(_num(self.gamepad_scroll_speed, 1.0), 0.2, 4.0), 2)
         self.gamepad_deadzone = int(_clamp(_num(self.gamepad_deadzone, 8000), 0, 30000))
         self.gamepad_bindings = _clean_bindings(self.gamepad_bindings)
+        alvo_bp = str(self.bigpicture_target or "").strip()
+        self.bigpicture_target = alvo_bp if alvo_bp.startswith("screen:") else ""
         self.display_off_by_default = [str(x) for x in _as_list(self.display_off_by_default)
                                        if str(x)]
         conhecidas = {"cpu", "gpu", "ram", "vram"}
@@ -468,6 +478,9 @@ def _clean_launch_item(raw) -> dict | None:
         # para ela e' o fim natural da partida, e nao voltar para a mesa.
         "voltar_bp": bool(raw.get("voltar_bp", False)),
         "restore": bool(raw.get("restore", True)),
+        # Vazio e' o normal, nao falta de configuracao: sem imagem escolhida a
+        # capa sai do Steam ou do icone do executavel, sem o usuario fazer nada.
+        "image": str(raw.get("image", "")).strip(),
     }
 
 

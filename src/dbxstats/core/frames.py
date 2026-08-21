@@ -561,4 +561,40 @@ class SessionRecorder:
             "hitches": self.hitches,
             "stutters": self.stutters,
             "stutter_pct": round(100.0 * self.stutters / self.count, 2),
+            "hist": self.compact_hist(),
         }
+
+    def compact_hist(self, alvo: int = 96) -> dict:
+        """O histograma reduzido a poucas barras, para caber no disco.
+
+        Os 2500 baldes de 0,1 ms existem para o percentil sair preciso; para
+        DESENHAR a distribuicao eles sao caros e inuteis — viraria um arquivo de
+        sessoes dezenas de vezes maior para um grafico que tem uns duzentos
+        pixels de largura.
+
+        Sem isto a partida guardava so' numeros, e escolher uma sessao na lista
+        deixava os graficos exibindo a corrida cronometrada anterior — parecia
+        que a tela tinha travado.
+
+        Devolve {"w": largura do balde em ms, "i0": indice do primeiro,
+        "c": contagens}. Vazio quando nao ha' frame nenhum.
+        """
+        if self.count <= 0:
+            return {}
+        ocupados = [i for i, n in enumerate(self.bins) if n]
+        if not ocupados:
+            return {}
+        # So' a faixa que tem frame de verdade: um jogo a 144 fps vive perto dos
+        # 7 ms, e guardar os 243 ms vazios acima disso nao diz nada.
+        inicio, fim = ocupados[0], ocupados[-1]
+        largura = fim - inicio + 1
+        juntar = max(1, -(-largura // alvo))       # divisao para cima
+        contagens = []
+        for i in range(inicio, fim + 1, juntar):
+            contagens.append(sum(self.bins[i:i + juntar]))
+        return {"w": round(SESSION_BIN_MS * juntar, 4),
+                "i0": inicio, "c": contagens,
+                # O balde de estouro entra separado: sao os piores frames da
+                # partida, e some-los ao ultimo balde mentiria sobre onde eles
+                # estao.
+                "over": self.over}

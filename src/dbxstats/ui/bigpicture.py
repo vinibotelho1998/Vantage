@@ -18,10 +18,12 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, QRect, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
+from PySide6.QtGui import (QColor, QFont, QLinearGradient, QPainter, QPainterPath,
+                           QPen, QPixmap)
 from PySide6.QtWidgets import QApplication, QWidget
 
 from .. import log, theme
+from ..platform import art
 from ..platform import gamepad as G
 
 _log = log.get("bigpicture")
@@ -57,10 +59,19 @@ class BigPicture(QWidget):
         self._aviso = ""
         self._abrindo = ""
         self._sem_controle = False
+        self._capas: dict[str, QPixmap] = {}
+        """Capa ja' carregada, por caminho do atalho.
+
+        A grade repinta inteira a cada passo do foco. Ler JPG do disco dentro do
+        paintEvent faria a navegacao engasgar a cada card — o cache tira o disco
+        do caminho do desenho e o QPixmap ja' fica no formato da tela."""
 
     # ── ciclo ────────────────────────────────────────────────────────────────
     def abrir(self, screen=None) -> None:
         self._itens = list(self._ctl.settings.launch_items)
+        # Recarrega as capas a cada abertura: e' o unico momento em que trocar a
+        # imagem de um jogo na aba Jogos tem como aparecer aqui.
+        self._capas.clear()
         self._foco = min(self._foco, max(0, len(self._itens) - 1))
         self._abrindo = ""
         alvo = screen or QApplication.primaryScreen()
@@ -202,6 +213,75 @@ class BigPicture(QWidget):
         altura = int(largura * 0.62)
         return colunas, margem, topo, largura, altura
 
+    def _capa(self, item: dict) -> QPixmap | None:
+        """Capa do jogo, carregada uma vez e guardada.
+
+        O None tambem fica guardado, como QPixmap vazio: jogo sem capa nenhuma
+        nao pode sair varrendo o cache do Steam e o disco a cada repintura.
+        """
+        chave = item.get("path", "")
+        if chave in self._capas:
+            pix = self._capas[chave]
+            return pix if not pix.isNull() else None
+        try:
+            caminho = art.artwork_path(item)
+        except OSError as e:
+            _log.debug("capa de %s falhou: %s", item.get("name"), e)
+            caminho = None
+        pix = QPixmap(str(caminho)) if caminho is not None else QPixmap()
+        self._capas[chave] = pix
+        return pix if not pix.isNull() else None
+
+    @staticmethod
+    def _e_icone(pix: QPixmap) -> bool:
+        """Quadrado quer dizer icone de executavel, nao capa.
+
+        A diferenca importa no desenho: capa e' arte feita para preencher, e
+        icone e' um simbolo com margem propria. Esticar o icone ate' cobrir um
+        card deitado amplia ele em varias vezes e corta o desenho pela metade —
+        e' o que faz um icone bonito virar borrao.
+
+        O teste e' a proporcao, e nao a origem do arquivo, porque uma imagem
+        quadrada escolhida a mao pelo usuario tem exatamente o mesmo problema.
+        """
+        if pix.height() <= 0:
+            return False
+        return abs(pix.width() / pix.height() - 1.0) < 0.15
+
+    def _pintar_capa(self, p: QPainter, pix: QPixmap, rect: QRect,
+                     caminho: QPainterPath) -> None:
+        """Desenha a capa dentro do card, cobrindo ou centralizada."""
+        p.save()
+        p.setClipPath(caminho)
+
+        if self._e_icone(pix):
+            # Contido e no alto: fica com o tamanho que o icone aguenta sem
+            # borrar, e deixa a parte de baixo livre para o nome.
+            lado = int(rect.height() * 0.58)
+            escalada = pix.scaled(lado, lado, Qt.AspectRatioMode.KeepAspectRatio,
+                                  Qt.TransformationMode.SmoothTransformation)
+            origem = QPoint(rect.x() + (rect.width() - escalada.width()) // 2,
+                            rect.y() + int(rect.height() * 0.10))
+            p.drawPixmap(origem, escalada)
+        else:
+            escalada = pix.scaled(rect.size(),
+                                  Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                                  Qt.TransformationMode.SmoothTransformation)
+            origem = QPoint(rect.x() - (escalada.width() - rect.width()) // 2,
+                            rect.y() - (escalada.height() - rect.height()) // 2)
+            p.drawPixmap(origem, escalada)
+
+            # Cortina escura so' embaixo, e so' sobre arte de verdade. O nome
+            # precisa ser legivel a tres metros por cima de qualquer cor, e
+            # escurecer o card inteiro desperdicaria a imagem que fomos buscar.
+            # No icone ela nao entra: o fundo ali ja' e' a cor do card.
+            veu = QLinearGradient(rect.left(), rect.top() + rect.height() * 0.35,
+                                  rect.left(), rect.bottom())
+            veu.setColorAt(0.0, QColor(0, 0, 0, 0))
+            veu.setColorAt(1.0, QColor(0, 0, 0, 225))
+            p.fillRect(rect, veu)
+        p.restore()
+
     def _card(self, p: QPainter, indice: int, item: dict, focado: bool) -> None:
         colunas, margem, topo, largura, altura = self._grade()
         e = self._escala
@@ -221,22 +301,52 @@ class BigPicture(QWidget):
             cor.setAlpha(140)
         caminho = QPainterPath()
         caminho.addRoundedRect(rect, 14 * e, 14 * e)
-        p.fillPath(caminho, cor)
+
+        capa = self._capa(item)
+        if capa is not None:
+            # A cor entra por baixo mesmo com capa: enquanto o Qt escala a
+            # imagem, e em capa com canto transparente (icone recortado), o que
+            # aparece atras e' o card e nao o fundo preto da tela.
+            p.fillPath(caminho, cor)
+            self._pintar_capa(p, capa, rect, caminho)
+        else:
+            p.fillPath(caminho, cor)
+        if not focado and capa is not None:
+            # Card fora de foco perde presenca. Com capa isso nao pode vir do
+            # alfa da cor, que fica escondida atras da imagem.
+            p.fillPath(caminho, QColor(0, 0, 0, 90))
         if focado:
             p.setPen(QPen(QColor(theme.TXT), max(3.0, 4 * e)))
             p.drawPath(caminho)
 
-        nome = item.get("name") or Path(item.get("path", "")).stem
-        p.setFont(_fonte(max(15.0, 28 * e), QFont.Weight.Bold))
-        p.setPen(QColor("#06121c") if focado else QColor(theme.TXT))
-        alvo = rect.adjusted(int(20 * e), int(16 * e), int(-20 * e), int(-20 * e))
-        p.drawText(alvo, int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
-                             | Qt.TextFlag.TextWordWrap), nome)
+        # Sobre capa o texto e' sempre claro: a cortina embaixo garante o
+        # contraste, e o azul escuro do card focado sumiria em cima dela.
+        forte = QColor(theme.TXT) if capa is not None else (
+            QColor("#06121c") if focado else QColor(theme.TXT))
+        fraco = QColor(theme.TXT) if capa is not None else (
+            QColor("#06121c") if focado else QColor(theme.MUTE))
+        if capa is not None:
+            fraco.setAlpha(200)
 
+        nome = item.get("name") or Path(item.get("path", "")).stem
+        alvo = rect.adjusted(int(20 * e), int(16 * e), int(-20 * e), int(-20 * e))
         p.setFont(_fonte(max(11.0, 14 * e)))
-        p.setPen(QColor("#06121c") if focado else QColor(theme.MUTE))
+        p.setPen(fraco)
         p.drawText(alvo, int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom),
                    self._rodape_do_card(item))
+
+        p.setFont(_fonte(max(15.0, 28 * e), QFont.Weight.Bold))
+        p.setPen(forte)
+        # Com capa o nome desce para junto do rodape, dentro da cortina. No topo
+        # ele cairia bem no meio da arte, que e' onde ela e' mais informativa.
+        if capa is not None:
+            alvo = alvo.adjusted(0, 0, 0, -int(22 * e))
+            p.drawText(alvo, int(Qt.AlignmentFlag.AlignLeft
+                                 | Qt.AlignmentFlag.AlignBottom
+                                 | Qt.TextFlag.TextWordWrap), nome)
+        else:
+            p.drawText(alvo, int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+                                 | Qt.TextFlag.TextWordWrap), nome)
 
     def _rodape_do_card(self, item: dict) -> str:
         """Fatos que ajudam a escolher, sem inventar nenhum."""
