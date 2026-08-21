@@ -661,16 +661,85 @@ class DisplaysView(View):
         row.addStretch(1)
         card.add_layout(row)
 
+        self.c_ao_abrir = QCheckBox("Aplicar o arranjo padrão quando o DBX Stats abrir")
+        self.c_ao_abrir.setChecked(bool(self.cfg.display_apply_on_start))
+        self.c_ao_abrir.toggled.connect(self._set_ao_abrir)
+        card.add(self.c_ao_abrir)
+
         self.c_after_game = QCheckBox("Voltar ao perfil padrão quando um jogo fechar")
         self.c_after_game.setChecked(bool(self.cfg.display_restore_after_game))
         self.c_after_game.toggled.connect(self._set_after_game)
         card.add(self.c_after_game)
 
-        self.c_restore = QCheckBox("Voltar ao perfil padrão ao fechar o DBX Stats")
+        self.c_restore = QCheckBox("Aplicar o arranjo padrão ao fechar o DBX Stats")
         self.c_restore.setChecked(bool(self.cfg.display_restore_on_exit))
         self.c_restore.toggled.connect(self._set_restore)
         card.add(self.c_restore)
+
+        self.c_nativa = QCheckBox("Corrigir resolução e taxa para a nativa de cada painel")
+        self.c_nativa.setToolTip(
+            "O Windows escolhe um modo conservador ao reanexar uma tela: numa TV 4K "
+            "vira 60 Hz, e num painel de 144 vira 120. Vale na abertura do app e "
+            "quando um monitor entra ou sai — nunca no meio do uso.")
+        self.c_nativa.setChecked(bool(self.cfg.display_force_native))
+        self.c_nativa.toggled.connect(self._set_nativa)
+        card.add(self.c_nativa)
+
+        acoes = QHBoxLayout()
+        acoes.setSpacing(theme.scaled(8))
+        aplicar = PillButton("Aplicar arranjo padrão agora", theme.FPS, filled=True)
+        aplicar.setToolTip("Acende o que deve estar aceso, entrega a primária a quem "
+                           "você escolheu, apaga o que deve ficar apagado e devolve "
+                           "cada tela ao modo nativo.")
+        aplicar.clicked.connect(self._aplicar_padrao)
+        acoes.addWidget(aplicar)
+        acoes.addStretch(1)
+        card.add_layout(acoes)
+
+        self.resumo_padrao = label("", 8.5, color=theme.MUTE)
+        self.resumo_padrao.setWordWrap(True)
+        card.add(self.resumo_padrao)
+        self._descrever_padrao()
         return card
+
+    def _set_ao_abrir(self, on: bool) -> None:
+        self.cfg.display_apply_on_start = bool(on)
+        self.cfg.save()
+
+    def _set_nativa(self, on: bool) -> None:
+        self.cfg.display_force_native = bool(on)
+        self.cfg.save()
+
+    def _descrever_padrao(self) -> None:
+        """Diz em uma linha o que "arranjo padrao" significa hoje.
+
+        Sem isso a promessa fica invisivel: os dois marcadores vivem cada um no
+        cartao da sua tela, e ninguem junta as pecas de cabeca.
+        """
+        nomes = {d.monitor_id: d.name for d in D.list_displays(with_modes=False)}
+        principal = nomes.get(self.cfg.display_primary_default, "")
+        apagadas = [nomes.get(m, "?") for m in self.cfg.display_off_by_default
+                    if m in nomes]
+        partes = []
+        partes.append(f"principal: {principal}" if principal
+                      else "principal: nenhuma escolhida")
+        if apagadas:
+            partes.append("apagadas: " + ", ".join(apagadas))
+        if self.cfg.display_force_native:
+            partes.append("modo nativo")
+        self.resumo_padrao.setText("Arranjo padrão — " + "   ·   ".join(partes))
+
+    def _aplicar_padrao(self) -> None:
+        aplicar = getattr(self.app, "_enforce_display_defaults", None)
+        if aplicar is None:
+            return
+        try:
+            aplicar()
+        except Exception as e:                                   # noqa: BLE001
+            self.notify(f"não consegui aplicar: {e}", theme.BAD)
+            return
+        self.notify("Arranjo padrão aplicado.", theme.OK)
+        self.reload()
 
     def _set_restore(self, on: bool) -> None:
         self.cfg.display_restore_on_exit = bool(on)
@@ -843,6 +912,8 @@ class DisplaysView(View):
                 self.cfg.save()
 
         self._refresh_profiles()
+        if hasattr(self, "resumo_padrao"):
+            self._descrever_padrao()
 
     def on_activate(self) -> None:
         self.reload()

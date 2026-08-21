@@ -202,6 +202,17 @@ class Settings:
     A TV da sala fica nesse grupo: conectada e reconhecida, mas fora da area de
     trabalho ate' um atalho de jogo pedir por ela.
     """
+    display_apply_on_start: bool = True
+    """Aplicar o arranjo padrao quando o app abre.
+
+    O Windows costuma acordar com as telas noutro arranjo depois de um jogo ou
+    de um reinicio; sem isso a correcao vira tarefa manual toda vez."""
+    display_force_native: bool = True
+    """Devolver cada tela acesa ao modo nativo na abertura.
+
+    O Windows chuta um modo conservador ao reanexar uma tela — numa TV 4K vira
+    60 Hz, e num painel de 144 vira 120. Desligue se voce usa de proposito um
+    modo que nao e' o nativo."""
     display_primary_default: str = ""
     """monitor_id que deve mandar quando nao ha' jogo pedindo outra coisa.
 

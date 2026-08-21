@@ -44,7 +44,8 @@ def _app(monkeypatch, telas, padrao=None):
     a.notify = lambda *args: None
     a._normal_layout = lambda: padrao
     a._normal_topology = lambda: ""
-    a.settings = type("S", (), {"display_primary_default": "", "display_off_by_default": []})()
+    a.settings = type("S", (), {"display_primary_default": "", "display_off_by_default": [],
+                             "display_force_native": False})()
     a.window = type("W", (), {"reload_displays": lambda self: None})()
     return a, fake
 
@@ -146,7 +147,8 @@ def _com_padrao(monkeypatch, telas, alvo):
     fake.set_primary = lambda device: (fake.primarias.append(device), (True, ""))[1]
     a = App.__new__(App)
     a._session = None
-    a.settings = type("S", (), {"display_primary_default": alvo, "display_off_by_default": []})()
+    a.settings = type("S", (), {"display_primary_default": alvo, "display_off_by_default": [],
+                             "display_force_native": False})()
     a.notify = lambda *args: None
     return a, fake
 

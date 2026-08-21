@@ -188,7 +188,7 @@ class App:
         self._apply_overlay()
         # Antes dos timers: se a maquina abriu com a primaria na tela errada
         # (TV ligada por ultimo, por exemplo), a janela ja' nasce no lugar certo.
-        nome = self._enforce_display_defaults()
+        nome = self._enforce_display_defaults() if self.settings.display_apply_on_start else ""
         if nome:
             self.notify("DBX Stats", f"{nome} de volta como tela principal.")
         self._init_timers()
@@ -454,25 +454,67 @@ class App:
     def _enforce_display_defaults(self) -> str:
         """Poe as telas no arranjo escolhido como o normal da casa.
 
-        Duas escolhas, nesta ordem obrigatoria: primeiro quem manda, depois
-        quem apaga — o Windows nao desliga a tela que esta' mandando.
+        Quatro passos, e a ordem nao e' negociavel:
+
+        1. acende o que deveria estar aceso — inclusive a tela que vai mandar,
+           porque o Windows nao promove tela apagada;
+        2. entrega a primaria a quem foi escolhido;
+        3. apaga o que deveria estar apagado, agora que ela nao manda mais;
+        4. devolve cada tela acesa ao modo nativo.
+
+        O passo 4 existe porque o Windows chuta um modo conservador ao reanexar
+        uma tela — e' o que fazia a maquina abrir "com resolucao doida" depois
+        de um jogo ter mexido nas telas, ou depois de um reinicio.
 
         So' roda quando um monitor entra ou sai, e na abertura do app. Nao e'
         um vigia constante de proposito: ligar a TV na mao pela aba Telas tem
         de continuar funcionando sem o app apaga-la um segundo depois.
         """
-        nome = self._enforce_primary()
         if self._session is not None:
-            return nome
+            return self._enforce_primary()
+
         apagar = set(self.settings.display_off_by_default)
-        if not apagar:
-            return nome
+        for d in dsp.list_displays(with_modes=False):
+            if d.active or d.monitor_id in apagar or not d.monitor_id:
+                continue
+            ok, err = dsp.set_enabled(d.device, True)
+            _log.info("%s acesa por padrao (%s)", d.name, "ok" if ok else err)
+
+        nome = self._enforce_primary()
+
         for d in dsp.list_displays(with_modes=False):
             if d.monitor_id not in apagar or not d.active or d.primary:
                 continue
             ok, err = dsp.set_enabled(d.device, False)
             _log.info("%s apagada por padrao (%s)", d.name, "ok" if ok else err)
+
+        self._enforce_native_modes()
         return nome
+
+    def _tem_arranjo_padrao(self) -> bool:
+        """Ha' um arranjo padrao escolhido, ou o app nao sabe o que impor?"""
+        return bool(self.settings.display_primary_default
+                    or self.settings.display_off_by_default)
+
+    def _enforce_native_modes(self) -> None:
+        """Devolve cada tela acesa a' resolucao e taxa nativas do painel.
+
+        O Windows escolhe um modo conservador ao reanexar uma tela: numa TV 4K
+        isso vira 4096x2160 a 60 Hz, ou 3840x2160 a 120 em vez de 144. Quem
+        escolheu outro modo de proposito na aba Telas percebe, porque isso so'
+        acontece na abertura e quando um monitor entra ou sai — nao a cada
+        segundo.
+        """
+        if not self.settings.display_force_native:
+            return
+        for d in dsp.list_displays():
+            if not d.active or not d.mode:
+                continue
+            melhor = dsp.best_mode(d.device)
+            if melhor is None or melhor.as_key() == d.mode.as_key():
+                continue
+            ok, err = dsp.set_mode(d.device, melhor)
+            _log.info("%s -> %s (%s)", d.name, melhor.label, "ok" if ok else err)
 
     def _enforce_primary(self) -> str:
         """Devolve o comando para a tela escolhida como principal da casa.
@@ -798,6 +840,13 @@ class App:
         desfazer. Entao a volta e' automatica, e so' acontece se algo mudou.
         """
         if not self.settings.display_restore_on_exit:
+            return
+        # Com um arranjo padrao definido, ele manda tambem na saida: e' o mesmo
+        # estado que o app impoe ao abrir, e as duas pontas concordarem e' o que
+        # torna o comportamento previsivel. Sem padrao definido, sobra o retrato
+        # de antes, que e' o que existia antes desta opcao.
+        if self._tem_arranjo_padrao():
+            self._enforce_display_defaults()
             return
         # Fechar com jogo aberto volta para o estado de antes do jogo, que e' mais
         # recente que o do boot — e' o que o usuario reconhece como "o normal".

@@ -499,6 +499,11 @@ def _best_mode(device: str) -> Mode | None:
     return modes[0]
 
 
+def best_mode(device: str):
+    """Melhor modo do painel, para quem esta' fora deste modulo."""
+    return _best_mode(device)
+
+
 def apply_profile(entries: list[dict], topology: str = "") -> tuple[bool, str]:
     """Aplica um perfil inteiro: topologia, depois primaria, depois modos.
 
