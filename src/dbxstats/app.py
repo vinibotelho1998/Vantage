@@ -482,11 +482,20 @@ class App:
 
         nome = self._enforce_primary()
 
+        apagou = False
         for d in dsp.list_displays(with_modes=False):
             if d.monitor_id not in apagar or not d.active or d.primary:
                 continue
             ok, err = dsp.set_enabled(d.device, False)
+            apagou = apagou or ok
             _log.info("%s apagada por padrao (%s)", d.name, "ok" if ok else err)
+
+        if apagou:
+            # Apagar uma tela faz o Windows reatribuir a primaria por conta
+            # propria, ignorando a que acabamos de definir. Medido: pedimos a
+            # ULTRAWIDE, a TV foi apagada em seguida, e a primaria terminou na
+            # ULTRAGEAR. Confirmar depois e' o que fecha o arranjo.
+            nome = self._enforce_primary() or nome
 
         self._enforce_native_modes()
         return nome

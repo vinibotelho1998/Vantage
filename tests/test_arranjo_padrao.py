@@ -135,3 +135,30 @@ def test_sem_arranjo_definido_o_app_nao_opina():
     assert a._tem_arranjo_padrao() is False
     a.settings.display_primary_default = "uw"
     assert a._tem_arranjo_padrao() is True
+
+
+def test_primaria_e_reconfirmada_depois_de_apagar(monkeypatch):
+    """Apagar uma tela faz o Windows reatribuir a primaria por conta propria.
+
+    Medido nesta maquina: pedimos a ULTRAWIDE, a TV foi apagada em seguida, e a
+    primaria terminou na ULTRAGEAR — com o log dizendo que a troca dera certo.
+    """
+    telas = [_Tela("uw", "ULTRAWIDE", True, modo=_Modo(3440, 1440, 160)),
+             _Tela("ug", "ULTRAGEAR", True, modo=_Modo(1920, 1080, 180)),
+             _Tela("tv", "TV", True, True, modo=_Modo(3840, 2160, 144))]
+    a, fake = _app(monkeypatch, telas, principal="uw", apagar=["tv"], forcar=False)
+
+    real = fake.set_enabled
+
+    def apagar_e_bagunçar(device, ligada):
+        r = real(device, ligada)
+        if not ligada:                      # o Windows escolhe outra primaria
+            for t in fake.telas:
+                t.primary = t.monitor_id == "ug"
+        return r
+
+    fake.set_enabled = apagar_e_bagunçar
+    a._enforce_display_defaults()
+
+    assert [t.monitor_id for t in fake.telas if t.primary] == ["uw"]
+    assert fake.passos.count(("primary", "dev:uw")) == 2
