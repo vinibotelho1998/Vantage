@@ -645,7 +645,9 @@ class GamepadView(View):
 
         for nome, acao in (("Analógico esquerdo", "Move o cursor"),
                            ("Analógico direito", "Rola a página"),
-                           ("Back + Start", "Assume ou devolve o mouse")):
+                           ("Back + Start", "Assume ou devolve o mouse"),
+                           ("LT+RT+L3+R3, duas vezes",
+                            "Devolve as telas ao perfil padrão")):
             linha = QHBoxLayout()
             linha.addWidget(label(nome, 8.5, color=theme.MUTE))
             linha.addStretch(1)

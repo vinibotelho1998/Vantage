@@ -84,6 +84,14 @@ VK_MEDIA_PREV = 0xB1
 VK_MEDIA_PLAY_PAUSE = 0xB3
 
 TRIGGER_THRESHOLD = 40
+RESET_JANELA_S = 1.5
+"""Tempo maximo entre as duas apertadas do combo que devolve as telas.
+
+Duas apertadas, e nao uma, de proposito: o gesto desfaz o arranjo inteiro da
+casa, e os quatro botoes ficam justamente onde a mao descansa — uma apertada so'
+viraria acidente na primeira vez que alguem apoiasse o controle no colo.
+"""
+
 STUCK_S = 30.0
 """Tempo apertado a partir do qual um botao vira suspeita de preso.
 
@@ -428,6 +436,7 @@ def describe(cfg=None) -> list[tuple[str, str]]:
         if acao:
             linhas.append((nome, action_label(acao)))
     linhas.append(("Back + Start", "Assume ou devolve o mouse"))
+    linhas.append(("LT+RT+L3+R3 (2x)", "Devolve as telas ao perfil padrão"))
     return linhas
 
 
@@ -441,6 +450,11 @@ class GamepadMouse(QObject):
 
     connected_changed = Signal(bool)
     active_changed = Signal(bool)
+    reset_pedido = Signal()
+    """LT+RT+L3+R3 duas vezes: devolve as telas ao perfil padrao.
+
+    Quem faz a devolucao e' o App — este modulo nao sabe o que e' um monitor.
+    """
 
     def __init__(self, settings, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -465,6 +479,10 @@ class GamepadMouse(QObject):
         """Back+Start ainda esta' pressionado; segura a borda ate' soltar."""
         self._preso_desde: dict[str, float] = {}
         """Desde quando cada botao esta' apertado; ver stuck()."""
+        self._reset_segurado = False
+        """Os quatro do combo de reset ainda estao apertados."""
+        self._reset_armado_em = 0.0
+        """Quando foi a primeira apertada; zero quer dizer desarmado."""
         self._last_packet = 0
         self._scroll_carry = 0.0
         self._hscroll_carry = 0.0
@@ -601,6 +619,52 @@ class GamepadMouse(QObject):
             return None
         return pads[0] if len(pads) == 1 else _merge(pads)
 
+    def _reset(self, pad, buttons: int) -> bool:
+        """LT+RT+L3+R3 duas vezes seguidas pede o arranjo padrao de volta.
+
+        Devolve True enquanto os quatro estiverem apertados, e o laco para ali.
+        E' o que impede o combo de disparar as acoes proprias dos botoes que ele
+        usa: LT+RT ja' e' "area de trabalho", L3 e' o teclado virtual e R3 e' o
+        clique do meio — sem a parada, pedir o reset piscaria a area de trabalho
+        e abriria um teclado por cima.
+        """
+        segurando = (pad.bLeftTrigger > TRIGGER_THRESHOLD
+                     and pad.bRightTrigger > TRIGGER_THRESHOLD
+                     and buttons & BTN_LTHUMB and buttons & BTN_RTHUMB)
+        if not segurando:
+            self._reset_segurado = False
+            return False
+        if self._reset_segurado:
+            return True          # ainda na mesma apertada; nada de repetir
+
+        self._reset_segurado = True
+        # Solta o que ja' estava pressionado antes dos quatro fecharem: o combo
+        # passa por LT, por LT+RT e por L3 no caminho, e sem isto a tecla ou o
+        # clique daquele instante ficaria preso no Windows.
+        self._release_all()
+
+        agora = time.monotonic()
+        if self._reset_armado_em and agora - self._reset_armado_em <= RESET_JANELA_S:
+            self._reset_armado_em = 0.0
+            _log.info("combo de reset: devolvendo o arranjo padrao")
+            self.reset_pedido.emit()
+            # Duas batidas curtas confirmam que o pedido saiu, sem depender da
+            # tela — que no sofa pode estar prestes a mudar de modo.
+            self._bater(2)
+        else:
+            self._reset_armado_em = agora
+            self._bater(1)
+        return True
+
+    def _bater(self, vezes: int) -> None:
+        """Pulsos curtos de vibracao, para confirmar sem olhar para a tela."""
+        alvos = list(self.slots)
+        if not alvos:
+            return
+        for i in range(vezes):
+            QTimer.singleShot(i * 180, lambda a=alvos: rumble(a, 22000, 22000))
+            QTimer.singleShot(i * 180 + 110, lambda a=alvos: rumble(a, 0, 0))
+
     def stuck(self) -> list[tuple[str, float]]:
         """Botoes reportados apertados ha' tempo demais, com ha' quanto tempo.
 
@@ -649,6 +713,13 @@ class GamepadMouse(QObject):
         # Antes de qualquer saida antecipada: um botao preso importa mesmo com o
         # modo mouse desligado, ou com outra tela dona do controle.
         self._vigiar_presos(buttons)
+
+        # O reset tambem vem antes de tudo, e de proposito: e' o gesto de
+        # emergencia. Se so' funcionasse com o modo mouse ligado, ou fora do Big
+        # Picture, faltaria exatamente quando a TV esta' na frente e o teclado
+        # longe — que e' quando ele existe para servir.
+        if self._reset(pad, buttons):
+            return
         # Quem assumiu o controle recebe o estado cru e o laco para por aqui.
         # A checagem vem ANTES do combo de proposito: o combo roda mesmo com o
         # modo mouse desligado, e sem essa ordem apertar Back+Start dentro de uma

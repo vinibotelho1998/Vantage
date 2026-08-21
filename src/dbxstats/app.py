@@ -100,6 +100,7 @@ class App:
         self.collector = Collector(self.lhm, self.gpu, self.ping,
                                    self.settings.update_interval)
         self.gamepad = GamepadMouse(self.settings, qt)
+        self.gamepad.reset_pedido.connect(self._reset_pelo_controle)
 
         self._data: dict = {}
         self._stream = None
@@ -726,6 +727,25 @@ class App:
         self._voltar_ao_padrao(apagar)
         self.window.show()
         self.window.raise_()
+
+    def _reset_pelo_controle(self) -> None:
+        """LT+RT+L3+R3 duas vezes: devolve as telas ao perfil padrao.
+
+        Do sofa nao ha' teclado nem aba Telas ao alcance, e um jogo que fechou
+        errado — ou um perfil aplicado por engano — deixava a casa num arranjo
+        que so' dava para desfazer levantando. Este e' o caminho de volta.
+
+        Reaproveita o mesmo caminho do fim do Big Picture: um so' lugar decide o
+        que "padrao" significa, e ele sempre le' o perfil marcado como padrao
+        agora — nao um nome gravado em algum lugar.
+        """
+        nome = self.settings.display_default_profile
+        if not nome:
+            self.notify("DBX Stats", "Nenhum perfil de telas está marcado como "
+                                     "padrão — marque um na aba Telas.")
+            return
+        self._voltar_ao_padrao()
+        self.notify("DBX Stats", f"Telas de volta ao perfil “{nome}”")
 
     def _voltar_ao_padrao(self, apagar: str = "") -> None:
         """Fecha a cascata do sofa: sair da grade devolve a mesa como ela era.
