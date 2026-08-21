@@ -77,3 +77,41 @@ def test_valor_estragado_vira_o_padrao():
     """settings.json editado a mao nao pode fazer o app decidir por acaso."""
     assert _clean_launch_item({"path": "C:/j.exe", "bench": "talvez"})["bench"] is True
     assert _clean_launch_item({"path": "C:/j.exe", "bench": 0})["bench"] is False
+
+
+def test_prioridade_usa_o_nome_do_executavel(monkeypatch):
+    """A funcao confere nome contra pid antes de agir.
+
+    O apelido do atalho ("CrimsonDesert") nunca casa com o executavel
+    ("CrimsonDesert.exe"), e a promocao falhava calada dizendo que o jogo ja'
+    nao estava em execucao — no instante exato em que ele acabara de abrir.
+    """
+    import dbxstats.app as appmod
+
+    a = App.__new__(App)
+    a._session_priority = "high"
+    a._session_name = "CrimsonDesert"
+    a.notify = lambda *args: None
+    vistos = []
+    monkeypatch.setattr(appmod, "_process_name", lambda pid: "CrimsonDesert.exe")
+    monkeypatch.setattr(appmod.procs, "mudar_prioridade",
+                        lambda pid, nome, chave: (vistos.append((pid, nome, chave)),
+                                                  (True, "ok"))[1])
+    a._apply_launch_priority(4242)
+    assert vistos == [(4242, "CrimsonDesert.exe", "high")]
+
+
+def test_sem_nome_de_processo_cai_no_apelido(monkeypatch):
+    """Processo que morreu entre a descoberta e a promocao nao pode estourar."""
+    import dbxstats.app as appmod
+
+    a = App.__new__(App)
+    a._session_priority = "high"
+    a._session_name = "Jogo"
+    a.notify = lambda *args: None
+    vistos = []
+    monkeypatch.setattr(appmod, "_process_name", lambda pid: "")
+    monkeypatch.setattr(appmod.procs, "mudar_prioridade",
+                        lambda pid, nome, chave: (vistos.append(nome), (True, "ok"))[1])
+    a._apply_launch_priority(1)
+    assert vistos == ["Jogo"]

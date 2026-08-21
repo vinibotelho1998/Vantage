@@ -44,9 +44,9 @@ _log = log.get("app")
 FAST_TICK_MS = 120
 FOCUS_TICK_MS = 500
 GAME_EXIT_GRACE_S = 5.0
+"""Confirma que o jogo fechou mesmo antes de mexer nas telas."""
 ONLINE_GRACE_S = 25.0
 """Tempo de busca antes de dar a partida como local."""
-"""Confirma que o jogo fechou mesmo antes de mexer nas telas."""
 SERVER_SCAN_TICKS = 5
 """Ticks de sessao (1 s cada) entre buscas do servidor do jogo."""
 BENCH_HISTORY_MAX = 40
@@ -134,6 +134,7 @@ class App:
         self._alerted: dict[str, bool] = {}
         self._tray_hinted = False
         self._load_now = ""
+        """Perfil de esforco em uso; ver _apply_load_profile."""
         self._bigpicture = None
         self._bp_off = ""
         """Tela que o Big Picture acendeu e vai apagar ao sair."""
@@ -143,7 +144,7 @@ class App:
         """So' arma depois de ver o Back solto uma vez; ver _vigiar_atalho_do_sofa."""
         self._bp_voltar = False
         self._session_off_pendente = ""
-        """Perfil de esforco em uso; ver _apply_load_profile."""
+        """Tela acesa pelo Big Picture, a caminho de virar responsabilidade da sessao."""
 
         self._bench_active = False
         self._bench_started = 0.0
@@ -509,7 +510,13 @@ class App:
         if not chave:
             return
         self._session_priority = ""      # uma vez por sessao, nao a cada tique
-        ok, msg = procs.mudar_prioridade(pid, self._session_name or "jogo", chave)
+        # O nome tem de ser o do EXECUTAVEL, e nao o apelido do atalho: a funcao
+        # confere nome contra pid antes de agir — guarda contra o Windows
+        # reciclar numero — e "CrimsonDesert" nunca casa com "CrimsonDesert.exe".
+        # O atalho chamado "Forza" entao falhava calado, dizendo que o jogo ja'
+        # nao estava em execucao bem no instante em que ele acabara de abrir.
+        nome = _process_name(pid) or self._session_name or "jogo"
+        ok, msg = procs.mudar_prioridade(pid, nome, chave)
         _log.info("prioridade do jogo: %s", msg)
         if not ok:
             self.notify("DBX Stats", msg)
