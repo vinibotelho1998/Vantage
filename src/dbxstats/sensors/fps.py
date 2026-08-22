@@ -861,11 +861,45 @@ def _conferir_remocao(alvos: list[str]) -> None:
     if not restantes:
         _log.info("sessoes ETW orfas removidas: %s", ", ".join(alvos))
         return
+
+    # A causa muda conforme haja ou nao outra copia viva, e o conselho tambem.
+    # Dizer sempre "feche as outras copias" manda procurar o que nao existe —
+    # com nenhuma aberta, a sessao ja' esta' num estado que nem administrador
+    # nem SYSTEM desfazem, e so' o reinicio limpa.
+    outras = _outras_copias()
+    if outras:
+        _log.warning(
+            "a sessao ETW %s resistiu a remocao. Ha' outra copia do DBX Stats "
+            "aberta (pid %s) segurando ela: feche todas e a limpeza passa. Nao "
+            "e' falta de permissao, mesmo que o logman diga 'acesso negado'.",
+            ", ".join(restantes), ", ".join(str(p) for p in outras))
+        return
     _log.warning(
-        "a sessao ETW %s resistiu a remocao. Quase sempre e' outra copia do "
-        "DBX Stats ainda aberta segurando ela: feche todas e a limpeza passa. "
-        "Nao e' falta de permissao, mesmo que o logman diga 'acesso negado'.",
+        "a sessao ETW %s resistiu a remocao e nao ha' outra copia do app "
+        "aberta. Ela ficou num estado que nem administrador nem SYSTEM "
+        "desfazem — a captura de quadros so' volta reiniciando o Windows. "
+        "Acontece quando o app e' encerrado a forca com a captura ativa.",
         ", ".join(restantes))
+
+
+def _outras_copias() -> list[int]:
+    """Pids de outras instancias do app, sem contar esta.
+
+    E' o que separa "feche a outra janela" de "so' o reinicio resolve": os dois
+    sintomas sao identicos no log, e o conselho errado custa a caca ao problema
+    errado.
+    """
+    try:
+        import psutil
+    except ImportError:
+        return []
+    eu = os.getpid()
+    achados = []
+    for proc in psutil.process_iter(["pid", "name"]):
+        nome = (proc.info.get("name") or "").lower()
+        if proc.info["pid"] != eu and nome in ("dbxstats.exe", "pythonw.exe"):
+            achados.append(proc.info["pid"])
+    return achados
 
 
 def _orfa(nome: str) -> bool:

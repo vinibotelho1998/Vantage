@@ -57,3 +57,37 @@ def test_so_sessoes_do_app_entram_na_conta():
     assert fps._orfa("DBXStats_9999")
     assert not fps._orfa("Circular Kernel Context Logger")
     assert not fps._orfa("DiagLog")
+
+
+# ── o conselho depende de haver outra copia ──────────────────────────────────
+def _sessao_presa(monkeypatch):
+    monkeypatch.setattr(fps.subprocess, "run",
+                        lambda *a, **k: _Saida("DBXStats_123  Rastrear  Em execucao\n"))
+
+
+def test_com_outra_copia_aberta_manda_fechar(monkeypatch, caplog):
+    _sessao_presa(monkeypatch)
+    monkeypatch.setattr(fps, "_outras_copias", lambda: [4242])
+    with caplog.at_level("WARNING"):
+        fps._conferir_remocao(["DBXStats_123"])
+    texto = " ".join(r.message for r in caplog.records)
+    assert "4242" in texto
+    assert "feche todas" in texto
+    assert "reinici" not in texto.lower()
+
+
+def test_sem_outra_copia_manda_reiniciar(monkeypatch, caplog):
+    """O caso que a mensagem anterior errava: culpava "outra copia aberta"
+    quando nao havia nenhuma, mandando procurar o que nao existe."""
+    _sessao_presa(monkeypatch)
+    monkeypatch.setattr(fps, "_outras_copias", lambda: [])
+    with caplog.at_level("WARNING"):
+        fps._conferir_remocao(["DBXStats_123"])
+    texto = " ".join(r.message for r in caplog.records).lower()
+    assert "reiniciando o windows" in texto
+    assert "feche todas" not in texto
+
+
+def test_a_propria_instancia_nao_conta_como_outra_copia():
+    """Contar a si mesmo daria sempre "ha' outra copia" e nunca o conselho certo."""
+    assert os.getpid() not in fps._outras_copias()
