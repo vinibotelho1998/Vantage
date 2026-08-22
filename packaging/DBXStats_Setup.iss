@@ -9,7 +9,7 @@
 ; neles quebraria a configuracao de quem ja' usa o app.
 #define MyAppName "DBX STATUS"
 #ifndef MyAppVersion
-  #define MyAppVersion "3.0.0"
+  #define MyAppVersion "3.1.0"
 #endif
 #define MyAppPublisher "DBX"
 #define MyAppExeName "DBXStats.exe"
