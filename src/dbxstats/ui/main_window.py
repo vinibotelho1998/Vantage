@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import log, theme
+from .. import __version__, log, theme
 from ..core import units
 from ..platform import win as winapi
 from .components import IconButton, LoadDots, NavButton, PillButton, label
@@ -153,10 +153,49 @@ class Sidebar(QWidget):
             lay.addWidget(btn)
         lay.addStretch(1)
 
-        # O rodape com "Sensores / Captura / Ligado ha" saiu daqui: era ruido
-        # fixo num canto que ninguem olha. O estado dos sensores tem lugar
-        # proprio na aba Sensores, o da captura aparece no painel quando falta
-        # jogo, e o tempo ligado esta' nas abas CPU e Memoria.
+        # O rodape voltou, menor e por outro motivo. Ele havia saido por ser
+        # "ruido fixo num canto que ninguem olha" — e isso valia enquanto tudo
+        # funcionava. Quando os sensores ou a captura caem, o app fica com a
+        # cara de sempre e simplesmente sem numero nenhum, e nao ha' onde
+        # perguntar por que. Sao dois estados e uma versao: olha-se uma vez, na
+        # hora em que algo quebrou, que e' exatamente quando faltava.
+        self.versao = label(f"v{__version__}", 7.5, color=theme.FAINT)
+        lay.addWidget(self.versao)
+        self.saude = label("", 7.5, color=theme.FAINT)
+        self.saude.setWordWrap(True)
+        lay.addWidget(self.saude)
+
+    def atualizar_saude(self) -> None:
+        """Diz se os sensores e a captura estao de pe', e o porque quando nao.
+
+        O texto do erro vai para a dica de ferramenta em vez da tela: na barra
+        ele quebraria o layout, mas e' o que responde "por que nao aparece
+        nada" sem abrir log nenhum.
+        """
+        app = self._win.app
+        lhm = getattr(app, "lhm", None)
+        fps = getattr(app, "fps", None)
+
+        # getattr com padrao: o leitor pode existir sem ter terminado de subir,
+        # e a barra lateral nao pode cair junto com ele.
+        sensores_ok = bool(getattr(lhm, "ready", False))
+        erro = str(getattr(lhm, "error", "") or "sem leitor de sensores")
+        captura = str(getattr(fps, "status", "") or "—")
+        capturando = captura in ("capturando", "aguardando um jogo")
+
+        partes = [
+            f"Sensores: {'ok' if sensores_ok else 'falhou'}",
+            f"Captura: {captura}",
+        ]
+        self.saude.setText("\n".join(partes))
+        # Vermelho so' quando ha' o que consertar; sensor de pe' e captura
+        # esperando jogo sao o estado normal e nao devem chamar atencao.
+        ruim = not sensores_ok or not capturando
+        self.saude.setStyleSheet(
+            f"color: {theme.BAD if ruim else theme.FAINT}; background: transparent;")
+        self.saude.setToolTip(erro if not sensores_ok else
+                              "Sensores lendo normalmente." if capturando else
+                              "A captura de quadros nao esta' ativa.")
 
     def set_active(self, key: str) -> None:
         accent = theme.accent_color(self._win.app.settings.accent)
@@ -280,6 +319,7 @@ class MainWindow(QWidget):
         if view is not None:
             view.on_system(data)
         self._update_chips(data)
+        self.sidebar.atualizar_saude()
 
     def tick_fps(self) -> None:
         view = self.current_view
