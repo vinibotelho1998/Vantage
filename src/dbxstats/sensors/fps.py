@@ -809,11 +809,14 @@ def _run_bounded(cmd: list[str], seconds: float, what: str) -> None:
 def encerrar_presentmon_orfaos() -> int:
     """Pede a todo PresentMon largado que saia, e espera ele limpar.
 
-    E' o degrau que faltava. Quando o app e' encerrado a forca, o PresentMon
-    filho sobrevive: ninguem o matou, e ele segue vivo segurando um logger de
-    sistema. A instancia seguinte cria uma sessao de nome novo, nao encosta na
-    antiga, e recebe "acesso negado" para sempre — porque as flags de kernel que
-    ela precisa ja' estao presas naquela sessao viva.
+    Ajuda, mas nao salva. Medido: matando o app a forca, o PresentMon filho
+    sobrevive alguns segundos e depois morre sozinho — e a sessao dele CONTINUA
+    de pe'. Ou seja, a sessao nao depende do processo: ela vaza no instante do
+    TerminateProcess e passa a existir por conta propria.
+
+    Serve para a janela curta em que o filho ainda esta' vivo: ali um CTRL+BREAK
+    o faz fechar a sessao no caminho de saida. Passada essa janela, nao ha' o
+    que resgatar — o logger de sistema orfao nao volta por nenhum caminho.
 
     Matar a forca aqui seria trocar um problema por um pior: o logger de sistema
     orfao NAO pode ser removido depois, por ninguem — nem administrador, nem

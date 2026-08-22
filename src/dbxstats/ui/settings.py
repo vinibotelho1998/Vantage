@@ -189,6 +189,10 @@ class _CtlPrevia:
                              "critical": 85.0, "model": "A-DATA AX5U6000"}],
             "game_pid": 4242, "game_name": "jogo.exe",
             "game_ram_private": 9400.0, "game_ram_wset": 8100.0,
+            # A previa so' mostra o que existe nestes dados: metrica nova sem
+            # exemplo aqui aparece marcada e desenha nada, e quem liga a opcao
+            # conclui que ela esta' quebrada.
+            "game_vram": 7100.0,
             "ping_ms": 15.0, "packet_loss": 0.0,
             "gpu": {"usage": 98.0, "temp": 64, "temp_hotspot": 81, "temp_vram": 70,
                     "freq": 2900, "mem_freq": 2500, "watts": 290.0, "volts": 1.05,
