@@ -9,7 +9,10 @@ from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtWidgets import QApplication
 
 from . import __version__, log, paths
+
+_log = log.get("main")
 from .platform import win
+from .platform.instancia import InstanciaUnica
 
 
 def _elevate() -> bool:
@@ -54,6 +57,17 @@ def main() -> int:
         _require_admin_warning()
         return 1
 
+    # Depois da elevacao, e nunca antes: o processo que apenas dispara a copia
+    # elevada tambem passaria por aqui, tomaria a vaga e faria a copia de
+    # verdade se recusar a abrir.
+    guarda = InstanciaUnica()
+    if not guarda.assumir():
+        # Nao basta sair calado: quem clicou no atalho de novo concluiria que o
+        # app parou de abrir. A copia que ja' esta' no ar aparece no lugar.
+        InstanciaUnica.pedir_foco()
+        _log.info("ja' havia uma copia aberta; trouxe ela para a frente")
+        return 0
+
     _identidade_na_barra()
     QGuiApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
@@ -66,7 +80,13 @@ def main() -> int:
         qt.setWindowIcon(QIcon(str(icon)))
 
     from .app import App
-    return App(qt).run()
+    app = App(qt)
+    # A segunda copia pede foco por evento nomeado; quem responde e' a janela.
+    guarda.ouvir(app.trazer_para_frente)
+    try:
+        return app.run()
+    finally:
+        guarda.liberar()
 
 
 if __name__ == "__main__":

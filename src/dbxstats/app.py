@@ -1202,6 +1202,27 @@ class App:
             self.notify("DBX Stats", "Continua rodando na bandeja. Clique no ícone "
                                      "para reabrir.")
 
+    def trazer_para_frente(self) -> None:
+        """Mostra a janela porque outra copia do app tentou abrir.
+
+        Vem de uma thread propria (a que espera o evento nomeado), e mexer em
+        widget fora do laco do Qt trava a interface de formas dificeis de
+        reproduzir. O singleShot de zero devolve a chamada para a thread certa
+        antes de qualquer coisa acontecer.
+        """
+        QTimer.singleShot(0, self._trazer_agora)
+
+    def _trazer_agora(self) -> None:
+        # Minimizada ou escondida na bandeja sao estados diferentes, e os dois
+        # precisam voltar: `show` resolve a bandeja, `showNormal` desfaz a
+        # minimizacao, e sem os dois a janela "aparece" sem aparecer.
+        if self.window.isMinimized():
+            self.window.showNormal()
+        else:
+            self.window.show()
+        self.window.raise_()
+        self.window.activateWindow()
+
     def toggle_window(self) -> None:
         if self.window.isVisible():
             self.window.store_geometry()
