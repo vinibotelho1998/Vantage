@@ -355,6 +355,9 @@ class FpsEngine:
             _log.error("PresentMon nao encontrado em %s e o download falhou; "
                        "captura desligada", paths.presentmon_path())
             return
+        # Primeiro os processos, depois as sessoes: um PresentMon vivo segura
+        # a sessao dele, e varrer sessao com o dono de pe' nunca funciona.
+        encerrar_presentmon_orfaos()
         sweep_stale_sessions()
         attempt = 0
         while not self._stop.is_set() and geracao == self._gen:
@@ -394,7 +397,13 @@ class FpsEngine:
             proc = subprocess.Popen(
                 self._command(exe, pipe_name),
                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-                stdin=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
+                stdin=subprocess.DEVNULL,
+                # CREATE_NEW_PROCESS_GROUP e' o que permite mandar CTRL+BREAK
+                # depois. Sem grupo proprio o sinal iria para o app inteiro, e a
+                # unica saida seria matar o PresentMon a forca — que e'
+                # exatamente o que vaza a sessao ETW.
+                creationflags=(subprocess.CREATE_NO_WINDOW
+                               | subprocess.CREATE_NEW_PROCESS_GROUP))
             with self._proc_lock:
                 self._proc = proc
 
@@ -453,7 +462,11 @@ class FpsEngine:
         # Ja' aconteceu de valer meia hora sem FPS e sem overlay, resolvido na
         # mao com `logman`. Agora o proprio motor limpa e tenta de novo.
         if "access denied" in queixa or "in use" in queixa or "already" in queixa:
-            _log.warning("sessao de rastreamento bloqueada; varrendo sessoes orfas")
+            _log.warning("sessao de rastreamento bloqueada; procurando quem segura")
+            # A ordem importa: enquanto o PresentMon orfao estiver vivo, a
+            # sessao dele nao sai de jeito nenhum.
+            if encerrar_presentmon_orfaos():
+                return
             sweep_stale_sessions()
             return
 
@@ -793,6 +806,60 @@ def _run_bounded(cmd: list[str], seconds: float, what: str) -> None:
         pass
 
 
+def encerrar_presentmon_orfaos() -> int:
+    """Pede a todo PresentMon largado que saia, e espera ele limpar.
+
+    E' o degrau que faltava. Quando o app e' encerrado a forca, o PresentMon
+    filho sobrevive: ninguem o matou, e ele segue vivo segurando um logger de
+    sistema. A instancia seguinte cria uma sessao de nome novo, nao encosta na
+    antiga, e recebe "acesso negado" para sempre — porque as flags de kernel que
+    ela precisa ja' estao presas naquela sessao viva.
+
+    Matar a forca aqui seria trocar um problema por um pior: o logger de sistema
+    orfao NAO pode ser removido depois, por ninguem — nem administrador, nem
+    SYSTEM, nem pela API direta. So' o reinicio do Windows. Entao o pedido e'
+    CTRL+BREAK, que e' o unico caminho em que ele fecha a sessao ao sair.
+
+    Devolve quantos foram encerrados.
+    """
+    try:
+        import psutil
+    except ImportError:
+        return 0
+
+    import signal
+
+    meus = set()
+    encerrados = 0
+    for proc in psutil.process_iter(["pid", "name", "ppid"]):
+        if (proc.info.get("name") or "").lower() != "presentmon.exe":
+            continue
+        # Filho desta instancia nao e' orfao: quem cuida dele e' o supervisor.
+        if proc.info.get("ppid") == os.getpid():
+            meus.add(proc.info["pid"])
+            continue
+        pid = proc.info["pid"]
+        _log.info("PresentMon orfao (pid %s) segurando a captura; pedindo para sair", pid)
+        try:
+            os.kill(pid, signal.CTRL_BREAK_EVENT)
+        except (OSError, SystemError, PermissionError):
+            # Sem grupo de console em comum o sinal nao chega. Resta o caminho
+            # que ao menos libera o processo — a sessao pode ficar, mas nao ha'
+            # alternativa melhor, e sem isso ela ficaria de qualquer forma.
+            try:
+                psutil.Process(pid).terminate()
+            except psutil.Error:
+                continue
+        try:
+            psutil.Process(pid).wait(timeout=5)
+            encerrados += 1
+        except psutil.Error:
+            pass
+    if encerrados:
+        _log.info("%d PresentMon orfao(s) encerrados; a captura pode subir", encerrados)
+    return encerrados
+
+
 def sweep_stale_sessions() -> None:
     """Apaga sessoes ETW deixadas por instancias antigas do app.
 
@@ -844,12 +911,21 @@ def _conferir_remocao(alvos: list[str]) -> None:
     isso na hora poupa a caca ao erro errado.
     """
     restantes: list[str] = []
+    conferiu: list[bool] = []
 
     def _consultar() -> None:
         try:
             r = subprocess.run(["logman", "query", "-ets"], capture_output=True,
                                creationflags=subprocess.CREATE_NO_WINDOW)
             texto = r.stdout.decode("latin-1", "ignore")
+            # A consulta precisa ter DADO CERTO para a ausencia valer como
+            # remocao. Sem esta checagem, um logman que falha devolve texto
+            # vazio, nenhum nome casa, e o log anuncia "removidas" sobre sessoes
+            # que continuam de pe' — foi o que aconteceu, e me mandou procurar
+            # em outro lugar durante um bom tempo.
+            if r.returncode != 0 or not texto.strip():
+                return
+            conferiu.append(True)
             restantes.extend(n for n in alvos if n in texto)
         except Exception:                                    # noqa: BLE001
             pass
@@ -858,6 +934,12 @@ def _conferir_remocao(alvos: list[str]) -> None:
     t.start()
     t.join(8.0)
 
+    if not conferiu:
+        # Nao da' para afirmar nem que saiu nem que ficou: dizer "removidas"
+        # aqui e' inventar um resultado que ninguem mediu.
+        _log.warning("nao consegui conferir se as sessoes ETW orfas sairam (%s)",
+                     ", ".join(alvos))
+        return
     if not restantes:
         _log.info("sessoes ETW orfas removidas: %s", ", ".join(alvos))
         return
@@ -876,9 +958,12 @@ def _conferir_remocao(alvos: list[str]) -> None:
         return
     _log.warning(
         "a sessao ETW %s resistiu a remocao e nao ha' outra copia do app "
-        "aberta. Ela ficou num estado que nem administrador nem SYSTEM "
-        "desfazem — a captura de quadros so' volta reiniciando o Windows. "
-        "Acontece quando o app e' encerrado a forca com a captura ativa.",
+        "aberta. Ela e' um logger de SISTEMA orfao: uma vez sem dono, nao sai "
+        "por logman, nem por ControlTrace (por nome ou por handle), nem "
+        "alterando o DACL — nem como administrador, nem como SYSTEM. Todos "
+        "respondem 'acesso negado'. A captura so' volta reiniciando o Windows. "
+        "Nasce quando o app e' encerrado a forca com a captura ativa; feche "
+        "pela bandeja e isso nao acontece.",
         ", ".join(restantes))
 
 
@@ -1036,14 +1121,35 @@ def _close_handle(handle: int) -> None:
 
 
 def _terminate(proc: subprocess.Popen) -> None:
+    """Pede ao PresentMon que saia, e so' mata se ele nao obedecer.
+
+    Isto nao e' delicadeza: `terminate()` no Windows e' `TerminateProcess`, e o
+    PresentMon morto assim NAO remove a sessao ETW que criou. Ela e' um logger
+    de sistema, e um logger de sistema orfao nao volta — `logman`,
+    `ControlTrace` por nome ou por handle e ate' `EventAccessControl` respondem
+    "acesso negado" mesmo para administrador e para SYSTEM. So' o reinicio do
+    Windows limpa, e enquanto ela existir nenhuma captura nova sobe.
+
+    Com CTRL+BREAK ele fecha a sessao sozinho no caminho de saida. O prazo e'
+    curto porque isso roda a cada reinicio da captura, e o hard kill continua
+    ali como ultimo recurso — melhor uma sessao vazada que um app travado.
+    """
+    import signal
+
     try:
         if proc.poll() is None:
+            try:
+                proc.send_signal(signal.CTRL_BREAK_EVENT)
+                proc.wait(timeout=4)
+                return
+            except Exception:                                # noqa: BLE001
+                pass
             proc.terminate()
             proc.wait(timeout=3)
-    except Exception:
+    except Exception:                                        # noqa: BLE001
         try:
             proc.kill()
-        except Exception:
+        except Exception:                                    # noqa: BLE001
             pass
 
 

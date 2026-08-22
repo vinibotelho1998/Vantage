@@ -8,8 +8,9 @@ from dbxstats.sensors import fps  # noqa: E402
 
 
 class _Saida:
-    def __init__(self, texto):
+    def __init__(self, texto, returncode=0):
         self.stdout = texto.encode("latin-1")
+        self.returncode = returncode
 
 
 def test_confirma_quando_a_sessao_sumiu(monkeypatch, caplog):
@@ -91,3 +92,32 @@ def test_sem_outra_copia_manda_reiniciar(monkeypatch, caplog):
 def test_a_propria_instancia_nao_conta_como_outra_copia():
     """Contar a si mesmo daria sempre "ha' outra copia" e nunca o conselho certo."""
     assert os.getpid() not in fps._outras_copias()
+
+
+# ── a consulta precisa ter dado certo para valer ─────────────────────────────
+class _Falhou:
+    """logman que retorna erro: stdout vazio e codigo diferente de zero."""
+    stdout = b""
+    returncode = 1
+
+
+def test_consulta_que_falha_nao_vira_remocao_confirmada(monkeypatch, caplog):
+    """O bug real: logman falhando devolve texto vazio, nenhum nome casa, e o
+    log anunciava "removidas" sobre sessoes que continuavam de pe'."""
+    monkeypatch.setattr(fps.subprocess, "run", lambda *a, **k: _Falhou())
+    with caplog.at_level("INFO"):
+        fps._conferir_remocao(["DBXStats_123"])
+    texto = " ".join(r.message for r in caplog.records)
+    assert "removidas" not in texto
+    assert "nao consegui conferir" in texto
+
+
+def test_saida_vazia_com_codigo_zero_tambem_nao_confirma(monkeypatch, caplog):
+    class _Vazio:
+        stdout = b"   \n"
+        returncode = 0
+
+    monkeypatch.setattr(fps.subprocess, "run", lambda *a, **k: _Vazio())
+    with caplog.at_level("INFO"):
+        fps._conferir_remocao(["DBXStats_123"])
+    assert "removidas" not in " ".join(r.message for r in caplog.records)
