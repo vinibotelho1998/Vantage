@@ -13,6 +13,7 @@ import time
 import psutil
 
 from .. import log
+from ..platform import gpumem
 from ..core.series import Ema
 
 _log = log.get("collector")
@@ -43,6 +44,8 @@ class Collector:
         self._gpu_watts_ema = Ema(0.35)
         self._gpu_wmi: dict | None = None
         self._game_ram = _GameMemory()
+        self._game_vram = gpumem.ProcessVram()
+        """VRAM do mesmo processo; ver platform/gpumem.py."""
         self._static = _static_info()
 
     # ── ciclo de vida ────────────────────────────────────────────────────────
@@ -63,6 +66,7 @@ class Collector:
     def set_game_pid(self, pid: int | None) -> None:
         """Diz de qual processo medir a RAM. Zero (ou None) desliga a medida."""
         self._game_ram.follow(pid)
+        self._game_vram.follow(pid)
 
     def snapshot(self) -> dict:
         with self._lock:
@@ -179,6 +183,12 @@ class Collector:
         # Sem jogo, as chaves nao existem — o card some inteiro em vez de mostrar
         # um zero que se parece com "o jogo nao usa RAM".
         data.update(self._game_ram.read() or {})
+        # So' publica com o jogo identificado: sem pid, o numero seria de
+        # ninguem, e a linha do overlay apareceria zerada sem explicacao.
+        if data.get("game_pid"):
+            vram_jogo = self._game_vram.read_mb()
+            if vram_jogo is not None:
+                data["game_vram"] = vram_jogo
         return data
 
     def _collect_gpu(self, lhm: dict) -> dict | None:

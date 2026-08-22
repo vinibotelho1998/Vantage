@@ -54,6 +54,7 @@ def fake_snapshot(i: int) -> dict:
                          "model": "G.Skill F5-6000 (#3)"}],
         "game_pid": 4242, "game_name": "game.exe",
         "game_ram_private": 9400.0, "game_ram_wset": 8100.0,
+        "game_vram": 7100.0,
         "swap_used": 2.1, "swap_total": 8.0, "swap_pct": 26.0,
         "disk_used": 780.0, "disk_total": 1863.0, "disk_pct": 42.0,
         "disk_r": 1.4e7, "disk_w": 4.2e6,

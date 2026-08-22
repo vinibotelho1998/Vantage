@@ -88,7 +88,7 @@ Mono no lugar da Consolas, quando ela existe na maquina) sem deixar de rebaixar
 quem realmente pediu um painel grande demais: na escala 1.6 ele ainda desce."""
 
 _CORTE_COMPACTO = frozenset({
-    "volts", "ram", "temps_mem", "jogo_ram", "mem_clock",
+    "volts", "ram", "temps_mem", "jogo_ram", "jogo_vram", "mem_clock",
     "mem_ctrl", "teto_watts", "ping", "clock",
 })
 """O que sai no modo compacto: sobra FPS, traco, limite, CPU, GPU e VRAM."""
@@ -717,11 +717,26 @@ class GameOverlay(QWidget):
         volts_mem = "volts" in metrics
         if "vram" in self._dados:
             usado, total = _gb(g.get("vram_used")), _gb(g.get("vram_total"))
+            # A VRAM do jogo segue a mesma regra da RAM: so' vale a do processo
+            # que o motor de quadros esta' medindo AGORA. Comparar o pid evita o
+            # numero ficar congelado no ultimo jogo por um ciclo inteiro do
+            # coletor depois que ele fecha — valor parado mente.
+            pid_v = stream.pid if stream is not None else 0
+            jogo_v = (d.get("game_vram")
+                      if "jogo_vram" in metrics and d.get("game_pid") == pid_v and pid_v
+                      else None)
             par = f"{usado:.1f}/{total:.1f}GB" if total else ""
-            barra = _barra(usado, total, theme.DISK)
+            barra = _barra(usado, total, theme.DISK,
+                           destaque=(jogo_v or 0) / 1024.0 if jogo_v else None)
             if volts_mem and g.get("vram_volts"):
                 barra = f"{barra}&nbsp;&nbsp;{_volt(g['vram_volts'])}"
-            self._set("vram", CARGA, f"{par}&nbsp;&nbsp;{barra}" if par else "")
+            celula = f"{par}&nbsp;&nbsp;{barra}" if par else ""
+            # O numero do jogo fica colado na barra, e nao na ponta direita: ele
+            # e' uma FATIA do total que a barra desenha, e leitura que se compara
+            # precisa ficar ao lado do que se compara com ela.
+            if jogo_v:
+                celula = f"{celula}&nbsp;&nbsp;jogo {jogo_v / 1024:.1f}GB".strip()
+            self._set("vram", CARGA, celula)
             self._set("vram", TEMP, "")
             if "temps_mem" in metrics and g.get("temp_vram") is not None:
                 self._set("vram", TEMP, units.temp(g["temp_vram"]).replace(" ", ""),

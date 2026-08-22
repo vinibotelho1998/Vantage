@@ -110,6 +110,7 @@ _EXPLICACOES = {
     "jogo_ram": "Toda a memória que o jogo reservou para si, esteja ela na RAM "
                 "física ou não. Um número só: o par com o working set punha "
                 "dois valores sem rótulo na mesma célula e nao se explicava.",
+    "jogo_vram": "Quanto da VRAM é do jogo, e não do resto. O total sozinho não diz se quem encheu a placa foi o jogo ou o navegador aberto atrás — e a resposta muda o que se faz a seguir.",
     "mem_clock": "Clock das memórias.",
     "teto_watts": "Limite de potência da placa, ao lado do consumo. Consumo "
                   "colado no teto explica clock abaixo do esperado.",

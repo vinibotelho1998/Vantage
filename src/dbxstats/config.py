@@ -33,6 +33,7 @@ OVERLAY_METRICS = [
     ("temps_mem", "Temperatura das memórias"),
     ("mem_ctrl", "Uso da banda de VRAM"),
     ("jogo_ram", "RAM do jogo"),
+    ("jogo_vram", "VRAM do jogo"),
     ("mem_clock", "Clock das memórias"), ("teto_watts", "Limite de potência"),
     ("ping", "Ping"), ("clock", "Relógio"),
 ]
