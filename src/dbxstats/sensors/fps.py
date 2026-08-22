@@ -815,13 +815,57 @@ def sweep_stale_sessions() -> None:
     t.join(8.0)
     if not saida:
         return
+    alvos = []
     for linha in saida[0].splitlines():
         nome = linha.split()[0] if linha.split() else ""
         if not _orfa(nome):
             continue
-        _log.info("removendo sessao ETW orfa: %s", nome)
+        alvos.append(nome)
+        # "tentando", e nao "removendo": o comando nao espera resposta, entao
+        # afirmar a remocao aqui e' contar o que nao se sabe.
+        _log.info("tentando remover sessao ETW orfa: %s", nome)
         _run_bounded(["logman", "stop", nome, "-ets"], 8.0, f"logman stop {nome}")
         _run_bounded(["logman", "delete", nome, "-ets"], 8.0, f"logman delete {nome}")
+
+    if alvos:
+        _conferir_remocao(alvos)
+
+
+def _conferir_remocao(alvos: list[str]) -> None:
+    """Diz se a limpeza pegou, e nomeia o suspeito quando nao pega.
+
+    Sem esta conferencia o log ficava afirmando "removendo sessao ETW orfa" a
+    cada 15 segundos enquanto nada acontecia — e quem lesse concluiria que o
+    problema era outro. Custou uma hora de diagnostico na direcao errada.
+
+    Quando a sessao resiste, a causa quase sempre e' outra copia do app ainda no
+    ar segurando o recurso: `logman stop` volta "acesso negado" mesmo com
+    privilegio de administrador, o que faz parecer falta de permissao. Dizer
+    isso na hora poupa a caca ao erro errado.
+    """
+    restantes: list[str] = []
+
+    def _consultar() -> None:
+        try:
+            r = subprocess.run(["logman", "query", "-ets"], capture_output=True,
+                               creationflags=subprocess.CREATE_NO_WINDOW)
+            texto = r.stdout.decode("latin-1", "ignore")
+            restantes.extend(n for n in alvos if n in texto)
+        except Exception:                                    # noqa: BLE001
+            pass
+
+    t = threading.Thread(target=_consultar, name="fps-sweep-check", daemon=True)
+    t.start()
+    t.join(8.0)
+
+    if not restantes:
+        _log.info("sessoes ETW orfas removidas: %s", ", ".join(alvos))
+        return
+    _log.warning(
+        "a sessao ETW %s resistiu a remocao. Quase sempre e' outra copia do "
+        "DBX Stats ainda aberta segurando ela: feche todas e a limpeza passa. "
+        "Nao e' falta de permissao, mesmo que o logman diga 'acesso negado'.",
+        ", ".join(restantes))
 
 
 def _orfa(nome: str) -> bool:
