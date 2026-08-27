@@ -12,7 +12,7 @@ def test_define_a_identidade_do_processo():
     _identidade_na_barra()
     buf = ctypes.c_wchar_p()
     ctypes.windll.shell32.GetCurrentProcessExplicitAppUserModelID(ctypes.byref(buf))
-    assert buf.value == "DBX.DBXStats"
+    assert buf.value == "Dbx.DbxStats"
 
 
 def test_nao_derruba_o_app_quando_a_api_falta():
@@ -40,6 +40,6 @@ def test_o_icone_e_empacotado_junto():
     """
     import pathlib
 
-    spec = pathlib.Path("packaging/DBXStats.spec").read_text(encoding="utf-8")
+    spec = pathlib.Path("packaging/DbxStats.spec").read_text(encoding="utf-8")
     assert '"icon.ico"), "assets"' in spec, "o .ico precisa entrar em datas"
     assert pathlib.Path("assets/icon.ico").exists()

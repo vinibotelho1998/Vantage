@@ -1,19 +1,19 @@
-; Instalador do DBX Stats.
+; Instalador do Dbx Stats.
 ;
 ; Compile por packaging/build.ps1 (ou BUILD.bat): e' de la' que vem a versao,
 ; lida de src/dbxstats/__init__.py, para nao existir numero repetido em dois
 ; lugares. Compilar este arquivo na mao tambem funciona, usando a reserva.
 
 ; Nome exibido no instalador, nos atalhos e em Programas e Recursos.
-; O executavel e a pasta de dados continuam DBXStats/"DBX Stats": mexer
+; O executavel e a pasta de dados continuam DbxStats/"Dbx Stats": mexer
 ; neles quebraria a configuracao de quem ja' usa o app.
-#define MyAppName "DBX STATUS"
+#define MyAppName "Dbx Stats"
 #ifndef MyAppVersion
   #define MyAppVersion "3.4.0"
 #endif
-#define MyAppPublisher "DBX"
-#define MyAppExeName "DBXStats.exe"
-#define MyAppUrl "https://github.com/vinibotelho1998/DBX-Stats"
+#define MyAppPublisher "Dbx"
+#define MyAppExeName "DbxStats.exe"
+#define MyAppUrl "https://github.com/vinibotelho1998/Dbx-Stats"
 
 [Setup]
 ; AppId fixo e unico: e' por ele que o Windows reconhece uma atualizacao no
@@ -41,7 +41,7 @@ LicenseFile=..\TERMOS_DE_USO.txt
 InfoAfterFile=
 
 OutputDir=..\dist
-OutputBaseFilename=DBXStats-Setup
+OutputBaseFilename=DbxStats-Setup
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -60,7 +60,7 @@ MinVersion=10.0
 ; Fecha o app antes de sobrescrever os arquivos, em vez de falhar no meio.
 CloseApplications=yes
 RestartApplications=no
-SetupMutex=DBXStatsSetupMutex
+SetupMutex=DbxStatsSetupMutex
 
 [Languages]
 Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
@@ -69,7 +69,7 @@ Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortugue
 Name: "desktopicon"; Description: "Criar atalho na area de trabalho"; GroupDescription: "Atalhos:"
 
 [Files]
-Source: "..\dist\DBXStats\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\DbxStats\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\prereqs\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "..\prereqs\windowsdesktop-runtime-8.0-x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "..\prereqs\windowsdesktop-runtime-6.0-x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
@@ -173,7 +173,7 @@ var
 begin
   if CurUninstallStep <> usPostUninstall then
     Exit;
-  Dados := ExpandConstant('{userappdata}\DBX Stats');
+  Dados := ExpandConstant('{userappdata}\Dbx Stats');
   if not DirExists(Dados) then
     Exit;
   if MsgBox('Apagar tambem as configuracoes, perfis de tela e historico de benchmark?'

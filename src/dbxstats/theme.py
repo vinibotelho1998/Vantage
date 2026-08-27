@@ -1,4 +1,4 @@
-"""Design tokens do DBX Stats: paleta, tipografia, espacamento e escalas de cor.
+"""Design tokens do Dbx Stats: paleta, tipografia, espacamento e escalas de cor.
 
 Fonte unica de verdade do visual. Nenhum modulo de UI deve declarar cor propria.
 """

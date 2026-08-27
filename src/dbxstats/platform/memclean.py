@@ -28,7 +28,7 @@ estar usando. Fora disso, e' um botao de cosmetica.
 Este modulo foi escrito a partir da documentacao publica das APIs do Win32
 (EmptyWorkingSet, SetProcessWorkingSetSizeEx, AdjustTokenPrivileges e
 NtSetSystemInformation). Nada aqui foi copiado de outro projeto: a licenca do
-DBX Stats e' MIT e precisa continuar sendo.
+Dbx Stats e' MIT e precisa continuar sendo.
 """
 from __future__ import annotations
 
@@ -188,7 +188,7 @@ def habilitar_privilegio(nome: str = SE_PROFILE_SINGLE_PROCESS) -> tuple[bool, s
         # tudo; quem conta a verdade e' o GetLastError logo em seguida.
         if not ok or ctypes.get_last_error() == ERROR_NOT_ALL_ASSIGNED:
             return False, ("Este processo não tem o privilégio necessário. "
-                           "Abra o DBX Stats como administrador.")
+                           "Abra o Dbx Stats como administrador.")
         return True, ""
     finally:
         _kernel32.CloseHandle(token)
@@ -244,7 +244,7 @@ def limpar_standby() -> tuple[bool, str]:
         return True, ""
     if codigo == STATUS_PRIVILEGE_NOT_HELD:
         return False, ("O Windows recusou: falta o privilégio de perfil de "
-                       "processo. Abra o DBX Stats como administrador.")
+                       "processo. Abra o Dbx Stats como administrador.")
     if codigo == STATUS_ACCESS_DENIED:
         return False, "O Windows negou acesso à lista de standby."
     return False, f"O Windows recusou a limpeza da lista de standby (status {codigo:#x})."

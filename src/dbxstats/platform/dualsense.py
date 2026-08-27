@@ -3,7 +3,7 @@
 O XInput so' aceita dispositivo Xbox-compativel. Um DualSense pareado direto por
 Bluetooth nao passa por ele: o Windows o expoe como HID comum, e o app ficava
 cego para um controle que esta' ali, ligado e funcionando: a queixa de que "o
-DBX Stats nao reconhece o controle".
+Dbx Stats nao reconhece o controle".
 
 A saida usada por todo mundo e' instalar um tradutor (DS4Windows, DsHidMini) que
 cria um controle XInput virtual num driver de kernel. Aqui nao: o relatorio de

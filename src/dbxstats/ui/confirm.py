@@ -30,7 +30,7 @@ class ConfirmRevertDialog(QDialog):
     def __init__(self, description: str, seconds: int, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("SettingsRoot")
-        self.setWindowTitle("DBX Stats: confirmar telas")
+        self.setWindowTitle("Dbx Stats: confirmar telas")
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
         self.setWindowFlag(Qt.WindowType.WindowContextHelpButtonHint, False)
         self.setModal(True)
@@ -133,7 +133,7 @@ class ConfirmDialog(QDialog):
                  perigo: bool = False, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("SettingsRoot")
-        self.setWindowTitle("DBX Stats")
+        self.setWindowTitle("Dbx Stats")
         self.setWindowFlag(Qt.WindowType.WindowContextHelpButtonHint, False)
         self.setModal(True)
         self.setMinimumWidth(theme.scaled(430))

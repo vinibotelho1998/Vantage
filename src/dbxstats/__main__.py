@@ -1,4 +1,4 @@
-"""Ponto de entrada do DBX Stats."""
+"""Ponto de entrada do Dbx Stats."""
 from __future__ import annotations
 
 import subprocess
@@ -27,10 +27,10 @@ def _require_admin_warning() -> None:
     import ctypes
     ctypes.windll.user32.MessageBoxW(
         0,
-        "O DBX Stats precisa ser executado como administrador para ler os sensores "
+        "O Dbx Stats precisa ser executado como administrador para ler os sensores "
         "de CPU, GPU e placa-mae e para capturar FPS dos jogos.\n\n"
         "Feche e abra de novo com o botao direito > Executar como administrador.",
-        "DBX Stats - permissao necessaria",
+        "Dbx Stats - permissao necessaria",
         0x10)
 
 
@@ -44,7 +44,7 @@ def _identidade_na_barra() -> None:
     """
     try:
         import ctypes
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("DBX.DBXStats")
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Dbx.DbxStats")
     except Exception:                                    # noqa: BLE001
         pass          # em Windows antigo simplesmente nao existe; nao e' fatal
 
@@ -72,9 +72,9 @@ def main() -> int:
     QGuiApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     qt = QApplication(sys.argv)
-    qt.setApplicationName("DBX Stats")
+    qt.setApplicationName("Dbx Stats")
     qt.setApplicationVersion(__version__)
-    qt.setOrganizationName("DBX")
+    qt.setOrganizationName("Dbx")
     icon = paths.asset("icon.ico")
     if icon.exists():
         qt.setWindowIcon(QIcon(str(icon)))

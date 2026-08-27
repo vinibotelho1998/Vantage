@@ -73,7 +73,7 @@ class PrioridadeDialog(QDialog):
     def __init__(self, nome: str, pid: int, atual, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("SettingsRoot")
-        self.setWindowTitle("DBX Stats: prioridade")
+        self.setWindowTitle("Dbx Stats: prioridade")
         self.setModal(True)
         self.setMinimumWidth(theme.scaled(420))
 
@@ -132,7 +132,7 @@ class AfinidadeDialog(QDialog):
     def __init__(self, nome: str, pid: int, atuais, total: int, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("SettingsRoot")
-        self.setWindowTitle("DBX Stats: afinidade")
+        self.setWindowTitle("Dbx Stats: afinidade")
         self.setModal(True)
         self.setMinimumWidth(theme.scaled(460))
         self._total = max(1, int(total))

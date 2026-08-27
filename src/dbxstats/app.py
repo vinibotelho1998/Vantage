@@ -190,7 +190,7 @@ class App:
         # (TV ligada por ultimo, por exemplo), a janela ja' nasce no lugar certo.
         nome = self._enforce_display_defaults() if self.settings.display_apply_on_start else ""
         if nome:
-            self.notify("DBX Stats", f"{nome} de volta como tela principal.")
+            self.notify("Dbx Stats", f"{nome} de volta como tela principal.")
         self._init_timers()
         self._init_hotkeys()
         # A escuta do controle fica sempre de pe'. Ela nao mexe em nada sozinha:
@@ -389,7 +389,7 @@ class App:
             # fazer nada: se ele estiver rodando, a mudanca cai em cima do jogo.
             _log.warning("nao consegui acompanhar o processo de %s; telas ficam como estao",
                          self._session_name)
-            self.notify("DBX Stats",
+            self.notify("Dbx Stats",
                         f"não consegui acompanhar {self._session_name}. "
                         "As telas ficam como estão; use a aba Telas quando terminar.")
             return
@@ -400,7 +400,7 @@ class App:
         try:
             if not _same_layout(restore, dsp.snapshot()):
                 dsp.apply_profile(restore)
-                self.notify("DBX Stats", f"{self._session_name} fechou: telas de volta")
+                self.notify("Dbx Stats", f"{self._session_name} fechou: telas de volta")
         except Exception:
             _log.exception("falha devolvendo as telas depois do jogo")
 
@@ -572,7 +572,7 @@ class App:
         ok, msg = procs.mudar_prioridade(pid, nome, chave)
         _log.info("prioridade do jogo: %s", msg)
         if not ok:
-            self.notify("DBX Stats", msg)
+            self.notify("Dbx Stats", msg)
 
     def _close_session_bench(self) -> None:
         """Fecha a gravacao da partida e guarda o resumo.
@@ -601,7 +601,7 @@ class App:
         del self.session_history[:-SESSION_HISTORY_MAX]
         _save_session_history(self.session_history)
         minutos = registro.get("duracao_s", 0) / 60.0
-        self.notify("DBX Stats",
+        self.notify("Dbx Stats",
                     f"{registro['game']}: {minutos:.0f} min, "
                     f"{registro.get('fps_avg', 0):.0f} fps médio, "
                     f"1% low {registro.get('low_1', 0):.0f}")
@@ -697,7 +697,7 @@ class App:
             self._session_off = self._session_off_pendente
             self._session_off_pendente = ""
         if not ok:
-            self.notify("DBX Stats", msg)
+            self.notify("Dbx Stats", msg)
             self._bp_voltar = False
             self.big_picture_abrir()
 
@@ -738,11 +738,11 @@ class App:
         """
         nome = self.settings.display_default_profile
         if not nome:
-            self.notify("DBX Stats", "Nenhum perfil de telas está marcado como "
+            self.notify("Dbx Stats", "Nenhum perfil de telas está marcado como "
                                      "padrão; marque um na aba Telas.")
             return
         self._voltar_ao_padrao()
-        self.notify("DBX Stats", f"Telas de volta ao perfil “{nome}”")
+        self.notify("Dbx Stats", f"Telas de volta ao perfil “{nome}”")
 
     def _voltar_ao_padrao(self, apagar: str = "") -> None:
         """Fecha a cascata do sofa: sair da grade devolve a mesa como ela era.
@@ -801,7 +801,7 @@ class App:
         else:
             ok, err = dsp.set_primary(alvo.device)
             if ok:
-                self.notify("DBX Stats",
+                self.notify("Dbx Stats",
                             f"{self._session_name} fechou: {alvo.name} de volta")
             else:
                 _log.warning("nao consegui devolver a primaria: %s", err)
@@ -881,7 +881,7 @@ class App:
         ok, err = dsp.apply_profile(alvo, self._normal_topology())
         _log.info("%s fechou; telas de volta ao padrao (%s)", nome, "ok" if ok else err)
         if ok:
-            self.notify("DBX Stats", f"{nome} fechou: telas de volta ao padrão")
+            self.notify("Dbx Stats", f"{nome} fechou: telas de volta ao padrão")
 
     def _normal_topology(self) -> str:
         nome = self.settings.display_default_profile
@@ -1165,7 +1165,7 @@ class App:
                 continue
             if value >= limit and not self._alerted.get(key):
                 self._alerted[key] = True
-                self.notify("DBX Stats: alerta",
+                self.notify("Dbx Stats: alerta",
                             f"{name}: {value:.0f}{unit} (limite {limit}{unit})")
             elif value <= limit - 4:
                 self._alerted[key] = False
@@ -1184,7 +1184,7 @@ class App:
             fps = self._stream.metrics.fps_now
             if fps:
                 parts.append(f"{fps:.0f} fps")
-        self.tray.set_tooltip("DBX Stats: " + "  ·  ".join(parts))
+        self.tray.set_tooltip("Dbx Stats: " + "  ·  ".join(parts))
 
     def notify(self, title: str, message: str) -> None:
         self.tray.notify(title, message)
@@ -1192,7 +1192,7 @@ class App:
     def notify_tray_hint(self) -> None:
         if not self._tray_hinted:
             self._tray_hinted = True
-            self.notify("DBX Stats", "Continua rodando na bandeja. Clique no ícone "
+            self.notify("Dbx Stats", "Continua rodando na bandeja. Clique no ícone "
                                      "para reabrir.")
 
     def trazer_para_frente(self) -> None:
@@ -1274,7 +1274,7 @@ class App:
 
     def restart_capture(self) -> None:
         self.fps.restart()
-        self.notify("DBX Stats", "Captura de FPS reiniciada.")
+        self.notify("Dbx Stats", "Captura de FPS reiniciada.")
 
     def clear_stats(self) -> None:
         self.stats.clear()
@@ -1283,7 +1283,7 @@ class App:
 
     def _hotkey_reset(self) -> None:
         self.clear_stats()
-        self.notify("DBX Stats", "Estatísticas zeradas (Ctrl+Alt+R)")
+        self.notify("Dbx Stats", "Estatísticas zeradas (Ctrl+Alt+R)")
 
     def _hotkey_benchmark(self) -> None:
         if self._bench_active:
@@ -1386,7 +1386,7 @@ class App:
             return
         stream = self._stream
         if stream is None:
-            self.notify("DBX Stats", "Nenhum jogo detectado para o benchmark.")
+            self.notify("Dbx Stats", "Nenhum jogo detectado para o benchmark.")
             return
         self._bench_active = True
         self._bench_pid = stream.pid
@@ -1395,7 +1395,7 @@ class App:
         self._bench_total = float(seconds)
         self._bench_env = Accumulator()
         self.fps.capture_start(stream.pid)
-        self.notify("DBX Stats", f"Benchmark iniciado: {seconds}s de {self._bench_game}")
+        self.notify("Dbx Stats", f"Benchmark iniciado: {seconds}s de {self._bench_game}")
 
     def benchmark_stop(self) -> None:
         if not self._bench_active:
@@ -1403,7 +1403,7 @@ class App:
         self._bench_active = False
         samples = self.fps.capture_stop()
         if len(samples) < 20:
-            self.notify("DBX Stats", "Benchmark sem amostras suficientes.")
+            self.notify("Dbx Stats", "Benchmark sem amostras suficientes.")
             return
         metrics = fr.compute(samples, self.settings.fps_now_window)
         system = {}
@@ -1433,7 +1433,7 @@ class App:
         _save_last_bench(self._bench_result)
         if self.settings.bench_autosave:
             export.export_benchmark(_summary_row(metrics), self._bench_game)
-        self.notify("DBX Stats",
+        self.notify("Dbx Stats",
                     f"Benchmark concluído: {metrics.fps_avg:.0f} fps médio, "
                     f"1% low {metrics.low_1:.0f}")
         self.show_view("benchmark")

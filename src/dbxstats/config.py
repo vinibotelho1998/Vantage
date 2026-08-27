@@ -1,4 +1,4 @@
-"""Configuracao tipada, validada e persistida em %APPDATA%/DBX Stats/settings.json."""
+"""Configuracao tipada, validada e persistida em %APPDATA%/Dbx Stats/settings.json."""
 from __future__ import annotations
 
 import json

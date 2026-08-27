@@ -5,7 +5,7 @@ import os
 import sys
 from pathlib import Path
 
-APP_NAME = "DBX Stats"
+APP_NAME = "Dbx Stats"
 
 
 def is_frozen() -> bool:

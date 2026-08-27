@@ -219,7 +219,7 @@ def _da_area_de_trabalho() -> list[Achado]:
 
     O exe solto entra porque e' o caso que mais irrita: baixar o jogo, largar o
     executavel na area de trabalho e o app nao oferecer ele. Pior, arrastar dali
-    para a janela nao funciona: o DBX Stats roda elevado, e o Windows bloqueia
+    para a janela nao funciona: o Dbx Stats roda elevado, e o Windows bloqueia
     arrastar de um Explorer comum para uma janela elevada (UIPI), sem aviso
     nenhum. Encontrar sozinho e' o que fecha esse buraco.
 

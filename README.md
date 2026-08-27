@@ -1,18 +1,18 @@
-# DBX Stats
+# Dbx Stats
 
 Monitor de hardware e desempenho em jogos para Windows. Um app de verdade, feito
 para ficar aberto no segundo monitor, com telas dedicadas de CPU, GPU, memória,
 disco, rede, sensores e processos, além de uma engine de FPS/frametime nível
 CapFrameX. O overlay in-game continua ali, mas agora é um acessório, não o produto.
 
-[![Build](https://github.com/vinibotelho1998/DBX-Stats/actions/workflows/release.yml/badge.svg)](https://github.com/vinibotelho1998/DBX-Stats/actions/workflows/release.yml)
+[![Build](https://github.com/vinibotelho1998/Dbx-Stats/actions/workflows/release.yml/badge.svg)](https://github.com/vinibotelho1998/Dbx-Stats/actions/workflows/release.yml)
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D6)
 ![UI](https://img.shields.io/badge/UI-PySide6-41CD52)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 <p align="center">
-  <img src="docs/images/panel.png" alt="Painel do DBX Stats">
+  <img src="docs/images/panel.png" alt="Painel do Dbx Stats">
 </p>
 
 <p align="center">
@@ -92,11 +92,11 @@ janela sem moldura com redimensionamento e snap nativos do Windows.
 
 ## Instalação
 
-Baixe o **DBXStats-Setup.exe** da [última release](https://github.com/vinibotelho1998/DBX-Stats/releases/latest),
+Baixe o **DbxStats-Setup.exe** da [última release](https://github.com/vinibotelho1998/Dbx-Stats/releases/latest),
 execute e pronto. O instalador leva o app, o LibreHardwareMonitor, o PresentMon e
 instala sozinho o que faltar de runtime. Não precisa de Python nem do repositório.
 
-O instalador se chama **DBX STATUS**, com assistente em português, licença,
+O instalador se chama **Dbx Stats**, com assistente em português, licença,
 atalho opcional na área de trabalho e desinstalador que pergunta se você quer
 manter suas configurações.
 
@@ -108,7 +108,7 @@ Para gerar o instalador você mesmo, a partir de um clone limpo:
 
 Ele acha o Python, monta um ambiente próprio, baixa o que falta (inclusive uma
 cópia local do Inno Setup, sem instalar nada no sistema) e entrega
-`dist\DBXStats-Setup.exe`, o arquivo único para mandar para outra pessoa.
+`dist\DbxStats-Setup.exe`, o arquivo único para mandar para outra pessoa.
 
 ## Requisitos
 
@@ -148,7 +148,7 @@ manter o app aberto custa quase nada.
 src/dbxstats/
 ├── __main__.py          entrada (eleva admin, sobe engine + UI)
 ├── app.py               controlador: timers, seleção do jogo, alertas, benchmark
-├── config.py            Settings tipado e validado, em %APPDATA%/DBX Stats
+├── config.py            Settings tipado e validado, em %APPDATA%/Dbx Stats
 ├── theme.py             design tokens: paleta, tipografia, escalas de cor
 ├── core/
 │   ├── frames.py        métricas de frame (lows, percentis, stutter, gargalo)
@@ -178,7 +178,7 @@ src/dbxstats/
 
 ```powershell
 .\BUILD.bat                                     # instalador completo
-powershell -File packaging\build.ps1 -SemInstalador # so' a pasta dist\DBXStats
+powershell -File packaging\build.ps1 -SemInstalador # so' a pasta dist\DbxStats
 ```
 
 A arte do assistente é gerada por `scripts/make_installer_art.py` a partir do

@@ -4,7 +4,7 @@ Ao instalar e usar este software, voce concorda com os termos abaixo.
 
 1. NATUREZA DO SOFTWARE
 
-DBX Stats e' um monitor de hardware e desempenho em jogos para Windows,
+Dbx Stats e' um monitor de hardware e desempenho em jogos para Windows,
 distribuido como codigo aberto sob a licenca MIT (texto completo ao final
 deste arquivo). O software e' fornecido "como esta", sem garantias de
 qualquer tipo, expressas ou implicitas.
@@ -30,7 +30,7 @@ LibreHardwareMonitor.
 4. DADOS LOCAIS
 
 Configuracoes, perfis de tela e historico de benchmark ficam salvos
-localmente em %APPDATA%\DBX Stats. Nada e' enviado para servidores de
+localmente em %APPDATA%\Dbx Stats. Nada e' enviado para servidores de
 terceiros: toda leitura de sensor e captura de desempenho acontece
 localmente na sua maquina.
 
@@ -45,7 +45,7 @@ conta e risco de quem instala e opera o software.
 
 6. LICENCA MIT
 
-Copyright (c) 2026 DBX Stats
+Copyright (c) 2026 Dbx Stats
 
 Permission is hereby granted, free of charge, to any person obtaining a
 copy of this software and associated documentation files (the "Software"),

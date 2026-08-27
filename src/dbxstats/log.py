@@ -1,4 +1,4 @@
-"""Logging central com rotacao em %APPDATA%/DBX Stats/logs."""
+"""Logging central com rotacao em %APPDATA%/Dbx Stats/logs."""
 from __future__ import annotations
 
 import logging

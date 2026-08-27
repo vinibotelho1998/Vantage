@@ -37,8 +37,8 @@ SYNCHRONIZE = 0x00100000
 # "Local\" e' proposital: o escopo e' a sessao de logon. Assim duas contas
 # usando o mesmo PC (troca rapida de usuario) tem cada uma a sua copia, que e'
 # o certo: o que nao pode e' a MESMA pessoa abrir duas.
-NOME_MUTEX = r"Local\DBXStats.instancia.unica"
-NOME_EVENTO = r"Local\DBXStats.mostrar.janela"
+NOME_MUTEX = r"Local\DbxStats.instancia.unica"
+NOME_EVENTO = r"Local\DbxStats.mostrar.janela"
 
 
 def _setup() -> None:

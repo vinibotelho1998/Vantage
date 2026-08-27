@@ -134,7 +134,7 @@ class Sidebar(QWidget):
         brand = QHBoxLayout()
         brand.setContentsMargins(theme.scaled(6), 0, 0, theme.scaled(14))
         brand.setSpacing(theme.scaled(6))
-        self._brand = label("DBX", 15, QFont.Weight.Black, theme.accent_color(
+        self._brand = label("Dbx", 15, QFont.Weight.Black, theme.accent_color(
             window.app.settings.accent))
         sub = label("STATS", 9, QFont.Weight.Bold, theme.FAINT)
         sub.setAlignment(Qt.AlignmentFlag.AlignBottom)
@@ -235,7 +235,7 @@ class MainWindow(QWidget):
         self._maximized = False
         self._normal_geometry = None
 
-        self.setWindowTitle("DBX Stats")
+        self.setWindowTitle("Dbx Stats")
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setMinimumSize(theme.scaled(980), theme.scaled(620))

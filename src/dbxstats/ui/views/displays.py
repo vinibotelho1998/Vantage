@@ -775,7 +775,7 @@ class DisplaysView(View):
         row.addStretch(1)
         card.add_layout(row)
 
-        self.c_ao_abrir = QCheckBox("Aplicar o arranjo padrão quando o DBX Stats abrir")
+        self.c_ao_abrir = QCheckBox("Aplicar o arranjo padrão quando o Dbx Stats abrir")
         self.c_ao_abrir.setChecked(bool(self.cfg.display_apply_on_start))
         self.c_ao_abrir.toggled.connect(self._set_ao_abrir)
         card.add(self.c_ao_abrir)
@@ -785,7 +785,7 @@ class DisplaysView(View):
         self.c_after_game.toggled.connect(self._set_after_game)
         card.add(self.c_after_game)
 
-        self.c_restore = QCheckBox("Aplicar o arranjo padrão ao fechar o DBX Stats")
+        self.c_restore = QCheckBox("Aplicar o arranjo padrão ao fechar o Dbx Stats")
         self.c_restore.setChecked(bool(self.cfg.display_restore_on_exit))
         self.c_restore.toggled.connect(self._set_restore)
         card.add(self.c_restore)

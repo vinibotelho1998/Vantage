@@ -18,7 +18,7 @@ def test_confirma_quando_a_sessao_sumiu(monkeypatch, caplog):
     monkeypatch.setattr(fps.subprocess, "run",
                         lambda *a, **k: _Saida("Data Collector Set  Type  Status\n"))
     with caplog.at_level("INFO"):
-        fps._conferir_remocao(["DBXStats_123"])
+        fps._conferir_remocao(["DbxStats_123"])
     assert any("removidas" in r.message for r in caplog.records)
 
 
@@ -26,9 +26,9 @@ def test_avisa_quando_a_sessao_resistiu(monkeypatch, caplog):
     """O caso real: o log repetia "removendo" a cada 15 s e nada acontecia, e
     quem lesse concluia que o problema era outro."""
     monkeypatch.setattr(fps.subprocess, "run",
-                        lambda *a, **k: _Saida("DBXStats_123  Rastrear  Em execucao\n"))
+                        lambda *a, **k: _Saida("DbxStats_123  Rastrear  Em execucao\n"))
     with caplog.at_level("WARNING"):
-        fps._conferir_remocao(["DBXStats_123"])
+        fps._conferir_remocao(["DbxStats_123"])
     recados = [r.message for r in caplog.records]
     assert any("resistiu" in m for m in recados)
 
@@ -37,9 +37,9 @@ def test_o_aviso_aponta_a_causa_certa(monkeypatch, caplog):
     """`logman` diz "acesso negado" mesmo com privilegio de administrador, o que
     manda o diagnostico para permissao quando a causa e' recurso em uso."""
     monkeypatch.setattr(fps.subprocess, "run",
-                        lambda *a, **k: _Saida("DBXStats_123  Rastrear  Em execucao\n"))
+                        lambda *a, **k: _Saida("DbxStats_123  Rastrear  Em execucao\n"))
     with caplog.at_level("WARNING"):
-        fps._conferir_remocao(["DBXStats_123"])
+        fps._conferir_remocao(["DbxStats_123"])
     texto = " ".join(r.message for r in caplog.records).lower()
     assert "outra copia" in texto
     assert "permissao" in texto
@@ -50,12 +50,12 @@ def test_consulta_que_falha_nao_derruba_a_limpeza(monkeypatch):
         raise OSError("logman sumiu")
 
     monkeypatch.setattr(fps.subprocess, "run", explode)
-    fps._conferir_remocao(["DBXStats_123"])       # nao pode levantar
+    fps._conferir_remocao(["DbxStats_123"])       # nao pode levantar
 
 
 def test_so_sessoes_do_app_entram_na_conta():
     """Varrer nome alheio derrubaria rastreamento de outro programa."""
-    assert fps._orfa("DBXStats_9999")
+    assert fps._orfa("DbxStats_9999")
     assert not fps._orfa("Circular Kernel Context Logger")
     assert not fps._orfa("DiagLog")
 
@@ -63,14 +63,14 @@ def test_so_sessoes_do_app_entram_na_conta():
 # ── o conselho depende de haver outra copia ──────────────────────────────────
 def _sessao_presa(monkeypatch):
     monkeypatch.setattr(fps.subprocess, "run",
-                        lambda *a, **k: _Saida("DBXStats_123  Rastrear  Em execucao\n"))
+                        lambda *a, **k: _Saida("DbxStats_123  Rastrear  Em execucao\n"))
 
 
 def test_com_outra_copia_aberta_manda_fechar(monkeypatch, caplog):
     _sessao_presa(monkeypatch)
     monkeypatch.setattr(fps, "_outras_copias", lambda: [4242])
     with caplog.at_level("WARNING"):
-        fps._conferir_remocao(["DBXStats_123"])
+        fps._conferir_remocao(["DbxStats_123"])
     texto = " ".join(r.message for r in caplog.records)
     assert "4242" in texto
     assert "feche todas" in texto
@@ -83,7 +83,7 @@ def test_sem_outra_copia_manda_reiniciar(monkeypatch, caplog):
     _sessao_presa(monkeypatch)
     monkeypatch.setattr(fps, "_outras_copias", lambda: [])
     with caplog.at_level("WARNING"):
-        fps._conferir_remocao(["DBXStats_123"])
+        fps._conferir_remocao(["DbxStats_123"])
     texto = " ".join(r.message for r in caplog.records).lower()
     assert "reiniciando o windows" in texto
     assert "feche todas" not in texto
@@ -106,7 +106,7 @@ def test_consulta_que_falha_nao_vira_remocao_confirmada(monkeypatch, caplog):
     log anunciava "removidas" sobre sessoes que continuavam de pe'."""
     monkeypatch.setattr(fps.subprocess, "run", lambda *a, **k: _Falhou())
     with caplog.at_level("INFO"):
-        fps._conferir_remocao(["DBXStats_123"])
+        fps._conferir_remocao(["DbxStats_123"])
     texto = " ".join(r.message for r in caplog.records)
     assert "removidas" not in texto
     assert "nao consegui conferir" in texto
@@ -119,5 +119,5 @@ def test_saida_vazia_com_codigo_zero_tambem_nao_confirma(monkeypatch, caplog):
 
     monkeypatch.setattr(fps.subprocess, "run", lambda *a, **k: _Vazio())
     with caplog.at_level("INFO"):
-        fps._conferir_remocao(["DBXStats_123"])
+        fps._conferir_remocao(["DbxStats_123"])
     assert "removidas" not in " ".join(r.message for r in caplog.records)

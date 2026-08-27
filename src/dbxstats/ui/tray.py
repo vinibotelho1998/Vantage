@@ -34,7 +34,7 @@ class Tray:
     def __init__(self, controller) -> None:
         self._ctl = controller
         self._icon = QSystemTrayIcon(make_icon(controller.settings.accent))
-        self._icon.setToolTip("DBX Stats")
+        self._icon.setToolTip("Dbx Stats")
         self._icon.setContextMenu(self._build_menu())
         self._icon.activated.connect(self._on_activated)
         self._icon.show()

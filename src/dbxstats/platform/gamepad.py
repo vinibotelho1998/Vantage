@@ -215,7 +215,7 @@ def close_window() -> None:
 def toggle_osk() -> None:
     """Abre o teclado virtual do Windows, para digitar sem sair do controle.
 
-    O DBX Stats roda elevado, e dai' o `osk.exe` chamado direto costuma morrer
+    O Dbx Stats roda elevado, e dai' o `osk.exe` chamado direto costuma morrer
     calado: ele se recusa a subir no mesmo nivel de integridade. A saida e' pedir
     para o `explorer.exe` abrir, porque o explorer roda no nivel do usuario e o
     teclado nasce junto dele.

@@ -372,7 +372,7 @@ FASES = (FASE_LATENCIA, FASE_DOWNLOAD, FASE_UPLOAD)
 PESOS = {FASE_LATENCIA: 0.08, FASE_DOWNLOAD: 0.52, FASE_UPLOAD: 0.40}
 """Quanto cada fase ocupa da barra. Download pesa mais porque demora mais."""
 
-_CABECALHOS = {"User-Agent": "DBXStats/3.0", "Cache-Control": "no-cache",
+_CABECALHOS = {"User-Agent": "DbxStats/3.0", "Cache-Control": "no-cache",
                "Pragma": "no-cache"}
 
 

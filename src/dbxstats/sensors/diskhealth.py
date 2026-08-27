@@ -323,7 +323,7 @@ def _explicar(stderr: str) -> str:
     texto = (stderr or "").lower()
     if "cim" in texto or "acesso" in texto or "access" in texto or "denied" in texto:
         return ("Sem permissão para ler a saúde dos discos. "
-                "Abra o DBX Stats como administrador.")
+                "Abra o Dbx Stats como administrador.")
     if "not recognized" in texto or "não é reconhecido" in texto:
         return "Este Windows não tem os comandos de armazenamento (Get-PhysicalDisk)."
     return "Nenhum disco físico respondeu à consulta de saúde."

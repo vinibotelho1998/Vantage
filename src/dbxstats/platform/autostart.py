@@ -7,7 +7,7 @@ from .. import log, paths
 
 _log = log.get("autostart")
 _RUN_KEY = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
-_VALUE = "DBX Stats"
+_VALUE = "Dbx Stats"
 
 
 def _command() -> str:

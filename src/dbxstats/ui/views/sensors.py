@@ -369,4 +369,4 @@ class SensorsView(View):
         from ...core.export import export_sensors
         path = export_sensors(self.app.lhm.tree(), self.app.stats)
         if path:
-            self.app.notify("DBX Stats", f"Sensores exportados para {path.name}")
+            self.app.notify("Dbx Stats", f"Sensores exportados para {path.name}")

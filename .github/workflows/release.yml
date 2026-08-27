@@ -60,7 +60,7 @@ jobs:
           pip install pyinstaller
 
       - name: Build do app (PyInstaller)
-        run: pyinstaller packaging/DBXStats.spec --noconfirm --distpath dist --workpath build
+        run: pyinstaller packaging/DbxStats.spec --noconfirm --distpath dist --workpath build
 
       - name: Baixar dependencias de runtime (.NET 6/8, VC++)
         run: powershell -NoProfile -ExecutionPolicy Bypass -File packaging/prepare_prereqs.ps1
@@ -70,14 +70,14 @@ jobs:
 
       - name: Compilar instalador
         run: |
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=${{ steps.versao.outputs.numero }}" packaging\DBXStats_Setup.iss
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=${{ steps.versao.outputs.numero }}" packaging\DbxStats_Setup.iss
 
       - name: Publicar release "latest"
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest --cleanup-tag --yes 2>$null
-          gh release create latest "dist/DBXStats-Setup.exe" `
-            --title "DBX Stats v${{ steps.versao.outputs.numero }}" `
+          gh release create latest "dist/DbxStats-Setup.exe" `
+            --title "Dbx Stats v${{ steps.versao.outputs.numero }}" `
             --notes "Instalador gerado automaticamente do commit ${{ github.sha }} (versao ${{ steps.versao.outputs.numero }}). Inclui app, LibreHardwareMonitor, PresentMon e dependencias (.NET 6/8, VC++)." `
             --latest

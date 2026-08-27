@@ -30,11 +30,11 @@ _log = log.get("fps")
 PM_FALLBACK_URL = ("https://github.com/GameTechDev/PresentMon/releases/"
                    "download/v2.5.1/PresentMon-2.5.1-x64.exe")
 
-SESSION_PREFIX = "DBXStats"
+SESSION_PREFIX = "DbxStats"
 SESSION = f"{SESSION_PREFIX}_{os.getpid()}"
 """Nome da sessao ETW, unico por processo.
 
-Ja' foi a constante "DBXStats" para todo mundo, e duas copias do app abertas ao
+Ja' foi a constante "DbxStats" para todo mundo, e duas copias do app abertas ao
 mesmo tempo viravam uma briga sem fim: cada uma subia o PresentMon com
 --stop_existing_session e derrubava a sessao da outra. O sintoma era o
 PresentMon ficar vivo sem nunca conectar no pipe. Com o pid no nome, duas
@@ -50,7 +50,7 @@ EXCLUDED = (
     "ApplicationFrameHost.exe", "SystemSettings.exe", "LockApp.exe",
     "PhoneExperienceHost.exe", "Widgets.exe",
     # o proprio app
-    "dbx-stats.exe", "DBXStats.exe",
+    "dbx-stats.exe", "DbxStats.exe",
     # navegadores
     "chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe",
     "opera_gx.exe", "vivaldi.exe",
@@ -943,7 +943,7 @@ def _conferir_remocao(alvos: list[str]) -> None:
     outras = _outras_copias()
     if outras:
         _log.warning(
-            "a sessao ETW %s resistiu a remocao. Ha' outra copia do DBX Stats "
+            "a sessao ETW %s resistiu a remocao. Ha' outra copia do Dbx Stats "
             "aberta (pid %s) segurando ela: feche todas e a limpeza passa. Nao "
             "e' falta de permissao, mesmo que o logman diga 'acesso negado'.",
             ", ".join(restantes), ", ".join(str(p) for p in outras))
@@ -1150,7 +1150,7 @@ def _resolve_pm_url() -> str:
     try:
         req = urllib.request.Request(
             "https://api.github.com/repos/GameTechDev/PresentMon/releases",
-            headers={"User-Agent": "DBXStats/3.0"})
+            headers={"User-Agent": "DbxStats/3.0"})
         with urllib.request.urlopen(req, timeout=10) as r:
             releases = json.loads(r.read())
         for rel in releases:

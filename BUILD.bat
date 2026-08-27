@@ -1,8 +1,8 @@
 @echo off
-title DBX Stats - gerar instalador
+title Dbx Stats - gerar instalador
 echo.
-echo   Gerando o instalador do DBX Stats.
-echo   O resultado sai em dist\DBXStats-Setup.exe
+echo   Gerando o instalador do Dbx Stats.
+echo   O resultado sai em dist\DbxStats-Setup.exe
 echo.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0packaging\build.ps1"
 pause

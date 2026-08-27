@@ -48,7 +48,7 @@ class BigPicture(QWidget):
         self._ctl = controller
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint
                             | Qt.WindowType.WindowDoesNotAcceptFocus)
-        self.setWindowTitle("DBX Stats: Big Picture")
+        self.setWindowTitle("Dbx Stats: Big Picture")
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._itens: list[dict] = []
         self._foco = 0

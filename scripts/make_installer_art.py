@@ -35,7 +35,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from dbxstats import theme  # noqa: E402
 
-MARCA = "DBX STATUS"
+MARCA = "Dbx Stats"
 """Nome exibido no instalador."""
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -145,7 +145,7 @@ def imagem_grande(w: int, h: int) -> QImage:
     if not _icone(p, icone):
         p.setFont(QFont("Segoe UI", int(20 * escala), QFont.Weight.Bold))
         p.setPen(QColor(theme.TXT))
-        p.drawText(icone, int(Qt.AlignmentFlag.AlignCenter), "DBX")
+        p.drawText(icone, int(Qt.AlignmentFlag.AlignCenter), "Dbx")
 
     topo = icone.bottom() + h * 0.035
     p.setFont(QFont("Segoe UI", int(13 * escala), QFont.Weight.Bold))
@@ -185,7 +185,7 @@ def imagem_pequena(w: int, h: int) -> QImage:
     if not _icone(p, QRectF(w * 0.13, h * 0.13, w * 0.74, h * 0.74)):
         p.setFont(QFont("Segoe UI", int(13 * (w / 55.0)), QFont.Weight.Bold))
         p.setPen(QColor(theme.TXT))
-        p.drawText(QRectF(0, 0, w, h), int(Qt.AlignmentFlag.AlignCenter), "DBX")
+        p.drawText(QRectF(0, 0, w, h), int(Qt.AlignmentFlag.AlignCenter), "Dbx")
     p.end()
     return img
 

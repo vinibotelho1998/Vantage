@@ -112,7 +112,7 @@ def _paths_from(mime) -> list[str]:
 
 _COMO_FUNCIONA = """Escolha em que tela o jogo abre, inclusive uma que esteja desligada.
 
-Ao clicar em Jogar, o DBX Stats liga essa tela se preciso, coloca ela como principal,
+Ao clicar em Jogar, o Dbx Stats liga essa tela se preciso, coloca ela como principal,
 abre o jogo e passa a acompanhar o processo. Quando o jogo fecha, as telas voltam
 sozinhas para como estavam.
 

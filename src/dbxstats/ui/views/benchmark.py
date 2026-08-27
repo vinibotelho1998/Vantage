@@ -542,9 +542,9 @@ class BenchmarkView(View):
     def _export(self) -> None:
         path = self.app.benchmark_export()
         if path:
-            self.app.notify("DBX Stats", f"Benchmark exportado para {path.name}")
+            self.app.notify("Dbx Stats", f"Benchmark exportado para {path.name}")
         else:
-            self.app.notify("DBX Stats", "Nenhum benchmark para exportar.")
+            self.app.notify("Dbx Stats", "Nenhum benchmark para exportar.")
 
     def on_settings_changed(self) -> None:
         self.run_btn.set_color(theme.accent_color(self.cfg.accent))
@@ -676,7 +676,7 @@ def _texto_relatorio(result: dict) -> str:
     m = result["metrics"]
     sistema = result.get("system") or {}
     linhas = [
-        "DBX STATUS: relatório de benchmark",
+        "Dbx Stats: relatório de benchmark",
         f"  jogo: {result.get('game') or '—'}",
     ]
     if result.get("quando"):

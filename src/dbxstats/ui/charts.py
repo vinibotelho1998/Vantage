@@ -1,4 +1,4 @@
-"""Graficos vetoriais do DBX Stats.
+"""Graficos vetoriais do Dbx Stats.
 
 Tudo desenhado a mao com QPainter para ter controle total sobre suavizacao e
 densidade de informacao:

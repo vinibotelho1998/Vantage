@@ -213,7 +213,7 @@ class SettingsDialog(QDialog):
         self._ctl = controller
         self._cfg = controller.settings
         self.setObjectName("SettingsRoot")
-        self.setWindowTitle("DBX Stats: Configurações")
+        self.setWindowTitle("Dbx Stats: Configurações")
         self.setMinimumSize(560, 620)
         self.resize(620, 720)
 

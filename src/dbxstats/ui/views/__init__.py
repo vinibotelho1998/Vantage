@@ -1,4 +1,4 @@
-"""Telas do DBX Stats. Cada view e independente e so recebe dados do controlador."""
+"""Telas do Dbx Stats. Cada view e independente e so recebe dados do controlador."""
 from __future__ import annotations
 
 from .base import View, scroll_page
