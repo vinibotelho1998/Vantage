@@ -41,9 +41,11 @@ jobs:
         run: choco install innosetup --no-progress -y
 
       - name: Compilar instalador
+        id: versao
         run: |
           $versao = (Select-String -Path src/dbxstats/__init__.py -Pattern '__version__\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$versao" packaging\DBXStats_Setup.iss
+          echo "numero=$versao" >> $env:GITHUB_OUTPUT
 
       - name: Publicar release "latest"
         env:
@@ -51,6 +53,6 @@ jobs:
         run: |
           gh release delete latest --cleanup-tag --yes 2>$null
           gh release create latest "dist/DBXStats-Setup.exe" `
-            --title "DBX Stats — ultima build" `
-            --notes "Instalador gerado automaticamente do commit ${{ github.sha }}. Inclui app, LibreHardwareMonitor, PresentMon e dependencias (.NET 6/8, VC++)." `
+            --title "DBX Stats v${{ steps.versao.outputs.numero }}" `
+            --notes "Instalador gerado automaticamente do commit ${{ github.sha }} (versao ${{ steps.versao.outputs.numero }}). Inclui app, LibreHardwareMonitor, PresentMon e dependencias (.NET 6/8, VC++)." `
             --latest
