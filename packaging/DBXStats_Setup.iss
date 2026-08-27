@@ -37,7 +37,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 DisableDirPage=auto
-LicenseFile=..\LICENSE
+LicenseFile=..\TERMOS_DE_USO.txt
 InfoAfterFile=
 
 OutputDir=..\dist

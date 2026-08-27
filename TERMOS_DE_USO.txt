@@ -1,0 +1,69 @@
+TERMOS DE USO - DBX STATS
+
+Ao instalar e usar este software, voce concorda com os termos abaixo.
+
+1. NATUREZA DO SOFTWARE
+
+DBX Stats e' um monitor de hardware e desempenho em jogos para Windows,
+distribuido como codigo aberto sob a licenca MIT (texto completo ao final
+deste arquivo). O software e' fornecido "como esta", sem garantias de
+qualquer tipo, expressas ou implicitas.
+
+2. PRIVILEGIO DE ADMINISTRADOR
+
+O app exige privilegio de administrador para funcionar: e' o que permite
+ler sensores de CPU e placa-mae e capturar quadros para as metricas de FPS.
+Sem esse privilegio ele abre, mas nao mede nada.
+
+3. DRIVER DE TERCEIROS (PAWNIO)
+
+O instalador baixa e instala silenciosamente o PawnIO, um driver de kernel
+de terceiros (https://github.com/namazso/PawnIO) usado para leitura de
+sensores de CPU. Ele so' e' instalado se ainda nao estiver presente na
+maquina, e pode exigir reiniciar o computador antes das temperaturas de
+CPU aparecerem corretamente.
+
+O instalador tambem verifica e instala, quando necessario, o Microsoft
+Visual C++ Redistributable e o .NET Desktop Runtime (6 e 8), exigidos pelo
+LibreHardwareMonitor.
+
+4. DADOS LOCAIS
+
+Configuracoes, perfis de tela e historico de benchmark ficam salvos
+localmente em %APPDATA%\DBX Stats. Nada e' enviado para servidores de
+terceiros: toda leitura de sensor e captura de desempenho acontece
+localmente na sua maquina.
+
+5. ISENCAO DE RESPONSABILIDADE
+
+O autor e os contribuidores deste projeto nao se responsabilizam por
+qualquer prejuizo direto ou indireto decorrente do uso deste software ou
+dos componentes de terceiros que ele instala (PawnIO, LibreHardwareMonitor,
+PresentMon), incluindo, sem limitacao, instabilidade do sistema, perda de
+dados ou necessidade de reiniciar o computador. O uso e' inteiramente por
+conta e risco de quem instala e opera o software.
+
+6. LICENCA MIT
+
+Copyright (c) 2026 DBX Stats
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+Ao clicar em "Aceito o contrato", voce declara ter lido e concordado com
+os termos acima.
