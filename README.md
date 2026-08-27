@@ -189,3 +189,7 @@ pelo GitHub Actions e publica na release `latest`.
 ## Licença
 
 [MIT](LICENSE).
+
+O código deste projeto é MIT. `vendor/lhm` (LibreHardwareMonitor, MPL 2.0) e
+`tools` (PresentMon, MIT) trazem binários de terceiros redistribuídos sem
+modificação, cada um com sua licença original na própria pasta.
