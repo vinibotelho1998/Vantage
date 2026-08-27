@@ -18,6 +18,34 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Incrementar versao
+        id: versao
+        run: |
+          $conteudo = Get-Content -Path "src/dbxstats/__init__.py" -Raw
+          $m = [regex]::Match($conteudo, '__version__\s*=\s*"(\d+)\.(\d+)\.(\d+)"')
+          if (-not $m.Success) { throw "Nao achei __version__ no formato X.Y.Z" }
+          $major = [int]$m.Groups[1].Value
+          $minor = [int]$m.Groups[2].Value
+          $patch = [int]$m.Groups[3].Value + 1
+          $nova = "$major.$minor.$patch"
+
+          $conteudo = $conteudo -replace '__version__\s*=\s*"\d+\.\d+\.\d+"', "__version__ = `"$nova`""
+          Set-Content -Path "src/dbxstats/__init__.py" -Value $conteudo -NoNewline
+
+          $pyproject = Get-Content -Path "pyproject.toml" -Raw
+          $pyproject = $pyproject -replace 'version = "\d+\.\d+\.\d+"', "version = `"$nova`""
+          Set-Content -Path "pyproject.toml" -Value $pyproject -NoNewline
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/dbxstats/__init__.py pyproject.toml
+          git commit -m "chore: incrementa versao para $nova [skip ci]"
+          git push origin HEAD:main
+
+          echo "numero=$nova" >> $env:GITHUB_OUTPUT
 
       - name: Configurar Python
         uses: actions/setup-python@v5
@@ -41,11 +69,8 @@ jobs:
         run: choco install innosetup --no-progress -y
 
       - name: Compilar instalador
-        id: versao
         run: |
-          $versao = (Select-String -Path src/dbxstats/__init__.py -Pattern '__version__\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$versao" packaging\DBXStats_Setup.iss
-          echo "numero=$versao" >> $env:GITHUB_OUTPUT
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=${{ steps.versao.outputs.numero }}" packaging\DBXStats_Setup.iss
 
       - name: Publicar release "latest"
         env:
