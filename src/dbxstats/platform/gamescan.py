@@ -136,7 +136,6 @@ def _melhor_exe(raiz: Path, titulo: str) -> Path | None:
     return max(candidatos, key=peso)
 
 
-# ── Steam ────────────────────────────────────────────────────────────────────
 def _do_steam() -> list[Achado]:
     from . import art
 
@@ -173,7 +172,6 @@ def _do_steam() -> list[Achado]:
     return achados
 
 
-# ── pastas de biblioteca ─────────────────────────────────────────────────────
 def _raizes() -> list[Path]:
     """Onde procurar pasta de jogo, em todos os discos que existirem."""
     nomes = ("Games", "Jogos", "SteamLibrary", "Epic Games", "GOG Games",
@@ -216,7 +214,6 @@ def _das_pastas() -> list[Achado]:
     return achados
 
 
-# ── atalhos ──────────────────────────────────────────────────────────────────
 def _da_area_de_trabalho() -> list[Achado]:
     """O que estiver na area de trabalho: atalho do Steam, .lnk ou o exe solto.
 

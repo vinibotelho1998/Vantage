@@ -151,7 +151,6 @@ class NetworkView(View):
         self._peak_dl = 0.0
         self._peak_ul = 0.0
 
-    # ── teste de velocidade ──────────────────────────────────────────────────
     def _montar_teste(self) -> Card:
         """Card do teste sob demanda: botao, barra, tres numeros e o detalhe."""
         accent = theme.accent_color(self.cfg.accent)

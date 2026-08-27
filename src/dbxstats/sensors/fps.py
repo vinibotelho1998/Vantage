@@ -73,7 +73,6 @@ RESTART_BACKOFF = (1.0, 2.0, 4.0, 8.0, 15.0)
 
 NAN = float("nan")
 
-# ── mapeamento de colunas (aceita CSV v1 e v2) ────────────────────────────────
 _COLUMNS_V2 = {
     "t": ("cpustarttime", "timeinseconds"),
     "ft": ("frametime", "msbetweenpresents"),
@@ -188,7 +187,6 @@ class FpsEngine:
         self._cal_prev: dict[tuple[int, str], float] = {}
         self._cal_ratios: list[float] = []
 
-    # ── ciclo de vida ────────────────────────────────────────────────────────
     def start(self) -> None:
         if self._threads:
             return
@@ -234,7 +232,6 @@ class FpsEngine:
         with self._proc_lock:
             return self._proc is not None and self._proc.poll() is None
 
-    # ── configuracao ─────────────────────────────────────────────────────────
     def set_windows(self, analysis: float | None = None, now: float | None = None) -> None:
         if analysis:
             self._analysis_window = max(5.0, float(analysis))
@@ -252,7 +249,6 @@ class FpsEngine:
         self._force_restart.set()
         self._kill_process()
 
-    # ── leitura publica ──────────────────────────────────────────────────────
     def snapshot(self) -> dict[int, FrameStream]:
         with self._pub_lock:
             return dict(self._streams)
@@ -290,7 +286,6 @@ class FpsEngine:
             self._streams.clear()
             self._windows.clear()
 
-    # ── partida inteira ──────────────────────────────────────────────────────
     def session_start(self, pid: int) -> None:
         """Comeca a acompanhar uma partida do inicio ao fim.
 
@@ -327,7 +322,6 @@ class FpsEngine:
         with self._raw_lock:
             return self._session_rec.count if self._session_rec is not None else 0
 
-    # ── captura de benchmark ─────────────────────────────────────────────────
     def capture_start(self, pid: int) -> None:
         with self._raw_lock:
             self._capture = []
@@ -347,7 +341,6 @@ class FpsEngine:
     def capturing(self) -> bool:
         return self._capture_active
 
-    # ── supervisor ───────────────────────────────────────────────────────────
     def _supervise(self, geracao: int = 1) -> None:
         exe = self._ensure_presentmon()
         if not exe:
@@ -477,7 +470,6 @@ class FpsEngine:
             self._use_v1 = True
             _log.warning("PresentMon nao aceitou --v2_metrics; usando --v1_metrics")
 
-    # ── leitor ───────────────────────────────────────────────────────────────
     def _read_pipe(self, handle: int, proc: subprocess.Popen) -> None:
         import msvcrt
         fd = msvcrt.open_osfhandle(handle, os.O_RDONLY)
@@ -594,7 +586,6 @@ class FpsEngine:
                     self._session_rec.add(sample[1])
         self._last_frame_at = now
 
-    # ── unidade da coluna de tempo ───────────────────────────────────────────
     def _begin_calibration(self, layout: _Layout) -> None:
         """Assume a unidade indicada pelo cabecalho e prepara a conferencia."""
         self._t_scale = layout.t_scale
@@ -645,7 +636,6 @@ class FpsEngine:
         self._t_scale = melhor
         self.reset()                                # o pouco que entrou veio errado
 
-    # ── agregador ────────────────────────────────────────────────────────────
     def _aggregate_loop(self) -> None:
         period = 1.0 / AGGREGATE_HZ
         while not self._stop.wait(period):
@@ -745,7 +735,6 @@ class FpsEngine:
             _log.warning("supervisor parado ha %.0fs; subindo outro", agora - self._loop_at)
             self._spawn_supervisor()
 
-    # ── processo auxiliar ────────────────────────────────────────────────────
     def _kill_process(self) -> None:
         with self._proc_lock:
             proc = self._proc
@@ -1003,7 +992,6 @@ def _orfa(nome: str) -> bool:
     return nome == SESSION_PREFIX or nome.startswith(SESSION_PREFIX + "_")
 
 
-# ── helpers win32 ─────────────────────────────────────────────────────────────
 def _create_pipe(name: str) -> int | None:
     import ctypes
     k32 = ctypes.windll.kernel32

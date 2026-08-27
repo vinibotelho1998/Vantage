@@ -42,7 +42,6 @@ pontas; o hero e' largo demais e viraria uma tira do meio da imagem.
 """
 
 
-# ── Steam ────────────────────────────────────────────────────────────────────
 def _steam_root() -> Path | None:
     """Onde o Steam esta' instalado, segundo o proprio Steam."""
     import winreg
@@ -166,7 +165,6 @@ def _steam_art(appid: str, root: Path) -> Path | None:
     return None
 
 
-# ── icone do executavel ──────────────────────────────────────────────────────
 class ICONINFO(ctypes.Structure):
     _fields_ = [("fIcon", wintypes.BOOL), ("xHotspot", wintypes.DWORD),
                 ("yHotspot", wintypes.DWORD), ("hbmMask", wintypes.HBITMAP),
@@ -330,7 +328,6 @@ def icon_png(caminho: Path) -> Path | None:
     return None
 
 
-# ── entrada publica ──────────────────────────────────────────────────────────
 def artwork_path(item: dict) -> Path | None:
     """Melhor capa disponivel para um atalho, ou None se nao houver nenhuma."""
     escolhida = str(item.get("image", "")).strip()

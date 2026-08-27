@@ -159,7 +159,6 @@ class SensorsView(View):
         from ... import paths
         os.startfile(str(paths.logs_dir()))  # noqa: S606
 
-    # ── favoritos ────────────────────────────────────────────────────────────
     def _favoritos(self) -> list[str]:
         """Chaves marcadas, sempre como lista de texto.
 
@@ -227,7 +226,6 @@ class SensorsView(View):
         menu.addAction(texto, lambda: self._alternar_favorito(key))
         menu.exec(self.table.viewport().mapToGlobal(pos))
 
-    # ── ciclo ────────────────────────────────────────────────────────────────
     def on_system(self, _d: dict) -> None:
         nodes = self.app.lhm.tree()
         if not nodes:

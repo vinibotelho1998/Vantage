@@ -127,7 +127,6 @@ class Resultado:
         return self.depois_gb - self.antes_gb
 
 
-# ── regras puras ─────────────────────────────────────────────────────────────
 def e_critico(pid: int, nome: str) -> bool:
     """Decide se o processo fica de fora da limpeza."""
     if pid in PIDS_CRITICOS:
@@ -150,7 +149,6 @@ def resumo(r: Resultado) -> str:
     return "  ·  ".join(partes)
 
 
-# ── privilegio ───────────────────────────────────────────────────────────────
 class _LUID(ctypes.Structure):
     _fields_ = [("LowPart", wintypes.DWORD), ("HighPart", wintypes.LONG)]
 
@@ -196,7 +194,6 @@ def habilitar_privilegio(nome: str = SE_PROFILE_SINGLE_PROCESS) -> tuple[bool, s
         _kernel32.CloseHandle(token)
 
 
-# ── working set ──────────────────────────────────────────────────────────────
 def esvaziar_working_set(pid: int) -> bool:
     """Tira da RAM as paginas residentes de um processo.
 
@@ -233,7 +230,6 @@ def listar_processos() -> list[tuple[int, str]]:
     return saida
 
 
-# ── lista de standby ─────────────────────────────────────────────────────────
 def limpar_standby() -> tuple[bool, str]:
     """Descarta a lista de standby (o cache de arquivos que o Windows mantem)."""
     ok, erro = habilitar_privilegio()
@@ -261,7 +257,6 @@ def _disponivel_gb() -> float | None:
         return None
 
 
-# ── orquestracao ─────────────────────────────────────────────────────────────
 def limpar(processos=None, esvaziar=None, standby=None, disponivel=None) -> Resultado:
     """Roda a limpeza inteira e devolve o que realmente aconteceu.
 

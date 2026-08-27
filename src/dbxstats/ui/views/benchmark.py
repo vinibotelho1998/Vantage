@@ -520,7 +520,6 @@ class BenchmarkView(View):
         self.btn_copiar.setText("Copiado!")
         QTimer.singleShot(1600, lambda: self.btn_copiar.setText("Copiar relatório"))
 
-    # ── acoes ────────────────────────────────────────────────────────────────
     def _toggle(self) -> None:
         if self.app.benchmark_active():
             self.app.benchmark_stop()
@@ -575,7 +574,6 @@ class BenchmarkView(View):
             self._rev = result.get("_rev")
             self._show(result)
 
-    # ── resultado ────────────────────────────────────────────────────────────
     def _show(self, result: dict) -> None:
         m: fr.FrameMetrics = result["metrics"]
         ft = result["frametimes"]

@@ -68,7 +68,6 @@ class DashboardView(View):
             self._grid.addWidget(card, 0, i)
             self._grid.setColumnStretch(i, 1)
 
-    # ── construcao ───────────────────────────────────────────────────────────
     def _build_timeline(self) -> Card:
         card = Card("Linha do tempo", theme.accent_color(self.cfg.accent))
         self.chart = TimeSeriesChart([
@@ -217,7 +216,6 @@ class DashboardView(View):
         card.add(self.net_spark, 1)
         return card
 
-    # ── atualizacao ──────────────────────────────────────────────────────────
     def on_settings_changed(self) -> None:
         wanted = set(self.cfg.dash_cards)
         for key, card in self._cards.items():

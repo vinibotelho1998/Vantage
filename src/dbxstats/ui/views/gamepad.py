@@ -152,7 +152,6 @@ class ControllerDiagram(QWidget):
     def controles(self) -> list:
         return _CONTROLS_SONY if self.kind == "sony" else _CONTROLS
 
-    # ── estado ───────────────────────────────────────────────────────────────
     def _pressed(self, key: str) -> bool:
         if self.pad is None:
             return False
@@ -180,7 +179,6 @@ class ControllerDiagram(QWidget):
             return QPointF(0, 0)
         return QPointF(x / 32767 * 9, -y / 32767 * 9)
 
-    # ── pintura ──────────────────────────────────────────────────────────────
     @property
     def _GEOM(self) -> dict:
         return {key: (cx, cy, r, w) for key, cx, cy, r, w in self.controles}
@@ -234,7 +232,6 @@ class ControllerDiagram(QWidget):
         p.drawText(QRectF(158, 326, 400, 16), Qt.AlignmentFlag.AlignCenter, combo)
         p.end()
 
-    # ── pecas com relevo ─────────────────────────────────────────────────────
     @staticmethod
     def _sombra(p: QPainter, desenhar, deslocamento: float = 2.4) -> None:
         """Repete a peca deslocada e escura, por baixo.
@@ -697,7 +694,6 @@ class GamepadView(View):
         if pad is not None:
             pad.reload_bindings()
 
-    # ── ajustes ──────────────────────────────────────────────────────────────
     def _slider(self, card: Card, caption: str, lo: int, hi: int, value: int, cb) -> QSlider:
         s = QSlider(Qt.Orientation.Horizontal)
         s.setRange(lo, hi)
@@ -727,7 +723,6 @@ class GamepadView(View):
     def _dead(self, v: int) -> None:
         self.cfg.gamepad_deadzone = int(v)
 
-    # ── ciclo ────────────────────────────────────────────────────────────────
     def _refresh(self, _=None) -> None:
         pad = getattr(self.app, "gamepad", None)
         if not G.available():

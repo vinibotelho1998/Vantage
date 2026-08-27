@@ -68,7 +68,6 @@ class InstanciaUnica:
         self._evento = None
         self._parar = threading.Event()
 
-    # ── vaga ─────────────────────────────────────────────────────────────────
     def assumir(self) -> bool:
         """Tenta ser a instancia da vez. False quer dizer que ja' ha' outra.
 
@@ -96,7 +95,6 @@ class InstanciaUnica:
                 kernel32.CloseHandle(h)
         self._evento = self._mutex = None
 
-    # ── pedido de foco ───────────────────────────────────────────────────────
     def ouvir(self, mostrar) -> None:
         """Chama `mostrar()` sempre que outra copia tentar abrir.
 

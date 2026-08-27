@@ -31,7 +31,6 @@ from .. import theme
 NAN = float("nan")
 
 
-# ── matematica de curva ───────────────────────────────────────────────────────
 def monotone_tangents(ys: list[float]) -> list[float]:
     """Tangentes de Fritsch–Carlson para spline cubica monotona (x uniforme)."""
     n = len(ys)
@@ -118,7 +117,6 @@ def nice_step(span: float, target_lines: int = 4) -> float:
     return mag * 10
 
 
-# ── serie ─────────────────────────────────────────────────────────────────────
 class Plot:
     """Uma linha do grafico: dados + estilo + estado de visibilidade."""
 
@@ -167,7 +165,6 @@ class TimeSeriesChart(QWidget):
         self._anim.setInterval(33)
         self._anim.timeout.connect(self._tick_scale)
 
-    # ── API ──────────────────────────────────────────────────────────────────
     def configure(self, smooth: bool = True, fill: bool = True, grid: bool = True,
                   glow: bool = True, legend: bool = True) -> None:
         self._smooth, self._fill, self._grid = smooth, fill, grid
@@ -201,7 +198,6 @@ class TimeSeriesChart(QWidget):
         self._update_scale()
         self.update()
 
-    # ── escala ───────────────────────────────────────────────────────────────
     def _visible_values(self) -> list[float]:
         out: list[float] = []
         for p in self._plots:
@@ -238,7 +234,6 @@ class TimeSeriesChart(QWidget):
             self._scale += delta * 0.22
         self.update()
 
-    # ── interacao ────────────────────────────────────────────────────────────
     def mouseMoveEvent(self, event) -> None:
         self._hover_x = event.position().x()
         self.update()
@@ -248,7 +243,6 @@ class TimeSeriesChart(QWidget):
         self.update()
         super().leaveEvent(event)
 
-    # ── pintura ──────────────────────────────────────────────────────────────
     def paintEvent(self, _event) -> None:
         p = QPainter(self)
         p.setRenderHints(QPainter.RenderHint.Antialiasing

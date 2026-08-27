@@ -184,7 +184,6 @@ class MemoryView(View):
             # Windows apaga o arquivo sozinho (FILE_FLAG_DELETE_ON_CLOSE).
             qt.aboutToQuit.connect(self._encerrar)
 
-    # ── construcao dos blocos novos ──────────────────────────────────────────
     def _montar_limpeza(self) -> QVBoxLayout:
         box = QVBoxLayout()
         box.setSpacing(theme.scaled(5))
@@ -302,7 +301,6 @@ class MemoryView(View):
         box.addWidget(self.bench_resumo)
         return box
 
-    # ── ciclo de vida ────────────────────────────────────────────────────────
     def on_activate(self) -> None:
         # So' a partir daqui a consulta de saude pode rodar: ela abre um
         # PowerShell, e telas nunca abertas nao tem por que pagar por isso.
@@ -317,7 +315,6 @@ class MemoryView(View):
             chart.configure(**self.chart_config())
             chart.set_span(self.cfg.history_window)
 
-    # ── limpeza de memoria ───────────────────────────────────────────────────
     def _limpar_memoria(self) -> None:
         """Dispara a limpeza fora da thread da UI.
 
@@ -357,7 +354,6 @@ class MemoryView(View):
         self.limpeza_status.setText(texto)
         self.limpeza_status.setStyleSheet(f"color: {cor}; background: transparent;")
 
-    # ── opcoes do benchmark ──────────────────────────────────────────────────
     def _opcoes_unidade(self) -> list[tuple[str, str]]:
         return [(m, m) for m in (self._mounts or ["C:\\"])]
 
@@ -428,7 +424,6 @@ class MemoryView(View):
             resumo = f"{resumo}\n{_EXPLICA_SO_LEITURA}"
         self.bench_resumo.setText(resumo)
 
-    # ── benchmark ────────────────────────────────────────────────────────────
     def _iniciar_bench(self, mount: str | None = None) -> None:
         mount = mount or self._unidade_bench()
         ok, erro = self._bench.iniciar(mount, self._opcoes_bench())
@@ -531,7 +526,6 @@ class MemoryView(View):
                 "podem estar otimistas porque parte do arquivo veio da RAM.")
             self.bench_aviso.setStyleSheet(f"color: {theme.WARN}; background: transparent;")
 
-    # ── snapshot ─────────────────────────────────────────────────────────────
     def on_system(self, d: dict) -> None:
         if not d:
             return
@@ -661,7 +655,6 @@ class MemoryView(View):
                 f"  ({pct:.0f}%){extra}")
             w["spark"].setVisible(False)
 
-    # ── saude ────────────────────────────────────────────────────────────────
     def _coletar_saude(self) -> tuple[list[dict], str]:
         """Junta LHM e Storage Spaces. Nunca deixa uma excecao chegar na UI."""
         do_lhm: list[dict] = []
@@ -721,7 +714,6 @@ class MemoryView(View):
         return {"root": raiz, "titulo": titulo, "sub": sub, "badge": badge, "rows": rows}
 
 
-# ── controles das opcoes do teste ────────────────────────────────────────────
 class _Escolha(PillButton):
     """Pilula que mostra a opção atual e abre um menu com as outras."""
 
@@ -776,7 +768,6 @@ def _opcoes_tempo() -> list[tuple[str, float]]:
     return [(_rotulo_tempo(s), s) for s in diskbench.SEGUNDOS_POR_FASE]
 
 
-# ── formatacao ───────────────────────────────────────────────────────────────
 def _escrito(gb: float | None) -> str:
     """Total escrito: TB quando ja' passou disso, senao GB."""
     if gb is None:

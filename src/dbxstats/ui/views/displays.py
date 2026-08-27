@@ -134,7 +134,6 @@ class ArrangeCanvas(QWidget):
             borda += largura
         self.update()
 
-    # ── conversao de coordenadas ─────────────────────────────────────────────
     def _bounds(self) -> QRect:
         if not self.rects:
             return QRect(0, 0, 1, 1)
@@ -176,7 +175,6 @@ class ArrangeCanvas(QWidget):
         return QPoint(int(b.left() + (ponto.x() - ox) / s),
                       int(b.top() + (ponto.y() - oy) / s))
 
-    # ── arraste ──────────────────────────────────────────────────────────────
     def mousePressEvent(self, event) -> None:
         ponto = event.position().toPoint()
         for key, rect in reversed(list(self.rects.items())):
@@ -246,7 +244,6 @@ class ArrangeCanvas(QWidget):
         return {k: (r.left(), r.top()) for k, r in self.rects.items()
                 if k not in self.apagadas}
 
-    # ── pintura ──────────────────────────────────────────────────────────────
     def paintEvent(self, event) -> None:
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -487,7 +484,6 @@ class _DisplayCard(Card):
         self.btn_mais.setToolTip("mais opções desta tela" if not aberto
                                  else "esconder as opções")
 
-    # ── dados ────────────────────────────────────────────────────────────────
     def _resolutions(self) -> list[tuple[str, object]]:
         seen: dict[tuple[int, int], bool] = {}
         for mode in self.disp.modes:
@@ -563,7 +559,6 @@ class _DisplayCard(Card):
             if idx >= 0:
                 self.hz_box.setCurrentIndex(idx)
 
-    # ── acoes ────────────────────────────────────────────────────────────────
     def _apply_mode(self) -> None:
         mode = self._selected()
         if mode is None:
@@ -712,7 +707,6 @@ class DisplaysView(View):
 
         self.reload()
 
-    # ── perfis ───────────────────────────────────────────────────────────────
     def _build_profiles(self) -> Card:
         card = Card("Perfis", theme.DISK, "guarda quais telas ficam ligadas e em que modo")
         self.profiles_box = QVBoxLayout()
@@ -999,7 +993,6 @@ class DisplaysView(View):
         self._refresh_profiles()
         self.notify(f"perfil '{removed['name']}' excluído", theme.MUTE)
 
-    # ── ciclo ────────────────────────────────────────────────────────────────
     def reload(self) -> None:
         for card in self._cards:
             card.setParent(None)

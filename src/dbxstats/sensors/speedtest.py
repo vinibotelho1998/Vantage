@@ -105,7 +105,6 @@ from .. import log, paths
 _log = log.get("speedtest")
 
 
-# ── provedores ───────────────────────────────────────────────────────────────
 class Provedor(NamedTuple):
     """Um servidor de teste e as manias dele.
 
@@ -210,7 +209,6 @@ fila o upload nao tinha plano B nenhum — um tropeco da Cloudflare apagava o
 numero inteiro.
 """
 
-# ── parametros da medicao ────────────────────────────────────────────────────
 FLUXOS = 4
 """Fluxos por fase. Quatro bastam DEPOIS do conserto da janela de envio.
 
@@ -301,7 +299,6 @@ JOIN_TOTAL_S = 3.0
 """Orcamento SOMADO para encerrar os fluxos da fase, e nao por fluxo."""
 PORTA_TLS = 443
 
-# ── escolha automatica do servidor ───────────────────────────────────────────
 SONDAS_DA_ESCOLHA = 2
 """Connects por candidato na varredura. Vale o MINIMO, e minimo de duas amostras
 ja' separa 15 ms de 134 ms — que e' a unica pergunta desta fase."""
@@ -363,7 +360,6 @@ por abertura, entao isto nunca morde uma medicao de verdade — so' segura quem
 devolve migalha rapido demais.
 """
 
-# ── fases ────────────────────────────────────────────────────────────────────
 FASE_OCIOSO = "ocioso"
 FASE_LATENCIA = "latencia"
 FASE_DOWNLOAD = "download"
@@ -380,7 +376,6 @@ _CABECALHOS = {"User-Agent": "DBXStats/3.0", "Cache-Control": "no-cache",
                "Pragma": "no-cache"}
 
 
-# ── matematica ───────────────────────────────────────────────────────────────
 def mbps(transferido: float, segundos: float) -> float | None:
     """Megabits por segundo — a unidade em que a operadora vende o plano.
 
@@ -549,7 +544,6 @@ def progresso(fase: str, fracao: float) -> float:
     return andado
 
 
-# ── estado em disco: servidor fixado e cache da lista publica ────────────────
 _disco = threading.Lock()
 
 
@@ -700,7 +694,6 @@ def atualizar_lista(rede, url: str = LISTA_URL, timeout: float = LISTA_TIMEOUT_S
     return len(itens)
 
 
-# ── escolha do servidor ──────────────────────────────────────────────────────
 class Escolha(NamedTuple):
     """Quem vai medir, quanto ele custou de latencia e quem fica de reserva."""
 
@@ -1508,7 +1501,6 @@ class TesteDeVelocidade:
         casar o host de um servidor com a latencia de outro."""
         self._estado = self._zerado()
 
-    # ── estado ───────────────────────────────────────────────────────────────
     def _zerado(self) -> dict:
         return {"fase": FASE_OCIOSO, "rodando": False, "progresso": 0.0,
                 "parcial": None, "download": None, "upload": None,
@@ -1520,7 +1512,6 @@ class TesteDeVelocidade:
                 "teto_processo": None, "teto_janela": None, "buffer_envio": 0,
                 "quando": None}
 
-    # ── servidores ───────────────────────────────────────────────────────────
     def candidatos(self) -> tuple[Provedor, ...]:
         """Todas as casas que este teste conhece — semente mais lista em disco.
 
@@ -1566,7 +1557,6 @@ class TesteDeVelocidade:
     def rodando(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
 
-    # ── controle ─────────────────────────────────────────────────────────────
     def start(self) -> bool:
         """Comeca um teste. Devolve False se ja' havia um rodando."""
         if self.rodando:
@@ -1611,7 +1601,6 @@ class TesteDeVelocidade:
             self._orfas = [t for t in self._orfas if t.is_alive()]
             return list(self._orfas)
 
-    # ── execucao ─────────────────────────────────────────────────────────────
     def _executar(self) -> None:
         try:
             self._buscar_lista()
@@ -1659,7 +1648,6 @@ class TesteDeVelocidade:
                        quando=time.strftime("%H:%M"), erro=None,
                        aviso=" ".join(avisos) if avisos else None)
 
-    # ── lista publica ────────────────────────────────────────────────────────
     def _buscar_lista(self) -> None:
         """Pede a lista publica em SEGUNDO PLANO, sem segurar o teste.
 
@@ -1685,7 +1673,6 @@ class TesteDeVelocidade:
         if quantos:
             _log.info("lista pública de servidores atualizada: %d casas", quantos)
 
-    # ── latencia e escolha do servidor ───────────────────────────────────────
     def _escolher_servidor(self) -> Escolha:
         """Sonda todas as casas, escolhe a melhor e mede o ping DELA.
 
@@ -1800,7 +1787,6 @@ class TesteDeVelocidade:
                                                0.6 + 0.4 * (i + 1) / self._sondas))
             self._parar.wait(0.05)
 
-    # ── transferencia ────────────────────────────────────────────────────────
     def _rodar_fila(self, fase: str, provedores: tuple[Provedor, ...]) -> _Medida:
         """Percorre os servidores da fase e para no primeiro que medir.
 
@@ -1935,7 +1921,6 @@ class TesteDeVelocidade:
                        buffer_envio=buffer_)
         return processo, janela_teto, inflado
 
-    # ── fluxos ───────────────────────────────────────────────────────────────
     def _encerrar_fluxos(self, threads: list[threading.Thread]) -> None:
         """Fecha os sockets da fase e espera os fluxos dentro de um orcamento.
 

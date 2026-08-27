@@ -50,7 +50,6 @@ class GameSession:
         self.direct = True
         """O alvo e' o proprio executavel do jogo, nao um atalho de loja."""
 
-    # ── ciclo ────────────────────────────────────────────────────────────────
     def start(self) -> tuple[bool, str]:
         alvo = Path(self.path)
         if not alvo.exists():

@@ -65,7 +65,6 @@ ConvertTo-Json -InputObject @($saida) -Depth 3 -Compress
 """
 
 
-# ── LibreHardwareMonitor ─────────────────────────────────────────────────────
 def _limpo(valor) -> float | None:
     """Descarta o que nao da' para tratar como leitura."""
     try:
@@ -142,7 +141,6 @@ def _aplicar_sensor(entrada: dict, kind: str, nome: str, valor: float) -> None:
         entrada["errors"] = valor
 
 
-# ── Storage Spaces / CIM ─────────────────────────────────────────────────────
 def _numero(bruto) -> float | None:
     if bruto is None or isinstance(bruto, bool):
         return None

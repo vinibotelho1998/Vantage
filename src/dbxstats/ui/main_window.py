@@ -279,7 +279,6 @@ class MainWindow(QWidget):
         self.show_view(app.settings.start_view)
         self.apply_settings()
 
-    # ── navegacao ────────────────────────────────────────────────────────────
     def reload_displays(self) -> None:
         """Redesenha a aba Telas depois de um monitor entrar ou sair.
 
@@ -313,7 +312,6 @@ class MainWindow(QWidget):
     def current_view(self) -> View | None:
         return self.views.get(self._current)
 
-    # ── ciclo de atualizacao ─────────────────────────────────────────────────
     def tick_system(self, data: dict) -> None:
         view = self.current_view
         if view is not None:
@@ -342,7 +340,6 @@ class MainWindow(QWidget):
         ]
         self.titlebar.chips.set_items(items)
 
-    # ── configuracoes ────────────────────────────────────────────────────────
     def apply_settings(self) -> None:
         cfg = self.app.settings
         self.titlebar.sync_overlay_button()
@@ -380,7 +377,6 @@ class MainWindow(QWidget):
             cfg.win_w, cfg.win_h = geo.width(), geo.height()
         cfg.win_maximized = self._maximized
 
-    # ── janela ───────────────────────────────────────────────────────────────
     def toggle_maximized(self, force: bool | None = None) -> None:
         target = (not self._maximized) if force is None else force
         if target == self._maximized:

@@ -67,7 +67,6 @@ assim que o controle conecta, e traz tudo que um controle precisa ter: dois
 analogicos, direcional, catorze botoes e dois gatilhos.
 """
 
-# ── mapa dos bits, direto do relatorio ───────────────────────────────────────
 _FACES = ((0x10, BTN_X), (0x20, BTN_A), (0x40, BTN_B), (0x80, BTN_Y))
 """Quadrado->X, Xis->A, Bola->B, Triangulo->Y.
 
@@ -138,7 +137,6 @@ class Leitor:
         self._vivo = False
         self._thread: threading.Thread | None = None
 
-    # ── ciclo ────────────────────────────────────────────────────────────────
     def abrir(self) -> bool:
         handle = kernel32.CreateFileW(self.path, GENERIC_READ,
                                       FILE_SHARE_READ | FILE_SHARE_WRITE, None,
@@ -174,7 +172,6 @@ class Leitor:
     def estado(self) -> XINPUT_GAMEPAD:
         return self._estado
 
-    # ── leitura ──────────────────────────────────────────────────────────────
     def _laco(self) -> None:
         buf = ctypes.create_string_buffer(self._tamanho)
         lidos = wintypes.DWORD()

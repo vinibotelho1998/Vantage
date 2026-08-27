@@ -245,7 +245,6 @@ class SettingsDialog(QDialog):
         buttons.addWidget(save)
         root.addLayout(buttons)
 
-    # ── abas ─────────────────────────────────────────────────────────────────
     def _tab_general(self) -> QWidget:
         area, lay = _page()
         form = QFormLayout()
@@ -458,7 +457,6 @@ class SettingsDialog(QDialog):
         col.addWidget(aviso)
         return caixa
 
-    # ── previa do overlay ────────────────────────────────────────────────────
     def _montar_previa(self) -> QWidget:
         """Mostra o overlay de verdade aqui dentro, com numeros de exemplo.
 
@@ -578,7 +576,6 @@ class SettingsDialog(QDialog):
         s.setValue(value)
         return s
 
-    # ── acoes ────────────────────────────────────────────────────────────────
     def _restore_defaults(self) -> None:
         from ..config import Settings
         defaults = Settings()

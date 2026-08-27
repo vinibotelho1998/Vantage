@@ -135,7 +135,6 @@ FASE_PREPARO = "preparando"
 FASES = (FASE_PREPARO,) + tuple(ROTULOS_FASES[c] for c in CHAVES_FASES)
 
 
-# ── win32 ────────────────────────────────────────────────────────────────────
 _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
 GENERIC_READ = 0x80000000
@@ -236,7 +235,6 @@ class Resultado:
     profundidade: int = 1
 
 
-# ── regras puras (testadas sem tocar em disco) ───────────────────────────────
 def _gb(n: float) -> str:
     return f"{n / 1024 ** 3:.1f} GB"
 
@@ -288,7 +286,6 @@ def taxa(total_bytes: int, segundos: float) -> float | None:
     return total_bytes / segundos
 
 
-# ── buffer alinhado ──────────────────────────────────────────────────────────
 class _BufferAlinhado:
     """Bloco de memoria com endereco multiplo do setor.
 
@@ -311,7 +308,6 @@ class _BufferAlinhado:
         return ctypes.c_void_p(self.endereco)
 
 
-# ── ambiente da unidade ──────────────────────────────────────────────────────
 def setor_do_volume(raiz: str) -> int:
     """Bytes por setor do volume; 4096 e' o palpite seguro se a API nao responder."""
     setores = wintypes.DWORD()
@@ -365,7 +361,6 @@ def limpar_sobras(mount: str) -> int:
     return removidas
 
 
-# ── motor ────────────────────────────────────────────────────────────────────
 class DiskBench:
     """Roda o teste numa thread propria e publica o estado para a UI ler.
 
@@ -395,7 +390,6 @@ class DiskBench:
         """
         _registrar(self)
 
-    # ── controle ─────────────────────────────────────────────────────────────
     @property
     def ativo(self) -> bool:
         t = self._thread
@@ -463,7 +457,6 @@ class DiskBench:
             return False, "Não foi possível ler o espaço livre da unidade."
         return folga_suficiente(uso.free, uso.total, tamanho)
 
-    # ── execucao ─────────────────────────────────────────────────────────────
     def _publicar(self, fase: str, progresso: float) -> None:
         """Guarda a fase e converte o avanco dela em avanco do teste inteiro.
 
@@ -714,7 +707,6 @@ def _apagar(caminho: Path | None, pasta: str | None) -> None:
             shutil.rmtree(pasta, ignore_errors=True)
 
 
-# ── encerramento ─────────────────────────────────────────────────────────────
 _ativos: weakref.WeakSet = weakref.WeakSet()
 _ativos_lock = threading.Lock()
 

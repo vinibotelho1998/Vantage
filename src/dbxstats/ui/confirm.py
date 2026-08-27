@@ -81,7 +81,6 @@ class ConfirmRevertDialog(QDialog):
         self._timer.timeout.connect(self._tick)
         self._paint()
 
-    # ── relogio ──────────────────────────────────────────────────────────────
     def _paint(self) -> None:
         self._count.setText(f"Revertendo sozinho em {self._left}s se você não confirmar.")
         self._bar.setValue(self._left)
@@ -99,7 +98,6 @@ class ConfirmRevertDialog(QDialog):
         self._timer.stop()
         self.accept()
 
-    # ── uso ──────────────────────────────────────────────────────────────────
     def ask(self) -> bool:
         """Mostra o popup e devolve True se o usuario mandou manter."""
         self._place()

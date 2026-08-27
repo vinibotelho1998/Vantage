@@ -39,7 +39,6 @@ from .components import dimm_color
 _MONO = "Cascadia Mono"
 _FALLBACK = "Consolas"
 
-# ── grade das linhas de peca ─────────────────────────────────────────────────
 TAG, CARGA, CLOCK, VOLT, TEMP, CAUDA = range(6)
 _COLUNAS = 6
 _GUTTER = _COLUNAS          # coluna de folga entre um bloco e o seguinte
@@ -278,7 +277,6 @@ class GameOverlay(QWidget):
         """Ultima temperatura media por linha; ver _temps."""
         self._build()
 
-    # ── tamanho ──────────────────────────────────────────────────────────────
     def _screen(self):
         """A tela onde o jogo esta', que nem sempre e' a primaria."""
         rect = win.foreground_monitor_rect()
@@ -308,7 +306,6 @@ class GameOverlay(QWidget):
         escolhidas = set(self._ctl.settings.overlay_metrics)
         return escolhidas - _CORTE_COMPACTO if self._compacto else escolhidas
 
-    # ── construcao ───────────────────────────────────────────────────────────
     def _build(self) -> None:
         cfg = self._ctl.settings
         self._built_for = self._screen_key()
@@ -571,7 +568,6 @@ class GameOverlay(QWidget):
         self._pintar()
         self.place()
 
-    # ── posicionamento ───────────────────────────────────────────────────────
     def showEvent(self, event) -> None:
         super().showEvent(event)
         hwnd = int(self.winId())
@@ -599,7 +595,6 @@ class GameOverlay(QWidget):
         y = area.bottom() - h - m + 1 if vert == "bottom" else area.top() + m
         self.move(int(x), int(y))
 
-    # ── atualizacao ──────────────────────────────────────────────────────────
     def refresh(self) -> None:
         cfg = self._ctl.settings
         # O controlador chama a 8 Hz para o overlay acompanhar o mouse e o topmost,
@@ -826,7 +821,6 @@ class GameOverlay(QWidget):
         if "clock" in metrics:
             self._hora.setText(datetime.now().strftime("%H:%M"))
 
-    # ── celulas ──────────────────────────────────────────────────────────────
     def _set(self, linha: str, coluna: int, texto: str, cor: str | None = None) -> None:
         cel = self._cels.get((linha, coluna))
         if cel is None:

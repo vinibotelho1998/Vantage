@@ -122,7 +122,6 @@ def process_started_at(pid: int | None) -> float | None:
         return None
 
 
-# ── o que nao se mata ─────────────────────────────────────────────────────────
 # Encerrar qualquer um destes nao fecha "um programa": apaga a sessao inteira ou
 # reinicia a maquina na hora. A recusa precisa vir do app, porque ele roda
 # elevado — o Windows aceitaria o pedido sem nem perguntar.
@@ -162,7 +161,6 @@ def aviso_encerrar(nome: str) -> str:
     return _AVISOS.get((nome or "").strip().lower(), "")
 
 
-# ── prioridade ────────────────────────────────────────────────────────────────
 @dataclass(frozen=True)
 class Prioridade:
     chave: str
@@ -201,7 +199,6 @@ def rotulo_prioridade(valor) -> str:
     return next((p.rotulo for p in PRIORIDADES if valor == p.valor), "")
 
 
-# ── afinidade ─────────────────────────────────────────────────────────────────
 def nucleos_totais() -> int:
     return psutil.cpu_count(logical=True) or 1
 
@@ -245,7 +242,6 @@ def formatar_nucleos(nucleos) -> str:
     return ", ".join(faixas)
 
 
-# ── acoes ─────────────────────────────────────────────────────────────────────
 def _abrir(pid: int, nome: str) -> psutil.Process:
     """Abre o processo conferindo que o PID ainda e' de quem a tabela mostrava.
 

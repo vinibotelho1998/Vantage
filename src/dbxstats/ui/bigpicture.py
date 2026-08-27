@@ -66,7 +66,6 @@ class BigPicture(QWidget):
         paintEvent faria a navegacao engasgar a cada card — o cache tira o disco
         do caminho do desenho e o QPixmap ja' fica no formato da tela."""
 
-    # ── ciclo ────────────────────────────────────────────────────────────────
     def abrir(self, screen=None) -> None:
         self._itens = list(self._ctl.settings.launch_items)
         # Recarrega as capas a cada abertura: e' o unico momento em que trocar a
@@ -89,7 +88,6 @@ class BigPicture(QWidget):
         self.hide()
         self.fechou.emit()
 
-    # ── entrada ──────────────────────────────────────────────────────────────
     def tratar_pad(self, pad) -> None:
         """Recebe o estado cru do controle, ja' fundido entre os conectados."""
         self._sem_controle = False
@@ -135,7 +133,6 @@ class BigPicture(QWidget):
         else:
             super().keyPressEvent(event)
 
-    # ── navegacao ────────────────────────────────────────────────────────────
     def _colunas(self) -> int:
         return max(1, min(COLUNAS_MAX, len(self._itens) or 1))
 
@@ -169,7 +166,6 @@ class BigPicture(QWidget):
         self.update()
         self.escolheu.emit(item)
 
-    # ── desenho ──────────────────────────────────────────────────────────────
     def paintEvent(self, _event) -> None:
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)

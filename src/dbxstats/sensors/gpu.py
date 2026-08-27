@@ -52,7 +52,6 @@ class GpuReader:
         self._mem_temp_ok = True
         self._init_nvml()
 
-    # ── ciclo de vida ────────────────────────────────────────────────────────
     def _init_nvml(self) -> None:
         try:
             import warnings
@@ -85,7 +84,6 @@ class GpuReader:
     def static(self) -> dict:
         return dict(self._static)
 
-    # ── metadados fixos ──────────────────────────────────────────────────────
     def _load_static(self) -> None:
         p, h = self._pynvml, self._hdl
         info: dict = {}
@@ -109,7 +107,6 @@ class GpuReader:
         self._name = info.get("name")
         self._static = info
 
-    # ── leitura por ciclo ────────────────────────────────────────────────────
     def read_nvml(self) -> dict | None:
         if not self._ok:
             return None
@@ -214,7 +211,6 @@ class GpuReader:
         except Exception:
             return None
 
-    # ── nvidia-smi (fallback de potencia) ────────────────────────────────────
     def _smi_loop(self) -> None:
         candidates = [
             shutil.which("nvidia-smi"),

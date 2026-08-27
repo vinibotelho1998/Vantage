@@ -190,7 +190,6 @@ class Display:
         return mode.width > self.native[0] or mode.height > self.native[1]
 
 
-# ── leitura ──────────────────────────────────────────────────────────────────
 def _new_devmode() -> DEVMODEW:
     dm = DEVMODEW()
     dm.dmSize = ctypes.sizeof(DEVMODEW)
@@ -334,7 +333,6 @@ def list_displays(with_modes: bool = True) -> list[Display]:
     return out
 
 
-# ── nome real do monitor ─────────────────────────────────────────────────────
 _edid_cache: dict[str, bytes] = {}
 
 
@@ -411,7 +409,6 @@ def _descriptors(blob: bytes):
             yield chunk
 
 
-# ── escrita ──────────────────────────────────────────────────────────────────
 def set_mode(device: str, mode: Mode) -> tuple[bool, str]:
     """Troca resolucao e taxa de uma tela ja' ligada.
 

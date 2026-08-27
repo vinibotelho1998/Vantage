@@ -201,7 +201,6 @@ class AfinidadeDialog(QDialog):
         root.addLayout(linha)
         self._pintar_resumo()
 
-    # ── selecao ──────────────────────────────────────────────────────────────
     def nucleos(self) -> list[int]:
         return [i for i, caixa in enumerate(self._caixas) if caixa.isChecked()]
 
@@ -363,7 +362,6 @@ class ProcessesView(View):
     def on_settings_changed(self) -> None:
         self.sort_btn.set_color(theme.accent_color(self.cfg.accent))
 
-    # ── selecao ──────────────────────────────────────────────────────────────
     def _alvo(self) -> tuple[int, str] | None:
         """(pid, nome) da linha selecionada, lidos da propria celula.
 
@@ -466,7 +464,6 @@ class ProcessesView(View):
         self.status.setText(texto)
         self.status.setStyleSheet(f"color: {cor}; background: transparent;")
 
-    # ── acoes ────────────────────────────────────────────────────────────────
     def _finalizar(self) -> None:
         alvo = self._alvo()
         if alvo is None:
@@ -523,7 +520,6 @@ class ProcessesView(View):
         ok, msg = P.mudar_afinidade(pid, nome, dlg.nucleos())
         self._dizer(msg, theme.OK if ok else theme.BAD)
 
-    # ── dados ────────────────────────────────────────────────────────────────
     def on_system(self, d: dict) -> None:
         rows = self.app.procs.snapshot()
         # A primeira passada do monitor so' arma o contador de CPU do psutil; o

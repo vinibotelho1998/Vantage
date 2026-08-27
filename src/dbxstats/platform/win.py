@@ -183,7 +183,6 @@ def set_tool_window(hwnd: int) -> None:
     _set_long(hwnd, GWL_EXSTYLE, style | WS_EX_TOOLWINDOW)
 
 
-# ── mover janelas entre telas ────────────────────────────────────────────────
 SW_SHOWNORMAL = 1
 SW_SHOWMAXIMIZED = 3
 SW_SHOWMINIMIZED = 2

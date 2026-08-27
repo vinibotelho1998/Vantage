@@ -22,7 +22,6 @@ class View(QWidget):
         self.app = app
         self.setObjectName("ViewRoot")
 
-    # ── ganchos ──────────────────────────────────────────────────────────────
     def on_system(self, data: dict) -> None:
         """Novo snapshot do coletor."""
 
@@ -35,7 +34,6 @@ class View(QWidget):
     def on_activate(self) -> None:
         """A view acabou de virar a visivel."""
 
-    # ── helpers ──────────────────────────────────────────────────────────────
     @property
     def cfg(self):
         return self.app.settings

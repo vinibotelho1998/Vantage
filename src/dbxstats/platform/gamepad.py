@@ -156,7 +156,6 @@ def available() -> bool:
     return _xinput is not None
 
 
-# ── injecao de entrada ───────────────────────────────────────────────────────
 def _send(*inputs: INPUT) -> None:
     array = (INPUT * len(inputs))(*inputs)
     user32.SendInput(len(inputs), array, ctypes.sizeof(INPUT))
@@ -184,7 +183,6 @@ def scroll(amount: int, horizontal: bool = False) -> None:
         _send(_mouse(MOUSEEVENTF_HWHEEL if horizontal else MOUSEEVENTF_WHEEL, data=amount))
 
 
-# ── laco de leitura ──────────────────────────────────────────────────────────
 def tap_alt_tab() -> None:
     """Alterna janelas. Sentado no sofa e' a acao mais usada depois do clique."""
     _send(_key(VK_MENU, False), _key(VK_TAB, False),
@@ -492,7 +490,6 @@ class GamepadMouse(QObject):
         self._consumer = None
         """Quem assumiu o controle inteiro; ver set_consumer."""
 
-    # ── ciclo ────────────────────────────────────────────────────────────────
     def start(self) -> None:
         if not available():
             # Segue de pe' mesmo assim: o caminho HID le' os controles da Sony
@@ -579,7 +576,6 @@ class GamepadMouse(QObject):
         self._release_all()
         self._bindings = bindings_from(self.cfg)
 
-    # ── leitura ──────────────────────────────────────────────────────────────
     def _read(self) -> XINPUT_GAMEPAD | None:
         """Le todos os controles conectados e funde num estado unico.
 
@@ -749,7 +745,6 @@ class GamepadMouse(QObject):
         self._buttons(buttons)
         self._triggers(pad)
 
-    # ── mapeamento ───────────────────────────────────────────────────────────
     def _axis(self, value: int) -> float:
         """Normaliza o eixo aplicando zona morta e curva quadratica.
 

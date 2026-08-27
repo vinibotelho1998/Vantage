@@ -252,7 +252,6 @@ class Settings:
     gamepad_only_with_tv: bool = False
     """So assume o mouse quando um perfil de tela marcado como sofa estiver ativo."""
 
-    # ── validacao ────────────────────────────────────────────────────────────
     @classmethod
     def _known(cls) -> set[str]:
         return {f.name for f in fields(cls)}
@@ -391,7 +390,6 @@ class Settings:
                                  if k in marcadas] or [k for k, _ in DISKBENCH_PHASES]
         self.diskbench_drive = str(self.diskbench_drive or "").strip()[:8]
 
-    # ── persistencia ─────────────────────────────────────────────────────────
     @classmethod
     def load(cls) -> Settings:
         path = paths.config_file()

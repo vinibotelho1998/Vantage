@@ -165,7 +165,6 @@ class App:
         self.window = MainWindow(self)
         self.tray = Tray(self)
 
-    # ── ciclo de vida ────────────────────────────────────────────────────────
     def run(self) -> int:
         self.boot()
         return self.qt.exec()
@@ -276,7 +275,6 @@ class App:
         self.lhm.close()
         self.qt.quit()
 
-    # ── atalhos de jogo ──────────────────────────────────────────────────────
     def play_item(self, item: dict) -> tuple[bool, str]:
         """Prepara as telas, abre o jogo e agenda a volta para quando ele fechar."""
         antes = dsp.snapshot()
@@ -618,7 +616,6 @@ class App:
         """
         _save_session_history(self.session_history)
 
-    # ── big picture ──────────────────────────────────────────────────────────
     def big_picture_toggle(self) -> None:
         if self._bigpicture is not None and self._bigpicture.isVisible():
             self._big_picture_fechar()
@@ -969,7 +966,6 @@ class App:
         except Exception:
             _log.exception("falha restaurando as telas ao fechar")
 
-    # ── timers ───────────────────────────────────────────────────────────────
     def _tick_system(self) -> None:
         data = self.collector.snapshot()
         if not data:
@@ -1122,7 +1118,6 @@ class App:
             self._bp_back_pronto = False
             self.big_picture_abrir()
 
-    # ── selecao do jogo ──────────────────────────────────────────────────────
     def _select_stream(self):
         streams = self.fps.snapshot()
         if not streams:
@@ -1154,7 +1149,6 @@ class App:
             return "nenhum jogo em tela cheia"
         return "nenhum jogo apresentando quadros"
 
-    # ── alertas ──────────────────────────────────────────────────────────────
     def _check_alerts(self, d: dict, gpu: dict) -> None:
         if not self.settings.alerts_enabled:
             return
@@ -1192,7 +1186,6 @@ class App:
                 parts.append(f"{fps:.0f} fps")
         self.tray.set_tooltip("DBX Stats — " + "  ·  ".join(parts))
 
-    # ── acoes expostas a UI ──────────────────────────────────────────────────
     def notify(self, title: str, message: str) -> None:
         self.tray.notify(title, message)
 
@@ -1301,7 +1294,6 @@ class App:
     def _history_depth(self) -> int:
         return max(80, int(self.settings.history_window / self.settings.update_interval) + 4)
 
-    # ── overlay ──────────────────────────────────────────────────────────────
     def toggle_overlay(self) -> None:
         self.settings.overlay_enabled = not self.settings.overlay_enabled
         self.settings.save()
@@ -1374,7 +1366,6 @@ class App:
         elif not show and self._overlay.isVisible():
             self._overlay.hide()
 
-    # ── benchmark ────────────────────────────────────────────────────────────
     def benchmark_active(self) -> bool:
         return self._bench_active
 

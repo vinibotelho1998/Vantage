@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-# ── superficies ───────────────────────────────────────────────────────────────
 BG = "#080A0F"          # fundo da janela
 BG_SUNKEN = "#05070B"   # fundo de graficos / areas rebaixadas
 SURFACE = "#0F141C"     # card padrao
@@ -15,12 +14,10 @@ SURFACE_3 = "#1B2432"   # chips, inputs
 LINE = "#1E2735"        # divisoria sutil
 LINE_HI = "#2B3749"     # divisoria destacada / borda de input
 
-# ── texto ─────────────────────────────────────────────────────────────────────
 TXT = "#E9EFF8"
 MUTE = "#9BA9BD"
 FAINT = "#5E6C82"
 
-# ── cores por dominio ─────────────────────────────────────────────────────────
 CPU = "#4C9AFF"
 GPU = "#31D583"
 RAM = "#A78BFA"
@@ -29,19 +26,16 @@ NET = "#FF6B81"
 FPS = "#22D3EE"
 FRAME = "#F5A623"
 
-# ── semantica ─────────────────────────────────────────────────────────────────
 OK = "#31D583"
 WARN = "#F5A623"
 BAD = "#FF5C5C"
 CRIT = "#FF2D55"
 IDLE = "#5E6C82"
 
-# ── tipografia ────────────────────────────────────────────────────────────────
 FONT_UI = "Segoe UI"
 FONT_DISPLAY = "Bahnschrift"
 FONT_MONO = "Cascadia Mono"
 
-# ── geometria ─────────────────────────────────────────────────────────────────
 RADIUS = 12
 RADIUS_SM = 8
 RADIUS_XS = 5
@@ -61,7 +55,6 @@ def set_scale(value: float) -> None:
     SCALE = max(0.75, min(2.0, float(value)))
 
 
-# ── acentos ───────────────────────────────────────────────────────────────────
 @dataclass(frozen=True)
 class Accent:
     key: str
@@ -84,7 +77,6 @@ def accent_color(key: str) -> str:
     return ACCENTS.get(key, ACCENTS["cyan"]).color
 
 
-# ── utilitarios de cor ────────────────────────────────────────────────────────
 def rgba(hex_color: str, alpha: float) -> str:
     """#RRGGBB + alpha 0..1 -> 'rgba(r, g, b, a)' aceito pelo QSS."""
     h = hex_color.lstrip("#")
@@ -120,7 +112,6 @@ def _band(value: float | None, warn: float, bad: float, invert: bool = False) ->
     return BAD
 
 
-# ── escalas semanticas ────────────────────────────────────────────────────────
 def temp_color(t: float | None) -> str:
     if t is not None and t >= 92:
         return CRIT

@@ -24,7 +24,6 @@ HITCH_MS = 50.0
 HITCH_FACTOR = 3.0
 STUTTER_FACTOR = 1.5
 
-# ── fluidez ───────────────────────────────────────────────────────────────────
 # O que se sente como fluidez e' a cadencia entre quadros vizinhos, nao o espalhamento
 # em torno da media da janela: um jogo que cai de 120 para 60 fps ao longo de um minuto
 # tem desvio padrao enorme e mesmo assim parece liso, enquanto 8/16/8/16 ms com a mesma
@@ -61,7 +60,6 @@ SMOOTH_MIN_FRAMES = 30
 """Menos que isso a mediana das diferencas e' chute; melhor a interface dizer que ainda
 esta' coletando do que mostrar uma nota que muda de 40 para 90 no tique seguinte."""
 
-# ── gargalo ───────────────────────────────────────────────────────────────────
 # O criterio e' o do proprio PresentMon: por quadro, quem trabalhou mais — CPUBusy ou
 # GPUBusy. Comparar cada um contra o frametime medio, como se fazia antes, mistura
 # quadros de regimes diferentes e ignora que os dois numeros nascem do mesmo quadro.
@@ -456,7 +454,6 @@ def verdict(m: FrameMetrics) -> str:
         return "Irregular — o intervalo entre quadros oscila o bastante pra sentir."
     return "Ruim — stutter frequente. Vale investigar limites de energia, VRAM ou CPU."
 
-# ── partida inteira ───────────────────────────────────────────────────────────
 SESSION_BIN_MS = 0.1
 """Largura do balde do histograma. Define a precisao dos percentis."""
 SESSION_MAX_MS = 250.0

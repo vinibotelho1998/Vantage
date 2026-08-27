@@ -360,7 +360,6 @@ class LauncherView(View):
                 partes.append(f"{d.name} (desligada)")
         return "Ao fechar o jogo, volta para:  " + "   ·   ".join(partes)
 
-    # ── dados ────────────────────────────────────────────────────────────────
     def _targets(self) -> list[tuple[str, str]]:
         """Opcoes de tela para o combo.
 
@@ -415,7 +414,6 @@ class LauncherView(View):
         self._refresh()
         self.notify(f"'{removido['name']}' removido", theme.MUTE)
 
-    # ── interface ────────────────────────────────────────────────────────────
     def on_activate(self) -> None:
         self._refresh()
 

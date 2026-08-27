@@ -48,7 +48,6 @@ class Collector:
         """VRAM do mesmo processo; ver platform/gpumem.py."""
         self._static = _static_info()
 
-    # ── ciclo de vida ────────────────────────────────────────────────────────
     def start(self) -> None:
         if self._thread is None:
             self._thread = threading.Thread(target=self._loop, name="collector", daemon=True)
@@ -91,7 +90,6 @@ class Collector:
             elapsed = time.monotonic() - started
             self._stop.wait(max(0.05, self._interval - elapsed))
 
-    # ── coleta ───────────────────────────────────────────────────────────────
     def _collect(self) -> dict:
         now = time.monotonic()
         dt = max(now - self._prev_time, 0.001)
@@ -378,7 +376,6 @@ class _GameMemory:
         return dados
 
 
-# ── helpers ───────────────────────────────────────────────────────────────────
 def _safe_usage(mount: str) -> tuple[float, float, float]:
     try:
         u = psutil.disk_usage(mount)

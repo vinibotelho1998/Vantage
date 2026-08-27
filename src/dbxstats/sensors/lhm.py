@@ -224,7 +224,6 @@ class LhmReader:
                 self._computer = None
                 self._ready = False
 
-    # ── arvore completa ──────────────────────────────────────────────────────
     def _collect_tree(self, hw, out: list[SensorNode], parent: str = "") -> None:
         hw_type = str(hw.HardwareType)
         hw_name = str(hw.Name)
@@ -239,7 +238,6 @@ class LhmReader:
                 key=f"{label}/{kind}/{name}", hardware=label, hw_type=hw_type,
                 name=name, kind=kind, unit=UNITS.get(kind, ""), value=float(value)))
 
-    # ── leitura curada ───────────────────────────────────────────────────────
     def _dispatch(self, hw, result: dict, gpus: list) -> None:
         hw_type = str(hw.HardwareType)
         if hw_type == "Cpu":
