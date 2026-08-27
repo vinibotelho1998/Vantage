@@ -1,7 +1,7 @@
 # DBX Stats
 
-Monitor de hardware e desempenho em jogos para Windows. Um app de verdade — feito
-para ficar aberto no segundo monitor — com telas dedicadas de CPU, GPU, memória,
+Monitor de hardware e desempenho em jogos para Windows. Um app de verdade, feito
+para ficar aberto no segundo monitor, com telas dedicadas de CPU, GPU, memória,
 disco, rede, sensores e processos, além de uma engine de FPS/frametime nível
 CapFrameX. O overlay in-game continua ali, mas agora é um acessório, não o produto.
 
@@ -21,7 +21,7 @@ CapFrameX. O overlay in-game continua ali, mas agora é um acessório, não o pr
 
 ## O que ele faz
 
-**Captura de FPS que não desiste.** O motor roda em três camadas independentes —
+**Captura de FPS que não desiste.** O motor roda em três camadas independentes:
 supervisor, leitor e agregador. O leitor só faz parsing do CSV do PresentMon; toda
 a estatística acontece fora do caminho crítico, 4× por segundo. Se a sessão ETW
 cair, o jogo fechar o swapchain ou o driver reiniciar, o supervisor detecta e sobe
@@ -33,9 +33,9 @@ precisar fazer nada.
 
 | Métrica | Como é calculada |
 | --- | --- |
-| FPS atual | média dos frametimes da última janela (0,5 / 1 / 2 s) — não é `1000/último frame`, então o número para de tremer |
+| FPS atual | média dos frametimes da última janela (0,5 / 1 / 2 s), não `1000/último frame`: por isso o número para de tremer |
 | FPS médio | `1000 / média dos frametimes` da janela de análise |
-| 1% e 0.1% low | média dos piores 1% / 0.1% frames — o mesmo critério usado em análises de hardware |
+| 1% e 0.1% low | média dos piores 1% / 0.1% frames, o mesmo critério usado em análises de hardware |
 | P1 / P0.1 | percentis 99 e 99.9 do frametime, para comparar com ferramentas que usam percentil |
 | Stutter | % de frames acima de 1,5× a mediana |
 | Engasgos | frames acima de 50 ms ou 3× a mediana |
@@ -48,28 +48,28 @@ precisar fazer nada.
 **Gráficos que mostram o que aconteceu.** As linhas usam interpolação cúbica
 monotona (Fritsch–Carlson): curva lisa que nunca inventa um pico que não existe
 nos dados. Quando há mais amostras que pixels, cada coluna desenha a faixa entre
-o mínimo e o máximo daquele intervalo — um spike de um frame continua visível com
+o mínimo e o máximo daquele intervalo: um spike de um frame continua visível com
 5 minutos de histórico na tela. A escala vertical se ajusta com transição
 amortecida, então o gráfico não pula a cada novo máximo. Passe o mouse para ler
 os valores exatos de qualquer ponto.
 
 **Telas:**
 
-- **Painel** — visão geral: KPIs, linha do tempo multi-série, jogo em foco com
+- **Painel:** visão geral com KPIs, linha do tempo multi-série, jogo em foco com
   frametime ao vivo e cards de CPU/GPU/RAM/disco/rede.
-- **Jogos** — frametime em destaque, FPS ao longo do tempo, histograma de FPS,
+- **Jogos:** frametime em destaque, FPS ao longo do tempo, histograma de FPS,
   curva de percentis, entrega de quadros, latência, gargalo e estatísticas da sessão.
-- **CPU** — uso e temperatura, frequência, potência, grade de núcleos com clock por
+- **CPU:** uso e temperatura, frequência, potência, grade de núcleos com clock por
   thread, dados do processador e top processos.
-- **GPU** — carga, VRAM, clocks, potência, PCIe, encoder/decoder e os motivos de
+- **GPU:** carga, VRAM, clocks, potência, PCIe, encoder/decoder e os motivos de
   throttle relatados pelo driver.
-- **Memória & Disco** — RAM, cache, swap, atividade de I/O e um card por unidade
+- **Memória & Disco:** RAM, cache, swap, atividade de I/O e um card por unidade
   com temperatura e vida útil.
-- **Rede** — throughput, latência, jitter, perda e volume acumulado.
-- **Sensores** — a árvore inteira do LibreHardwareMonitor com atual/mín/méd/máx e
+- **Rede:** throughput, latência, jitter, perda e volume acumulado.
+- **Sensores:** a árvore inteira do LibreHardwareMonitor com atual/mín/méd/máx e
   exportação para CSV.
-- **Processos** — quem está comendo CPU e memória, com o jogo destacado.
-- **Benchmark** — corrida cronometrada, resultado completo, comparação com corridas
+- **Processos:** quem está comendo CPU e memória, com o jogo destacado.
+- **Benchmark:** corrida cronometrada, resultado completo, comparação com corridas
   anteriores e exportação dos frametimes.
 
 **Ainda:** overlay in-game click-through configurável, alertas de temperatura e
@@ -108,7 +108,7 @@ Para gerar o instalador você mesmo, a partir de um clone limpo:
 
 Ele acha o Python, monta um ambiente próprio, baixa o que falta (inclusive uma
 cópia local do Inno Setup, sem instalar nada no sistema) e entrega
-`dist\DBXStats-Setup.exe` — que é o arquivo único para mandar para outra pessoa.
+`dist\DBXStats-Setup.exe`, o arquivo único para mandar para outra pessoa.
 
 ## Requisitos
 
@@ -135,13 +135,13 @@ py -3.12 -m venv .venv
 ```
 
 771 testes cobrem a engine de FPS, séries e métricas, telas, gerenciador de
-monitores, controle e sessões — a maioria sem depender de display nem hardware
+monitores, controle e sessões, a maioria sem depender de display nem hardware
 real.
 
 ## Arquitetura
 
 A engine é independente da interface e testável sem display. As views são burras:
-recebem um snapshot pronto e desenham — e só a tela visível é atualizada, então
+recebem um snapshot pronto e desenham; só a tela visível é atualizada, então
 manter o app aberto custa quase nada.
 
 ```
@@ -178,7 +178,7 @@ src/dbxstats/
 
 ```powershell
 .\BUILD.bat                                     # instalador completo
-powershell -File packaginguild.ps1 -SemInstalador   # so' a pasta dist\DBXStats
+powershell -File packaging\build.ps1 -SemInstalador # so' a pasta dist\DBXStats
 ```
 
 A arte do assistente é gerada por `scripts/make_installer_art.py` a partir do
