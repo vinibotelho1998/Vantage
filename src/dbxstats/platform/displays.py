@@ -510,7 +510,7 @@ def apply_profile(entries: list[dict], topology: str = "") -> tuple[bool, str]:
     que o caminho legado ainda serve.
 
     Com `topology="clone"` o perfil vira espelho: todas as telas mostram a mesma
-    imagem. Quem decide a topologia nesse caso e' o proprio Windows — montar grupo
+    imagem. Quem decide a topologia nesse caso e' o proprio Windows: montar grupo
     de clone na mao e' fragil, e o resultado seria o mesmo.
     """
     wanted_on = [e for e in entries if e.get("active")]
@@ -533,7 +533,7 @@ def apply_profile(entries: list[dict], topology: str = "") -> tuple[bool, str]:
 
     # A topologia escolhe uma saida por tela numa tacada so'. Quando varias telas
     # voltam juntas, essa escolha pode esbarrar em saidas que compartilham a mesma
-    # origem e deixar alguem de fora — foi o caso de voltar do jogo com uma tela
+    # origem e deixar alguem de fora: foi o caso de voltar do jogo com uma tela
     # ligada e a outra nao. Aqui conferimos e repescamos uma por uma: cada chamada
     # relê a configuracao, entao a saida livre e' reavaliada a cada passo.
     for mid in [p for p in paths if p not in _active_paths()]:
@@ -542,7 +542,7 @@ def apply_profile(entries: list[dict], topology: str = "") -> tuple[bool, str]:
             _log.warning("nao consegui religar %s: %s", mid, err)
 
     # Ultimo recurso: tela desligada ha' um tempo some da lista de caminhos do
-    # Windows — monitor DisplayPort dorme e derruba o link. "Estender" obriga o
+    # Windows: monitor DisplayPort dorme e derruba o link. "Estender" obriga o
     # Windows a redetectar tudo que esta' plugado; so' entao a topologia pedida
     # tem como incluir a tela de volta. Foi o que trouxe o ultrawide de volta.
     if [p for p in paths if p not in _active_paths()]:
@@ -570,7 +570,7 @@ def apply_profile(entries: list[dict], topology: str = "") -> tuple[bool, str]:
     # Posicoes antes da primaria, nunca depois. `set_positions` normaliza o
     # conjunto pelo canto superior esquerdo, o que tiraria a primaria do (0,0);
     # `make_primary` desloca tudo de volta preservando o arranjo relativo. Sem
-    # este passo o perfil volta com as telas em ordem trocada — foi o "voltou
+    # este passo o perfil volta com as telas em ordem trocada: foi o "voltou
     # meio bugado" depois do jogo.
     posicoes = {e["monitor_id"]: (int(e["position"][0]), int(e["position"][1]))
                 for e in wanted_on
@@ -596,7 +596,7 @@ def _active_paths() -> set[str]:
 def _apply_clone(wanted_on: list[dict]) -> tuple[bool, str]:
     """Espelha: ninguem desliga, todas mostram a mesma imagem.
 
-    O Windows exige uma resolucao que TODAS as telas aceitem — e' assim que clone
+    O Windows exige uma resolucao que TODAS as telas aceitem: e' assim que clone
     funciona no hardware, nao e' limitacao daqui. Entao a resolucao pedida no
     perfil so' entra se couber em todo mundo; senao fica a que o Windows escolheu.
     """
@@ -678,7 +678,7 @@ def suggested_profiles() -> list[dict]:
         })
 
         # Espelhar e' o caso do sofa: a imagem vai para a TV sem apagar os
-        # monitores da mesa. O palpite e' a maior tela pelo painel — mas a TV
+        # monitores da mesa. O palpite e' a maior tela pelo painel, mas a TV
         # costuma estar desligada na hora de montar o perfil, entao a tela de
         # Telas tem um botao por monitor para ancorar onde o usuario quiser.
         profiles.append(mirror_profile(max(found, key=_panel_pixels), found))
@@ -708,7 +708,7 @@ def _panel_pixels(disp: Display) -> int:
 
 
 def _shared_mode(displays: list[Display]) -> Mode | None:
-    """Maior modo que TODAS as telas aceitam — o teto real de um espelho."""
+    """Maior modo que TODAS as telas aceitam: o teto real de um espelho."""
     comuns: set[tuple[int, int, int]] | None = None
     for disp in displays:
         chaves = {m.as_key() for m in _supported_modes(disp.device)}

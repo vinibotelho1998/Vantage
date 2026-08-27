@@ -2,7 +2,7 @@
 
 Tres fontes, da melhor para a pior, e a primeira que responder vence:
 
-1. a imagem que o usuario escolheu no atalho — sempre ganha, porque e' a unica
+1. a imagem que o usuario escolheu no atalho: sempre ganha, porque e' a unica
    que ele controla e a unica que serve para jogo nenhum launcher conhece;
 2. a arte da biblioteca do Steam, quando o jogo e' do Steam. E' capa de verdade,
    ja' esta' no disco e nao custa rede;
@@ -30,7 +30,7 @@ gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
 _EXTS = (".png", ".jpg", ".jpeg", ".webp", ".bmp")
 
 # Nomes que a Valve usa dentro da pasta do jogo no cache. A pasta intermediaria
-# tem nome hasheado e opaco, mas o ARQUIVO nunca mudou de nome — entao a busca e'
+# tem nome hasheado e opaco, mas o ARQUIVO nunca mudou de nome: entao a busca e'
 # por nome, em qualquer profundidade, e o hash deixa de importar.
 _STEAM_ART = ("library_header.jpg", "library_capsule.jpg", "header.jpg",
               "library_600x900.jpg", "library_hero.jpg")
@@ -87,7 +87,7 @@ _apps_cache: dict[str, dict[str, str]] = {}
 
 A aba Jogos pergunta a origem da capa uma vez por linha, e o Big Picture uma vez
 por card. Sem isto, cada pergunta reabriria todos os `appmanifest_*.acf` de todas
-as bibliotecas — dezenas de arquivos para responder sobre um jogo so'.
+as bibliotecas: dezenas de arquivos para responder sobre um jogo so'.
 """
 
 
@@ -127,7 +127,7 @@ def _appid_do_url(caminho: Path) -> str:
     """Le o appid de um atalho .url do Steam.
 
     Atalho de jogo do Steam e' um .url apontando para `steam://rungameid/<id>`,
-    e nao ha' executavel nenhum no caminho — sem isto, jogo instalado pelo Steam
+    e nao ha' executavel nenhum no caminho: sem isto, jogo instalado pelo Steam
     e fixado na area de trabalho ficaria sem capa.
     """
     try:
@@ -195,7 +195,7 @@ def _setup_prototypes() -> None:
     """Sem isto o ctypes assume `int` para todo handle.
 
     Em 64 bits um HBITMAP nao cabe num int, e a chamada morre com OverflowError
-    justamente na hora de liberar o recurso — vazando o bitmap junto.
+    justamente na hora de liberar o recurso, vazando o bitmap junto.
     """
     user32.PrivateExtractIconsW.argtypes = [
         wintypes.LPCWSTR, ctypes.c_int, ctypes.c_int, ctypes.c_int,
@@ -227,7 +227,7 @@ BI_RGB = 0
 DIB_RGB_COLORS = 0
 _TAMANHOS = (256, 128, 96, 64, 48, 32)
 """Do maior para o menor. Um card de TV com icone de 32 px fica vergonhoso, mas
-o exe pode simplesmente nao ter nada maior — entao se pede o maior e desce."""
+o exe pode simplesmente nao ter nada maior: entao se pede o maior e desce."""
 
 
 def _hicon(caminho: Path, tamanho: int):
@@ -370,7 +370,7 @@ def artwork_path(item: dict) -> Path | None:
 def artwork_by_name(nome: str, itens=None) -> Path | None:
     """Capa a partir do NOME do jogo, procurando o atalho correspondente.
 
-    A partida gravada guarda so' o nome — o caminho do executavel vive no
+    A partida gravada guarda so' o nome: o caminho do executavel vive no
     atalho. Este e' o unico laco entre os dois, e e' o que permite a lista de
     sessoes ter capa igual a' aba Jogos.
 
@@ -401,7 +401,7 @@ def origin(item: dict) -> str:
     """De onde a capa veio, em uma palavra para a interface.
 
     Sem isto a aba Jogos nao teria como explicar por que um jogo mostra capa
-    bonita e o vizinho mostra um icone pequeno — e a diferenca e' justamente o
+    bonita e o vizinho mostra um icone pequeno, e a diferenca e' justamente o
     que decide se vale a pena escolher uma imagem a mao.
     """
     escolhida = str(item.get("image", "")).strip()

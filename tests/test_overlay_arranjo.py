@@ -106,7 +106,7 @@ def _visivel(painel, linha: str, coluna: int) -> bool:
 
 
 def test_coluna_sem_fonte_nenhuma_colapsa_e_a_grade_encolhe():
-    """Sem tensao em lugar nenhum, a coluna inteira sai — nao vira fileira de traco.
+    """Sem tensao em lugar nenhum, a coluna inteira sai; nao vira fileira de traco.
 
     E' o caso da maquina sem elevacao e da placa que nao publica o rail: uma
     coluna de travessoes diria "quebrou" quatro vezes por linha.
@@ -156,7 +156,7 @@ def test_gpu_sem_sensor_de_memoria_perde_a_linha_de_vram():
 
 
 def test_nenhuma_celula_de_peca_mostra_travessao():
-    """Numa maquina sem sensor nenhum, o painel fica vazio — nunca furado."""
+    """Numa maquina sem sensor nenhum, o painel fica vazio; nunca furado."""
     pelado = {"cpu_pct": 12.0, "ram_used": 7.8, "ram_total": 16.0, "gpu": None}
     painel = _montar(pelado, None)
     for (_linha, coluna), cel in painel._cels.items():
@@ -270,7 +270,7 @@ _ALTURAS_REAIS = {
 Medido com a fonte real do sistema, fora do pytest: a plataforma offscreen do Qt
 nao tem familia de fonte nenhuma nesta maquina, mede todo glifo com o mesmo
 avanco e devolve um painel 41% mais baixo que o de verdade. Medir a altura aqui
-dentro daria um numero confortavel e falso — por isso o que se testa e' a
+dentro daria um numero confortavel e falso: por isso o que se testa e' a
 decisao (`cabe_na_tela`), alimentada com as alturas que o painel tem mesmo.
 """
 
@@ -335,14 +335,14 @@ def test_o_aviso_de_administrador_sobrevive_ao_corte_do_compacto(monkeypatch):
 # ── legibilidade por cima do jogo ────────────────────────────────────────────
 _CENA_CLARA = (255, 255, 255)
 """Pior fundo possivel: neve, deserto, menu branco. O painel e' translucido, entao
-a cor por tras entra na conta — testar so' sobre preto testa o caso facil."""
+a cor por tras entra na conta; testar so' sobre preto testa o caso facil."""
 
 _MINIMO_CONTRASTE = 3.0
 """Razao de contraste minima aceita para qualquer tinta do painel.
 
 E' o piso do WCAG para texto grande e para elemento grafico. Abaixo disso o
 rotulo GARGALO, o trilho da barra e a barra "/" entre as duas temperaturas
-simplesmente somem, e "69/82°C" passa a ser lido como "69 82°C" — erro de
+simplesmente somem, e "69/82°C" passa a ser lido como "69 82°C": erro de
 leitura, e nao feiura.
 """
 
@@ -407,7 +407,7 @@ def _paineis_variados(**opcoes):
 def test_toda_tinta_do_painel_se_le_sobre_uma_cena_clara():
     """Sobre fundo claro o painel compunha um cinza medio e engolia meio painel.
 
-    O cinza mais escuro da paleta caia para 1.02:1 — nao "dificil de ler",
+    O cinza mais escuro da paleta caia para 1.02:1: nao "dificil de ler",
     invisivel. Levava junto a tag do gargalo, o trilho das barras de memoria e a
     barra que separa as duas temperaturas.
     """
@@ -471,8 +471,8 @@ def test_o_que_carrega_leitura_nao_fica_no_cinza_mais_apagado():
 def test_media_de_temperatura_sobrevive_a_um_ciclo_sem_leitura():
     """O sensor de nucleo falha em ciclo solto.
 
-    Sem carencia, a celula piscava entre "61/78" e "78" varias vezes por minuto
-    — o que se le' como o app perdendo dado, nao como a temperatura mudando.
+    Sem carencia, a celula piscava entre "61/78" e "78" varias vezes por minuto;
+    o que se le' como o app perdendo dado, nao como a temperatura mudando.
     """
     import dbxstats.ui.overlay as ov
 

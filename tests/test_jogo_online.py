@@ -41,8 +41,8 @@ def test_depois_de_procurar_bastante_e_local():
 def test_rodape_nao_repete_o_nome_do_jogo():
     """O rotulo do ping costuma SER o nome do processo do jogo.
 
-    A latencia sai do trafego dele, entao o rotulo vem com o nome do executavel
-    — e concatenar os dois escrevia "cs2.exe · cs2.exe" a partida inteira.
+    A latencia sai do trafego dele, entao o rotulo vem com o nome do executavel;
+    e concatenar os dois escrevia "cs2.exe · cs2.exe" a partida inteira.
     """
     import os
 

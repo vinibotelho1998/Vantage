@@ -124,7 +124,7 @@ def process_started_at(pid: int | None) -> float | None:
 
 # Encerrar qualquer um destes nao fecha "um programa": apaga a sessao inteira ou
 # reinicia a maquina na hora. A recusa precisa vir do app, porque ele roda
-# elevado — o Windows aceitaria o pedido sem nem perguntar.
+# elevado: o Windows aceitaria o pedido sem nem perguntar.
 _CRITICOS = {
     "system", "registry", "secure system", "system idle process",
     "memory compression", "smss.exe", "csrss.exe", "wininit.exe",
@@ -134,7 +134,7 @@ _CRITICOS = {
 # Morrem sem drama, mas levam junto algo que o usuario nao esta' esperando.
 _AVISOS = {
     "explorer.exe": ("A barra de tarefas, o menu Iniciar e os ícones da área de "
-                     "trabalho somem até o Explorer voltar — o Windows costuma "
+                     "trabalho somem até o Explorer voltar; o Windows costuma "
                      "reabri-lo sozinho em alguns segundos."),
 }
 
@@ -172,7 +172,7 @@ class Prioridade:
 
 # Rotulos iguais aos do Gerenciador de Tarefas: quem ja' mexeu la' nao precisa
 # traduzir nada de cabeca. Os valores sao as classes de prioridade do Win32, que
-# o psutil so' expoe rodando no Windows — o numero cru como reserva mantem o
+# o psutil so' expoe rodando no Windows: o numero cru como reserva mantem o
 # modulo importavel (e testavel) em qualquer lugar.
 PRIORIDADES: tuple[Prioridade, ...] = (
     Prioridade("realtime", "Tempo real", getattr(psutil, "REALTIME_PRIORITY_CLASS", 0x100),
@@ -247,7 +247,7 @@ def _abrir(pid: int, nome: str) -> psutil.Process:
 
     O Windows reaproveita PID depressa e a linha clicada pode ser de ate' 2,5 s
     atras. Sem essa conferencia, um clique em "Finalizar" acertaria o processo
-    novo que herdou o numero — e ninguem entenderia por que o programa errado
+    novo que herdou o numero, e ninguem entenderia por que o programa errado
     morreu.
     """
     proc = psutil.Process(pid)
@@ -298,7 +298,7 @@ def encerrar(pid: int, nome: str) -> tuple[bool, str]:
         try:
             # No Windows terminate() ja' e' TerminateProcess, mas o processo so'
             # some quando o kernel termina de fecha-lo. Esperar evita anunciar
-            # "encerrado" para algo que ficou pendurado — e o kill() cobre o caso
+            # "encerrado" para algo que ficou pendurado; e o kill() cobre o caso
             # do processo que esta' preso em I/O e ignora o primeiro pedido.
             proc.wait(timeout=3)
         except psutil.TimeoutExpired:

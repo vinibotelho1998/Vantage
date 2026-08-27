@@ -1,7 +1,7 @@
 """A cascata de volta do sofa: jogo -> Big Picture -> mesa com a TV apagada.
 
 O degrau que faltava era o ultimo. Quando o jogo devolve para a grade, quem
-acendeu a TV foi a sessao, e `_bp_off` chega vazio ao fechamento — a grade
+acendeu a TV foi a sessao, e `_bp_off` chega vazio ao fechamento; a grade
 sumia e a TV ficava ligada, mostrando area de trabalho para uma sala vazia.
 """
 import dbxstats.app as appmod

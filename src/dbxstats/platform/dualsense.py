@@ -2,7 +2,7 @@
 
 O XInput so' aceita dispositivo Xbox-compativel. Um DualSense pareado direto por
 Bluetooth nao passa por ele: o Windows o expoe como HID comum, e o app ficava
-cego para um controle que esta' ali, ligado e funcionando — a queixa de que "o
+cego para um controle que esta' ali, ligado e funcionando: a queixa de que "o
 DBX Stats nao reconhece o controle".
 
 A saida usada por todo mundo e' instalar um tradutor (DS4Windows, DsHidMini) que
@@ -10,8 +10,8 @@ cria um controle XInput virtual num driver de kernel. Aqui nao: o relatorio de
 entrada do DualSense e' publico e curto, e ler ele direto evita pendurar um
 driver de terceiros na maquina do usuario so' para mover um cursor.
 
-O estado sai como `XINPUT_GAMEPAD` de proposito. Todo o resto do app — modo
-mouse, grade do Big Picture, desenho da tela do controle — ja' fala essa
+O estado sai como `XINPUT_GAMEPAD` de proposito. Todo o resto do app (modo
+mouse, grade do Big Picture, desenho da tela do controle) ja' fala essa
 estrutura, e traduzir aqui na entrada deixa tudo isso funcionando sem tocar em
 uma linha sequer.
 
@@ -96,7 +96,7 @@ _HAT = {
 """O direcional vem como bussola de 0 a 7, e 8 quer dizer solto.
 
 As diagonais acendem os dois lados, que e' como o XInput representa a mesma
-coisa — assim `nav_direction` resolve diagonal do mesmo jeito nos dois controles.
+coisa: assim `nav_direction` resolve diagonal do mesmo jeito nos dois controles.
 """
 
 _RESCAN_S = 2.0
@@ -109,7 +109,7 @@ def _eixo(valor: int) -> int:
 
     O fator e' 256, e nao 258 nem 257: o byte anda de -128 a +127 em volta do
     meio, e so' 256 cabe inteiro no destino. Com 258 o extremo dava -33024, que
-    NAO cabe num `c_short` — o ctypes trunca em silencio e o numero volta
+    NAO cabe num `c_short`: o ctypes trunca em silencio e o numero volta
     positivo, entao o analogico empurrado todo para a esquerda pulava para a
     direita. O cursor ficava saltando entre os cantos da tela.
 

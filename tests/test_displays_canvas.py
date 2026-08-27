@@ -2,7 +2,7 @@
 
 O retangulo tem de acompanhar o cursor. Ja' nao acompanhava: a escala do
 desenho era recalculada a cada movimento, entao afastar uma tela aumentava os
-limites, encolhia tudo e o retangulo fugia do ponteiro — parecia que sumia.
+limites, encolhia tudo e o retangulo fugia do ponteiro: parecia que sumia.
 """
 import os
 
@@ -94,7 +94,7 @@ def test_indice_por_valor_e_nao_por_identidade():
     """QComboBox.findData compara payload Python por identidade.
 
     Procurar (1920, 1080) devolvia -1 mesmo com o item guardando exatamente
-    (1920, 1080). O seletor ficava no primeiro item — o maior modo da lista —
+    (1920, 1080). O seletor ficava no primeiro item (o maior modo da lista)
     e numa TV 4K isso oferecia "4096 x 2160 escalonada" com o painel em 3840 x
     2160 nativo. Aplicar sem perceber esticava a imagem.
     """

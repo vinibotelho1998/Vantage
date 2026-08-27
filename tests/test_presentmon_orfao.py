@@ -1,7 +1,7 @@
 """Encerrar PresentMon largado: o degrau que impedia a captura de voltar.
 
 Quando o app morre a forca, o PresentMon filho sobrevive segurando um logger de
-sistema. Esse logger, uma vez orfao, NAO pode ser removido por ninguem — nem
+sistema. Esse logger, uma vez orfao, NAO pode ser removido por ninguem, nem
 administrador, nem SYSTEM, nem pela API direta; so' o reinicio do Windows. Por
 isso o unico caminho e' pedir ao processo que saia enquanto ele ainda esta' vivo.
 """

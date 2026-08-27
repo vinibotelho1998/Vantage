@@ -1,7 +1,7 @@
 """Acoes da aba Processos: encerrar, prioridade e afinidade.
 
 Aqui o app deixa de so' olhar e passa a mexer em processo alheio, rodando
-elevado — o Windows nao vai segurar nada. Os testes cobrem justamente o que
+elevado; o Windows nao vai segurar nada. Os testes cobrem justamente o que
 nao tem desfazer: matar o processo errado, matar um processo essencial, e
 mandar uma selecao de nucleos diferente da que a pessoa escolheu. Tudo com
 dubles: nenhum processo de verdade e' tocado.
@@ -136,7 +136,7 @@ def test_pid_reaproveitado_nao_e_encerrado(falso):
     """O Windows recicla PID e a linha clicada tem ate' 2,5 s de atraso.
 
     Sem conferir o nome, o clique em Finalizar mataria o processo novo que
-    herdou o numero — o programa errado morre e ninguem entende por que.
+    herdou o numero: o programa errado morre e ninguem entende por que.
     """
     proc = falso(nome="outro.exe")
     ok, msg = P.encerrar(1234, "jogo.exe")
@@ -190,7 +190,7 @@ def test_cada_faixa_casa_com_a_classe_do_windows(chave, valor, rotulo):
 
 
 def test_prioridade_ilegivel_nao_vira_rotulo_inventado():
-    """O dialogo mostra 'agora: ...' — chutar 'Normal' faria a pessoa nao mudar nada."""
+    """O dialogo mostra 'agora: ...'; chutar 'Normal' faria a pessoa nao mudar nada."""
     assert P.rotulo_prioridade(None) == ""
     assert P.rotulo_prioridade(999) == ""
 
@@ -318,7 +318,7 @@ def test_consulta_sem_pid_nao_bloqueia_tudo():
     """0 e' o PID do kernel, entao nao pode ser o padrao do parametro.
 
     Com zero como padrao, perguntar so' pelo nome devolvia "PID 0 e 4 sao o
-    nucleo do Windows" para qualquer processo — nada poderia ser encerrado.
+    nucleo do Windows" para qualquer processo: nada poderia ser encerrado.
     """
     assert P.bloqueio_encerrar("jogo.exe") == ""
     assert P.bloqueio_encerrar("notepad.exe") == ""

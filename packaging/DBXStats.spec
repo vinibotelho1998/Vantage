@@ -5,7 +5,7 @@ ROOT = os.path.dirname(SPECPATH)
 
 # O app e' Qt Widgets puro: desenha tudo com QPainter e fala rede pelo socket do
 # Python. Sem podar, o PyInstaller carrega QML, Quick, PDF, OpenGL e o
-# rasterizador de OpenGL por software (opengl32sw.dll, 20 MB sozinho) — dezenas
+# rasterizador de OpenGL por software (opengl32sw.dll, 20 MB sozinho): dezenas
 # de megabytes que ninguem chega a abrir.
 QT_SOBRANDO = (
     "PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtQuickWidgets",

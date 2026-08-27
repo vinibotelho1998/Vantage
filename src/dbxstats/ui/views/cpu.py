@@ -20,7 +20,7 @@ _FONTE_VOLTS = {
     "rail": "rail anônimo, identificado por variação",
 }
 """De onde saiu o Vcore. A procedencia importa porque o valor anonimo foi
-escolhido por correlacao com a potencia, e nao por nome — em outra placa o mesmo
+escolhido por correlacao com a potencia, e nao por nome; em outra placa o mesmo
 indice poderia ser outro trilho."""
 
 
@@ -108,7 +108,7 @@ class CpuView(View):
 
         Sao coisas diferentes e por muito tempo esta tela mostrou uma no lugar da
         outra: o VID e' o codigo que o nucleo PEDE, e nesta maquina ele marcava
-        0,46 V com o pacote a 98 W — fisicamente impossivel. Quando o rail ainda
+        0,46 V com o pacote a 98 W, fisicamente impossivel. Quando o rail ainda
         nao foi identificado (precisa de carga variada) a linha some, porque um
         travessao aqui e' mais honesto que o numero errado que havia antes.
         """

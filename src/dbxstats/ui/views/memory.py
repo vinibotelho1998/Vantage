@@ -36,7 +36,7 @@ sem transformar o card numa lista rolante se algum SPD vier repetido."""
 
 # Uma leitura por linha, e rotulo curto. Duas medidas na mesma linha (ou rotulo
 # comprido) viram largura minima do card, e ai' a coluna vizinha sai da tela numa
-# janela estreita — a tela nao rola na horizontal.
+# janela estreita; a tela nao rola na horizontal.
 _SAUDE_ROWS = [
     ("life", "Vida restante"), ("written", "Total escrito"), ("read", "Total lido"),
     ("hours", "Ligado há"), ("temp", "Temperatura"), ("temp_max", "Temp. máxima"),
@@ -60,7 +60,7 @@ _EXPLICA_LIMPEZA = (
 )
 
 _EXPLICA_BENCH = (
-    "Grava um arquivo temporário na própria unidade, mede, e apaga ao terminar — "
+    "Grava um arquivo temporário na própria unidade, mede, e apaga ao terminar, "
     "inclusive se o teste falhar ou o app fechar no meio. Nenhum arquivo existente é "
     "tocado. O acesso é feito sem o cache do sistema, por isso os números são os do "
     "dispositivo e não os da RAM."
@@ -69,7 +69,7 @@ _EXPLICA_BENCH = (
 _EXPLICA_TAMANHO = (
     "Arquivo pequeno (256–512 MiB) cabe no cache SLC do SSD e é reescrito várias "
     "vezes dentro da fase: a escrita sai inflada, é a velocidade do cache e não a do "
-    "disco — inclusive num SSD que já está lento por ter escrito muito. Arquivo "
+    "disco, inclusive num SSD que já está lento por ter escrito muito. Arquivo "
     "grande, com mais tempo por fase, empurra mais gigabytes de uma vez e chega perto "
     "da escrita sustentada, a que aparece ao copiar um jogo inteiro; em SSD com cache "
     "folgado só dá para ver a queda com 4 GiB e 6 s por fase. Arquivo maior também "
@@ -77,7 +77,7 @@ _EXPLICA_TAMANHO = (
 )
 
 _EXPLICA_FILA = (
-    "Fila 1: uma operação por vez, cada uma esperando a anterior — é o que um jogo "
+    "Fila 1: uma operação por vez, cada uma esperando a anterior; é o que um jogo "
     "carregando textura faz. Fila maior exigiria I/O assíncrono de verdade "
     "(OVERLAPPED), que este motor não usa; oferecer QD32 aqui seria um QD1 com "
     "rótulo errado, então só QD1 é oferecido."
@@ -85,7 +85,7 @@ _EXPLICA_FILA = (
 
 _EXPLICA_SO_LEITURA = (
     "Só leitura marcada: o arquivo é gravado antes, na fase “preparando”, e essa "
-    "gravação fica fora da medição — não dá para ler o que não existe."
+    "gravação fica fora da medição; não dá para ler o que não existe."
 )
 
 
@@ -197,7 +197,7 @@ class MemoryView(View):
         box.addLayout(linha)
         # O resumo fica em linha propria e com quebra: ao lado do botao, uma
         # frase longa vira largura minima do card e empurra o vizinho para fora
-        # da tela — foi assim que a linha de cima quebrou no primeiro desenho.
+        # da tela; foi assim que a linha de cima quebrou no primeiro desenho.
         self.limpeza_status = label("", 8, QFont.Weight.DemiBold, theme.FAINT)
         self.limpeza_status.setWordWrap(True)
         box.addWidget(self.limpeza_status)
@@ -350,7 +350,7 @@ class MemoryView(View):
         cor = theme.OK if r.standby else theme.WARN
         texto = memclean.resumo(r)
         if not r.standby and r.erro_standby:
-            texto = f"{texto} — {r.erro_standby}"
+            texto = f"{texto} ({r.erro_standby})"
         self.limpeza_status.setText(texto)
         self.limpeza_status.setStyleSheet(f"color: {cor}; background: transparent;")
 
@@ -788,7 +788,7 @@ def _cor_saude(estado: str) -> str:
 def _contador(disco: dict, chave: str) -> tuple[str, str] | None:
     """Contador de erro so' aparece se a maquina de fato o reportou.
 
-    Aqui zero e' informacao boa — quer dizer "nenhum erro ate' agora". O que nao
+    Aqui zero e' informacao boa: quer dizer "nenhum erro ate' agora". O que nao
     pode e' inventar zero para um disco que nunca respondeu o contador, porque
     isso transforma "nao sei" em "esta' tudo bem".
     """

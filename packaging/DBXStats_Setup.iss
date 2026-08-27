@@ -91,7 +91,7 @@ Filename: "{tmp}\PawnIO_setup.exe"; Parameters: "-install -silent"; StatusMsg: "
 Filename: "{app}\{#MyAppExeName}"; Description: "Abrir o {#MyAppName} agora"; Flags: nowait postinstall skipifsilent shellexec
 
 [Messages]
-FinishedLabel=A instalação do [name] terminou.%n%nAbra pelo atalho na área de trabalho — ele pede permissão de administrador, que é o necessário para ler os sensores e capturar o FPS.%n%nSe as temperaturas da CPU não aparecerem, reinicie o computador: o driver de sensores (PawnIO) só carrega depois de reiniciar.
+FinishedLabel=A instalação do [name] terminou.%n%nAbra pelo atalho na área de trabalho: ele pede permissão de administrador, que é o necessário para ler os sensores e capturar o FPS.%n%nSe as temperaturas da CPU não aparecerem, reinicie o computador: o driver de sensores (PawnIO) só carrega depois de reiniciar.
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\_internal\__pycache__"
@@ -123,7 +123,7 @@ begin
 end;
 
 // Um runtime instalado e' uma pasta com o numero da versao dentro de
-// dotnet\shared\Microsoft.WindowsDesktop.App — e' assim que o proprio .NET
+// dotnet\shared\Microsoft.WindowsDesktop.App: e' assim que o proprio .NET
 // resolve o que existe na maquina, entao e' o que conferimos.
 //
 // Ja' tentei duas rotas piores: procurar dotnet.exe em System32 (ele nunca

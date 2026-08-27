@@ -154,7 +154,7 @@ class Sidebar(QWidget):
         lay.addStretch(1)
 
         # O rodape voltou, menor e por outro motivo. Ele havia saido por ser
-        # "ruido fixo num canto que ninguem olha" — e isso valia enquanto tudo
+        # "ruido fixo num canto que ninguem olha", e isso valia enquanto tudo
         # funcionava. Quando os sensores ou a captura caem, o app fica com a
         # cara de sempre e simplesmente sem numero nenhum, e nao ha' onde
         # perguntar por que. Sao dois estados e uma versao: olha-se uma vez, na
@@ -210,7 +210,7 @@ def _cabe_em_alguma_tela(x: int, y: int, w: int, h: int) -> bool:
     A posicao guardada envelhece: basta fechar o app com a janela na TV e depois
     desligar a TV para a geometria apontar para o vazio. O app abria, a janela
     nascia fora de qualquer monitor, e de fora parecia que ele tinha fechado
-    sozinho — com o processo vivo na bandeja o tempo todo.
+    sozinho, com o processo vivo na bandeja o tempo todo.
 
     Exige um pedaco de verdade visivel, e nao so' o canto: um titulo de 40 px
     espiando na borda nao da' para arrastar de volta.

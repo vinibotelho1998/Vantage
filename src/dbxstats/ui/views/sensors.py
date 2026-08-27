@@ -82,7 +82,7 @@ class SensorsView(View):
         self.table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         # A tabela e' so' leitura, mas a estrela precisa responder ao clique.
         # `cellClicked` sai do release do botao esquerdo sobre uma celula valida
-        # e nao depende do modo de selecao — por isso a lista continua sem
+        # e nao depende do modo de selecao: por isso a lista continua sem
         # destaque de linha, e o botao direito cai so' no menu de contexto.
         self.table.cellClicked.connect(self._clique)
         # O menu de contexto poe a acao em palavras para quem nao decodifica o
@@ -163,7 +163,7 @@ class SensorsView(View):
         """Chaves marcadas, sempre como lista de texto.
 
         Le com getattr porque um app de teste (ou um settings de versao antiga
-        recem-carregado) pode nao ter o campo — e favorito nenhum e' um estado
+        recem-carregado) pode nao ter o campo; e favorito nenhum e' um estado
         valido, nao um motivo para a aba inteira nao abrir.
         """
         return [str(k) for k in (getattr(self.cfg, "sensor_favorites", None) or [])]
@@ -187,7 +187,7 @@ class SensorsView(View):
         self._dirty = True
         # Redesenha na hora, com os nodes do ultimo ciclo. Esperar o proximo
         # tick do coletor (ate' 2 s no intervalo mais lento) faria o clique
-        # parecer que nao pegou, e a pessoa clicaria de novo — desmarcando.
+        # parecer que nao pegou, e a pessoa clicaria de novo, desmarcando.
         if self._nodes:
             self._build_table(self._nodes)
             self._update_values(self._nodes)
@@ -272,8 +272,8 @@ class SensorsView(View):
         """Favoritos que existem neste ciclo, na ordem em que foram marcados.
 
         A chave de um sensor que sumiu (placa desconectada, sensor renomeado
-        entre versoes do LHM) fica guardada no settings de proposito — volta
-        sozinha quando a peca voltar —, mas aqui ela e' ignorada: linha com
+        entre versoes do LHM) fica guardada no settings de proposito (volta
+        sozinha quando a peca voltar), mas aqui ela e' ignorada: linha com
         travessao eterno so' faz a tela parecer quebrada.
         """
         presentes = {n.key: n for n in nodes}

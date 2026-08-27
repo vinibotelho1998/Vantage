@@ -52,7 +52,7 @@ _CONTROLS = [
 # No DualSense os dois analogicos ficam embaixo, lado a lado, e o direcional sobe
 # para o lugar que no Xbox e' do analogico esquerdo. Desenhar sempre a silhueta
 # do Xbox obrigava o dono de um DualSense a traduzir a posicao de cada botao de
-# cabeca — justamente na tela que existe para conferir se o controle responde.
+# cabeca, justamente na tela que existe para conferir se o controle responde.
 _CONTROLS_SONY = [
     ("lt", 232, 52, 18, 11),
     ("lb", 238, 88, 20, 12),
@@ -73,7 +73,7 @@ _GLIFOS_SONY = {"a": "✕", "b": "○", "x": "□", "y": "△"}
 """As faces da Sony sao formas, nao letras.
 
 O app fala em A/B/X/Y porque e' o vocabulario do XInput, mas quem esta' com um
-DualSense na mao ve' simbolos — e "aperte A" nao ajuda a achar nada.
+DualSense na mao ve' simbolos, e "aperte A" nao ajuda a achar nada.
 """
 
 _CORES_SONY = {"a": "#7A8CDB", "b": "#E86A7C", "x": "#D48FD0", "y": "#5BC8A5"}
@@ -237,7 +237,7 @@ class ControllerDiagram(QWidget):
         """Repete a peca deslocada e escura, por baixo.
 
         E' o que da' altura: sem a sombra a peca fica pintada NO corpo, e com ela
-        fica EM CIMA do corpo — que e' como o controle e' de verdade.
+        fica EM CIMA do corpo, que e' como o controle e' de verdade.
         """
         p.save()
         p.translate(0, deslocamento)
@@ -251,7 +251,7 @@ class ControllerDiagram(QWidget):
         """Gradiente de cupula: a luz bate no alto e a esquerda, como no corpo.
 
         O foco fora do centro e' o detalhe que faz o circulo parecer redondo em
-        vez de chapado — centrado, ele viraria um alvo de tiro.
+        vez de chapado: centrado, ele viraria um alvo de tiro.
         """
         grad = QRadialGradient(centro.x() - raio * 0.35, centro.y() - raio * 0.4,
                                raio * 1.6)
@@ -305,7 +305,7 @@ class ControllerDiagram(QWidget):
                    pressed: bool, on: QColor, idle: QColor) -> None:
         """Analogico: poco fixo, e por cima o disco que se move com a mao.
 
-        O poco NAO acompanha a inclinacao de proposito — ele e' o buraco no corpo
+        O poco NAO acompanha a inclinacao de proposito: ele e' o buraco no corpo
         do controle, e ver o disco correr dentro dele e' o que mostra o quanto o
         analogico esta' deflexionado.
         """
@@ -423,8 +423,8 @@ class ControllerDiagram(QWidget):
         brilho no topo.
 
         O volume vem de tres camadas empilhadas, e nao de uma imagem pronta.
-        Desenhar em vetor mantem o projeto em MIT — arte de terceiros viria com
-        licenca e atribuicao junto — e mantem a nitidez em qualquer tamanho, que
+        Desenhar em vetor mantem o projeto em MIT (arte de terceiros viria com
+        licenca e atribuicao junto) e mantem a nitidez em qualquer tamanho, que
         num painel que escala com a janela e' o que mais aparece.
         """
         path = self._silhueta()
@@ -770,7 +770,7 @@ class GamepadView(View):
             self.aviso.setText(
                 f"{nomes}: o Windows reconhece, mas o controle só responde aqui "
                 "através do XInput. Um tradutor como DS4Windows ou o Steam "
-                "(Big Picture, com suporte a PlayStation ligado) resolve — ele "
+                "(Big Picture, com suporte a PlayStation ligado) resolve: ele "
                 "cria um controle XInput virtual que o app passa a ler.")
             self.aviso.show()
         else:
@@ -785,8 +785,8 @@ class GamepadView(View):
     def _avisar_presos(self, pad) -> None:
         """Denuncia botao travado, que e' o que move o foco sozinho.
 
-        O sintoma — o foco andando pelo Windows como se alguem batesse nas setas
-        — nao aponta para o culpado: o mapeamento manda o direcional para as
+        O sintoma (o foco andando pelo Windows como se alguem batesse nas setas)
+        nao aponta para o culpado: o mapeamento manda o direcional para as
         setas do teclado, entao um direcional preso em qualquer controle
         conectado produz exatamente isso, em qualquer aplicativo. Sem este aviso
         so' da' para descobrir desconectando um controle de cada vez.
@@ -797,7 +797,7 @@ class GamepadView(View):
             return
         nomes = ", ".join(f"{nome} (há {int(seg)} s)" for nome, seg in presos[:3])
         self.preso.setText(
-            f"⚠  {nomes} — o controle está reportando esse botão apertado sem "
+            f"⚠  {nomes}, o controle está reportando esse botão apertado sem "
             "parar. Com o modo mouse ligado é isso que faz o foco andar sozinho "
             "pelo Windows. Desconecte o controle ou solte o botão.")
         self.preso.show()

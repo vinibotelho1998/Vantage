@@ -44,7 +44,7 @@ OVERLAY_OFF_BY_DEFAULT = frozenset({"teto_watts", "mem_ctrl", "mem_clock"})
 
 O teto de potencia so' existe onde ha' sensor de limite real, e
 inventar o teto seria pior que nao mostrar; e a banda do controlador de memoria
-e' um numero de perfilamento, nao de partida — quem esta' jogando nao decide
+e' um numero de perfilamento, nao de partida; quem esta' jogando nao decide
 nada com ele. O clock das memorias fica cravado o jogo inteiro e nao explica
 queda nenhuma: quem quiser conferir liga uma vez e desliga.
 """
@@ -149,7 +149,7 @@ class Settings:
     posicao na arvore: a ordem muda quando um sensor aparece ou some, e um
     indice salvo apontaria o vizinho errado na abertura seguinte.
 
-    Chave de peca desligada continua guardada de proposito — a tela so' desenha
+    Chave de peca desligada continua guardada de proposito: a tela so' desenha
     o que existe no ciclo atual, entao o favorito volta sozinho quando o
     hardware voltar, em vez de o usuario ter que remarcar tudo.
     """
@@ -170,7 +170,7 @@ class Settings:
     diskbench_queue_depth: int = 1
     """Sempre 1: o motor usa I/O sincrono, e fila maior precisaria de OVERLAPPED.
 
-    O campo existe para o dia em que isso mudar — e para deixar registrado que o
+    O campo existe para o dia em que isso mudar, e para deixar registrado que o
     QD1 e' uma limitacao assumida, nao um esquecimento.
     """
 
@@ -182,7 +182,7 @@ class Settings:
     display_restore_on_exit: bool = True
     """Ao fechar, devolve as telas ao arranjo normal."""
     display_restore_after_game: bool = True
-    """Quando um jogo fecha, devolve as telas ao perfil padrao — abriu por onde abriu."""
+    """Quando um jogo fecha, devolve as telas ao perfil padrao: abriu por onde abriu."""
     dashboard_plots: list = field(default_factory=lambda: ["cpu", "gpu", "ram", "vram"])
     """Linhas ligadas no grafico do painel.
 
@@ -194,7 +194,7 @@ class Settings:
     """Nome do sensor de tensao que o usuario elegeu como o da memoria.
 
     Placa sem perfil no LibreHardwareMonitor publica os trilhos como
-    "Voltage #7", sem dizer o que sao. O app nao adivinha — quem sabe qual e' o
+    "Voltage #7", sem dizer o que sao. O app nao adivinha; quem sabe qual e' o
     da memoria e' quem montou a maquina, entao a escolha e' dele. Vazio
     significa nao mostrar."""
     display_off_by_default: list = field(default_factory=list)
@@ -211,7 +211,7 @@ class Settings:
     display_force_native: bool = True
     """Devolver cada tela acesa ao modo nativo na abertura.
 
-    O Windows chuta um modo conservador ao reanexar uma tela — numa TV 4K vira
+    O Windows chuta um modo conservador ao reanexar uma tela: numa TV 4K vira
     60 Hz, e num painel de 144 vira 120. Desligue se voce usa de proposito um
     modo que nao e' o nativo."""
     display_primary_default: str = ""
@@ -272,7 +272,7 @@ class Settings:
 
         `sanitize()` filtra a lista salva contra as chaves conhecidas e nunca
         acrescenta nada. Sem este passo, um redesenho do overlay estreia
-        invisivel justamente para quem ja' usa o app ha' tempo — o arquivo salvo
+        invisivel justamente para quem ja' usa o app ha' tempo; o arquivo salvo
         congela a lista da versao em que foi escrito. So' a lista intocada e'
         substituida: quem escolheu o que ver continua com a escolha.
         """
@@ -286,7 +286,7 @@ class Settings:
             # so' faz sentido onde ha' sensor de limite real, e o working set ao
             # lado da memoria privada punha dois numeros sem rotulo na mesma
             # celula. Mudar so' o padrao nao alcanca quem ja' tinha o arquivo
-            # salvo — por isso a remocao acontece aqui, uma vez.
+            # salvo, por isso a remocao acontece aqui, uma vez.
             fora = {"mem_ctrl", "teto_watts", "jogo_ram_ws"}
             self.overlay_metrics = [m for m in _as_list(self.overlay_metrics)
                                     if m not in fora]
@@ -373,7 +373,7 @@ class Settings:
 
         Este e' o unico bloco de configuracao que manda o app escrever gigabytes
         na unidade do usuario. Um settings.json editado a mao com 999999 MiB nao
-        pode virar um pedido de 1 TB de arquivo temporario — o teto aqui e' a
+        pode virar um pedido de 1 TB de arquivo temporario: o teto aqui e' a
         primeira barreira, e a checagem de espaco livre do motor e' a segunda.
         """
         from .sensors.diskbench import PROFUNDIDADES, SEGUNDOS_POR_FASE, TAMANHOS_MIB

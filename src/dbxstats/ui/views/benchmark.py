@@ -31,7 +31,7 @@ class SessaoCard(QFrame):
     """Uma partida na lista: capa, jogo, quando, e os numeros que decidem.
 
     Substitui a linha de tabela. Numa tabela todas as partidas tem o mesmo peso
-    visual e o jogo e' uma palavra no meio de seis colunas — para achar "aquela
+    visual e o jogo e' uma palavra no meio de seis colunas: para achar "aquela
     vez que o Palworld travou" era preciso ler linha por linha. Com a capa e os
     numeros grandes, a lista se percorre de relance.
     """
@@ -193,7 +193,7 @@ class BenchmarkView(View):
 
         # Duas colunas: a esquerda e' a biblioteca de partidas, a direita e' a
         # partida escolhida. Empilhado em coluna unica, o Resultado e o Relatorio
-        # ficavam abaixo da dobra — existiam, mas ninguem via.
+        # ficavam abaixo da dobra; existiam, mas ninguem via.
         colunas = QHBoxLayout()
         colunas.setSpacing(theme.scaled(theme.GAP))
         root.addLayout(colunas, 1)
@@ -350,8 +350,8 @@ class BenchmarkView(View):
     def _sessao_escolhida(self) -> None:
         """Mostra a sessao escolhida nos cards de resultado.
 
-        A partida nao guarda frame a frame — sao horas de jogo, e caberia em
-        centenas de megabytes —, entao os graficos de frametime continuam sendo
+        A partida nao guarda frame a frame (sao horas de jogo, e caberia em
+        centenas de megabytes), entao os graficos de frametime continuam sendo
         da corrida cronometrada. O que a sessao tem sao os numeros, e e' isso que
         aparece aqui.
         """
@@ -384,7 +384,7 @@ class BenchmarkView(View):
     def _limpar_resultado(self) -> None:
         """Zera tudo que descreve uma partida: KPIs, tabelas, graficos e texto.
 
-        Um painel so' esquecido ja' basta para enganar — o card de Resultado
+        Um painel so' esquecido ja' basta para enganar: o card de Resultado
         continuava dizendo "Palworld, 138820 frames" com a lista vazia.
         """
         for chave in ("avg", "low1", "ft", "stutter", "smooth"):
@@ -455,7 +455,7 @@ class BenchmarkView(View):
         self.aviso_sessao.setText(f"'{nome}' removida.")
 
     def _excluir_todas(self) -> None:
-        """Apaga o historico inteiro — este sim pergunta antes.
+        """Apaga o historico inteiro, este sim pergunta antes.
 
         Aqui o estrago e' de todas as partidas ja' gravadas, e nao ha' desfazer:
         o arquivo e' reescrito na hora.
@@ -478,7 +478,7 @@ class BenchmarkView(View):
         """Grava o historico, redesenha a tabela e esvazia o que ficou orfao.
 
         A limpeza mora aqui, e nao em `_fill_sessoes`, porque aquele metodo
-        tambem roda quando uma partida ACABA de ser gravada — limpar la' apagaria
+        tambem roda quando uma partida ACABA de ser gravada: limpar la' apagaria
         da tela o resultado que o usuario acabou de produzir.
 
         `_fill_sessoes` bloqueia os sinais da tabela enquanto a redesenha, entao
@@ -639,7 +639,7 @@ def _celulas(s: dict) -> list[str]:
 def _texto_sessao(s: dict) -> str:
     """Relatorio de uma partida inteira, em texto, pronto para copiar."""
     minutos = (s.get("duracao_s") or 0) / 60.0
-    linhas = [f"{s.get('game', 'jogo')} — {s.get('quando', '')}", ""]
+    linhas = [f"{s.get('game', 'jogo')} ({s.get('quando', '')})", ""]
     linhas.append(_linha("Duração", f"{minutos:.0f} min"))
     linhas.append(_linha("Frames", str(s.get("frames", 0))))
     linhas.append(_linha("FPS médio", f"{s.get('fps_avg', 0):.1f}"))
@@ -676,7 +676,7 @@ def _texto_relatorio(result: dict) -> str:
     m = result["metrics"]
     sistema = result.get("system") or {}
     linhas = [
-        "DBX STATUS — relatório de benchmark",
+        "DBX STATUS: relatório de benchmark",
         f"  jogo: {result.get('game') or '—'}",
     ]
     if result.get("quando"):

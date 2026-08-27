@@ -1,6 +1,6 @@
 """Teste de velocidade da conexao, no espirito do Speedtest.
 
-Tres medidas em sequencia — latencia, download e upload — cada uma com varios
+Tres medidas em sequencia (latencia, download e upload) cada uma com varios
 fluxos em paralelo. Fluxo unico nao serve para link rapido: a janela do TCP e o
 RTT limitam um socket sozinho bem antes do limite da banda, e o resultado sai a
 metade do que a assinatura entrega.
@@ -24,8 +24,8 @@ com ressalva.
 
 E a ORDEM dessa fila nao e' mais chutada: antes de medir, todas as casas sao
 sondadas em paralelo e a fila e' montada pela latencia observada, como faz o
-Ookla. Custa menos de 10 KB e uns dois decimos de segundo — ruido perto do quase
-1 GB que o teste move — e e' a diferenca entre medir por um servidor a 16 ms e um
+Ookla. Custa menos de 10 KB e uns dois decimos de segundo (ruido perto do quase
+1 GB que o teste move) e e' a diferenca entre medir por um servidor a 16 ms e um
 a 134 ms. Empate mantem a ordem da semente, e casa que nao respondeu vai para o
 fim da fila em vez de sumir: sonda perdida nao e' prova de servidor morto.
 
@@ -35,23 +35,23 @@ para de dizer "via fulano" mostrando um numero de upload que veio de outro lugar
 
 A lista de servidores tem tres camadas. A semente embutida (Linode, Cachefly,
 Cloudflare, Hetzner) e' infraestrutura de nuvem e CDN, com hostname estavel ha'
-anos — nunca envelhece como servidor de voluntario. Em cima dela entra a lista
+anos; nunca envelhece como servidor de voluntario. Em cima dela entra a lista
 publica do LibreSpeed, guardada em disco com ETag e validade de sete dias e
 buscada em SEGUNDO PLANO: o teste de hoje anda com o que ja' esta' no disco e a
 busca so' enriquece o de amanha. Medido, a lista publica nao tem uma unica casa
 no Brasil (a mais perto e' Atlanta, a 134 ms), entao ela entra como acrescimo e
-jamais como substituta da semente — escolher automaticamente dela pioraria o app
+jamais como substituta da semente: escolher automaticamente dela pioraria o app
 em oito vezes. Por cima de tudo, o usuario pode FIXAR um servidor; a escolha fica
 gravada e a fila automatica continua atras dela como reserva.
 
 Upload tem um defeito de sistema operacional embutido, e o conserto mora aqui. O
 Windows auto-ajusta a janela de RECEPCAO e deixa a de ENVIO cravada em 64 KB,
-entao cada fluxo de subida fica limitado a SO_SNDBUF/RTT — 32,8 Mbps por fluxo a
+entao cada fluxo de subida fica limitado a SO_SNDBUF/RTT: 32,8 Mbps por fluxo a
 16 ms, 131 Mbps com quatro fluxos, num link que sobe 1 Gbps. Medido nesta
 maquina: 118,5 Mbps de upload contra 775 de download, com o MESMO codigo e o
 mesmo RTT. Pedir SO_SNDBUF de 4 MB no socket cru, antes do TLS, levou os mesmos
 quatro fluxos a mais de 900 Mbps. Aumentar o numero de fluxos tambem "resolveria"
-— e' o que o Ookla esconde atras de "Conexoes: Multiplo" —, mas so' repete a
+(e' o que o Ookla esconde atras de "Conexoes: Multiplo"), mas so' repete a
 janela quebrada mais vezes; o conserto certo e' a janela.
 
 Numero de upload alto merece desconfianca, e o modulo desconfia por conta
@@ -59,27 +59,27 @@ propria. Duas contas acompanham a medida: o teto da JANELA (buffer concedido de
 verdade pelo sistema x fluxos / RTT) e o teto do PROCESSO (bytes movidos dividido
 pelo tempo de CPU que os fluxos gastaram, que e' o que o Python consegue empurrar
 com um nucleo). Se o valor medido encostar em qualquer um dos dois, ele deixa de
-ser "a velocidade da internet" e passa a ser o teto do app — e a tela diz isso,
+ser "a velocidade da internet" e passa a ser o teto do app; e a tela diz isso,
 com o numero do teto junto. Numero honesto com ressalva vale mais que numero
 bonito e falso.
 
-Falha de uma fase nao apaga as outras, e cada numero e' publicado assim que fecha
-— o download aparece na tela antes de o upload comecar. O contrario disso, que e'
+Falha de uma fase nao apaga as outras, e cada numero e' publicado assim que fecha:
+o download aparece na tela antes de o upload comecar. O contrario disso, que e'
 segurar tudo e no fim virar um "erro" so', joga fora medida boa e faz o usuario
 repetir um teste que ja' tinha dado certo pela metade.
 
 Duas regras seguram as duas maneiras conhecidas de este modulo mentir sem
-quebrar. A primeira: numero que nao foi medido nunca vira zero — abaixo de
+quebrar. A primeira: numero que nao foi medido nunca vira zero: abaixo de
 `PISO_MBPS` a resposta e' travessao e erro honesto, porque "0,0 Mbps" com badge
 verde e' a mentira em que o usuario acredita. A segunda: reabrir conexao tem
-piso de volume — resposta 200 sem corpo nao levanta excecao nenhuma, e sem esse
+piso de volume: resposta 200 sem corpo nao levanta excecao nenhuma, e sem esse
 piso o app viraria uma rajada de reconexoes contra o provedor, medindo a propria
 velocidade de reconectar.
 
 Cancelar e' um empurrao, nao uma espera. Quem manda parar e' a thread da
 interface, entao ela nao pode ficar presa esperando um `read()` voltar: os
 sockets sao derrubados pelo descritor, e cada um deles e' registrado desde o
-connect — fluxo parado no primeiro byte tambem precisa morrer, senao ele
+connect: fluxo parado no primeiro byte tambem precisa morrer, senao ele
 atravessa a fronteira da fase e consome link durante a medicao seguinte.
 
 Nada aqui depende do Qt. O motor roda em thread propria e quem desenha le
@@ -114,13 +114,13 @@ class Provedor(NamedTuple):
 
     `cache_buster` decide se a URL leva `?nocache=`. Quando fica em None, a regra
     e' "so' em URL que ja' tem querystring", porque endpoint dinamico foi feito
-    para ler parametro e servidor de arquivo estatico nao — o da Hetzner, por
+    para ler parametro e servidor de arquivo estatico nao: o da Hetzner, por
     exemplo, derruba a conexao sem responder quando ve' uma querystring, e era
     exatamente isso que quebrava o servidor reserva de antes.
 
     `envio` e' o endereco de UPLOAD da mesma casa, quando ela tem um. Guardar os
     dois juntos e' o que permite a escolha automatica preferir quem mede as duas
-    fases no mesmo lugar — sem isso a tela anunciava "via fulano" com um numero de
+    fases no mesmo lugar; sem isso a tela anunciava "via fulano" com um numero de
     upload que tinha vindo de outro servidor.
 
     `nome` e' o rotulo humano ("Linode Sao Paulo"); sem ele a tela mostra o
@@ -146,7 +146,7 @@ class Provedor(NamedTuple):
         return _porta(self.url)
 
     def pedido(self) -> str:
-        """URL desta tentativa — nova a cada reabertura, quando cabe nocache."""
+        """URL desta tentativa, nova a cada reabertura, quando cabe nocache."""
         quer = ("?" in self.url) if self.cache_buster is None else self.cache_buster
         return _sem_cache(self.url) if quer else self.url
 
@@ -170,29 +170,29 @@ CANDIDATOS = (
 )
 """Semente embutida: as casas que o app conhece sem perguntar a ninguem.
 
-Esta ordem so' vale quando a sondagem nao conseguir opinar — na vida normal a
+Esta ordem so' vale quando a sondagem nao conseguir opinar; na vida normal a
 fila e' remontada por latencia medida. Ela e' o PISO de qualidade: infraestrutura
 de nuvem e CDN, hostname estavel ha' anos, nada de servidor de voluntario que
 some no mes seguinte.
 
 1. Linode Sao Paulo: 597 Mbps de descida e 931 de subida, 16 ms. E' um LibreSpeed
-   inteiro na RAIZ — `/garbage.php?ckSize=N`, `/empty.php` e `/getIP.php`
-   respondem, `/backend/*` da' 404 —, entao download e upload saem da MESMA casa
+   inteiro na RAIZ (`/garbage.php?ckSize=N`, `/empty.php` e `/getIP.php`
+   respondem, `/backend/*` da' 404), entao download e upload saem da MESMA casa
    e o tamanho e' sob demanda, sem depender de um arquivo fixo de 100 MB. So' em
    HTTP de proposito: o certificado deles nao cobre este hostname, e medir byte
    nao precisa de TLS.
-2. Cachefly: 814 Mbps e 15,3 ms, o melhor download medido — e anycast, ou seja,
+2. Cachefly: 814 Mbps e 15,3 ms, o melhor download medido; e anycast, ou seja,
    caminho de rede diferente de todos os outros, que e' o que se quer numa fila.
    Nao tem endpoint de upload; serve so' para descer.
 3. Cloudflare: 757 de descida e 875 de subida no mesmo host, colo GRU. Fica atras
    porque o 429 por VOLUME castiga justamente quem testa varias vezes. Cuidado
-   medido no `bytes=`: 100000000 devolve HTTP 403 e 90000000 responde 200 — o
+   medido no `bytes=`: 100000000 devolve HTTP 403 e 90000000 responde 200: o
    valor esta' a um passo do precipicio, nao aumente sem testar.
 4. Hetzner Ashburn: prova de vida internacional. Mede ~72 Mbps num link de 600,
    entao entra com `perto=False` e o resultado sai com ressalva. A URL vai limpa:
    com querystring o servidor derruba a conexao sem responder.
 
-Fora da semente de proposito: Vultr SP (mede 171 Mbps num link de 900 — quatro
+Fora da semente de proposito: Vultr SP (mede 171 Mbps num link de 900, quatro
 vezes abaixo dos outros, medicao errada com cara de medicao boa) e os espelhos
 universitarios, que limitam por conexao e mudam de URL a cada release.
 """
@@ -205,15 +205,15 @@ PROVEDORES_UPLOAD = tuple(_como_upload(p) for p in CANDIDATOS if p.envio)
 
 Sai da mesma semente: toda casa que anuncia `envio` entra aqui automaticamente,
 entao acrescentar um servidor completo passou a ser uma linha so'. Antes desta
-fila o upload nao tinha plano B nenhum — um tropeco da Cloudflare apagava o
+fila o upload nao tinha plano B nenhum: um tropeco da Cloudflare apagava o
 numero inteiro.
 """
 
 FLUXOS = 4
 """Fluxos por fase. Quatro bastam DEPOIS do conserto da janela de envio.
 
-Antes dele a taxa era rigorosamente linear no numero de fluxos — 1 fluxo 29 Mbps,
-4 fluxos 119, 16 fluxos 463, sempre 24-29 Mbps por fluxo —, e essa linearidade e'
+Antes dele a taxa era rigorosamente linear no numero de fluxos (1 fluxo 29 Mbps,
+4 fluxos 119, 16 fluxos 463, sempre 24-29 Mbps por fluxo), e essa linearidade e'
 a assinatura de limite POR CONEXAO, nao de link cheio. Subir para 16 conexoes
 "resolveria" o numero sem consertar nada, ao custo de uma rajada contra o
 provedor: e' o que o Ookla esconde atras de "Conexoes: Multiplo". Com SO_SNDBUF
@@ -226,7 +226,7 @@ Com 4 MB por fluxo ficam ate' 16 MB entregues ao socket que o servidor ainda nao
 confirmou. Em regime isso e' um offset constante e cancela na subtracao das duas
 marcas (medido: +0,3% de erro na janela usada aqui), mas numa janela de 0,5 s o
 mesmo excesso passa a mentir +323%. Quem encurtar isto sem encurtar o buffer faz
-o upload marcar quatro vezes acima do real — e o app tem uma ressalva propria
+o upload marcar quatro vezes acima do real; e o app tem uma ressalva propria
 para delatar exatamente esse caso, ver `FOLGA_DE_BUFFER`.
 """
 AQUECIMENTO_S = 1.5
@@ -234,7 +234,7 @@ AQUECIMENTO_S = 1.5
 
 Folgado de proposito: o slow start acaba em ~300 ms com RTT de 16 ms, entao 1,5 s
 e' cinco vezes o necessario. A folga aqui e' o que garante que a medicao comece
-com o buffer de envio ja' cheio — que e' a condicao para o excesso contado virar
+com o buffer de envio ja' cheio, que e' a condicao para o excesso contado virar
 offset constante e cancelar.
 """
 JANELA_MINIMA_S = 0.5
@@ -247,7 +247,7 @@ PEDACO_UPLOAD = 60_000_000
 """Corpo prometido em cada POST.
 
 Generoso de proposito: sobrar nao custa nada (a fase acaba e o envio e' abortado
-no meio), mas faltar custa um handshake TLS novo a cada pedaco — num link de
+no meio), mas faltar custa um handshake TLS novo a cada pedaco: num link de
 upload rapido esse vaivem apareceria como buraco na medicao.
 
 Este valor foi confirmado com o buffer ja' corrigido: e' a configuracao em que a
@@ -259,7 +259,7 @@ SNDBUF_UPLOAD = 4 << 20
 """Buffer de ENVIO pedido ao sistema, em bytes, so' na fase de upload.
 
 O Windows entrega 65536 e nao mexe mais nisso; o teto por fluxo vira SNDBUF/RTT,
-e nao a banda do link. A 16 ms de RTT isso da' 32,8 Mbps por fluxo — com quatro
+e nao a banda do link. A 16 ms de RTT isso da' 32,8 Mbps por fluxo, com quatro
 fluxos, os 118,5 Mbps que este modulo media num link que sobe 1 Gbps. A janela
 deixa de morder quando o buffer passa de `taxa_do_link x RTT / fluxos`, que aqui
 e' 519 KB; 4 MB da' folga de oito vezes e some com o gargalo. Medido: 1 fluxo com
@@ -301,10 +301,10 @@ PORTA_TLS = 443
 
 SONDAS_DA_ESCOLHA = 2
 """Connects por candidato na varredura. Vale o MINIMO, e minimo de duas amostras
-ja' separa 15 ms de 134 ms — que e' a unica pergunta desta fase."""
+ja' separa 15 ms de 134 ms, que e' a unica pergunta desta fase."""
 TRABALHADORES_SONDA = 16
 """Sondas em paralelo. Latencia e' barata: 22 casas com 4 connects cada sairam em
-poucos segundos e menos de 10 KB somados — ruido perto do ~1 GB que o teste move."""
+poucos segundos e menos de 10 KB somados, ruido perto do ~1 GB que o teste move."""
 PRAZO_DA_ESCOLHA_S = 2.5
 """Teto de relogio da varredura inteira. Estourou, decide com o que ja' chegou."""
 FILA_MAXIMA = 4
@@ -317,7 +317,7 @@ CANDIDATOS_MAXIMOS = 24
 """Teto de casas sondadas. A varredura e' barata, mas nao e' de graca."""
 
 LISTA_URL = "https://librespeed.org/backend-servers/servers.json"
-"""Lista publica do LibreSpeed. Medida: 6.115 bytes, uma requisicao, 22 casas —
+"""Lista publica do LibreSpeed. Medida: 6.115 bytes, uma requisicao, 22 casas;
 e NENHUMA no Brasil (a mais perto e' Atlanta, a 134,1 ms). Por isso ela enriquece
 a semente e nunca a substitui: escolher automaticamente dela daria um servidor
 oito vezes pior do que o que o app ja' tem embutido."""
@@ -336,17 +336,17 @@ PISO_MBPS = 0.05
 A tela escreve uma casa decimal: tudo abaixo disto vira "0.0 Mbps" com badge
 verde de medicao concluida. Tarpit de anti-abuso, portal cativo, link agonizante
 e conexao travada que solta uns bytes depois do aquecimento caem todos nessa
-faixa — e "0.0 Mbps" com cara de medicao boa e' pior que erro nenhum, porque o
+faixa; e "0.0 Mbps" com cara de medicao boa e' pior que erro nenhum, porque o
 usuario acredita no numero e vai reclamar da operadora.
 """
 BYTES_MINIMOS_POR_ABERTURA = 1 << 20
 """Volume que uma abertura precisa entregar para valer como entrega.
 
 Resposta 200 com corpo vazio (Content-Length: 0, um 204, ou o objeto cortado por
-limite de volume — o que a Cloudflare faz) nao levanta excecao nenhuma. Sem este
+limite de volume, o que a Cloudflare faz) nao levanta excecao nenhuma. Sem este
 piso o fluxo reabria na mesma hora, para sempre, e o app virava uma tempestade de
 conexoes TCP+TLS contra o provedor: milhoes de aberturas por fase, fabricando
-sozinho o HTTP 429 por volume que a fila existe para evitar — e quatro threads em
+sozinho o HTTP 429 por volume que a fila existe para evitar; e quatro threads em
 giro de CPU maxima dentro de um app de MONITORAMENTO contaminam os proprios
 numeros da tela. Pior: quando o corpo era minusculo em vez de vazio (pagina de
 erro de proxy, portal cativo), os bytes eram contados e o "Mbps" publicado media
@@ -356,7 +356,7 @@ INTERVALO_MINIMO_ABERTURA_S = 0.02
 """Piso de tempo entre duas aberturas do mesmo fluxo.
 
 Rede de peito aberto: o arquivo de 90 MB dos provedores demora mais de um segundo
-por abertura, entao isto nunca morde uma medicao de verdade — so' segura quem
+por abertura, entao isto nunca morde uma medicao de verdade; so' segura quem
 devolve migalha rapido demais.
 """
 
@@ -377,12 +377,12 @@ _CABECALHOS = {"User-Agent": "DBXStats/3.0", "Cache-Control": "no-cache",
 
 
 def mbps(transferido: float, segundos: float) -> float | None:
-    """Megabits por segundo — a unidade em que a operadora vende o plano.
+    """Megabits por segundo, a unidade em que a operadora vende o plano.
 
     Byte vira bit e o divisor e' 1e6, nao 2^20: comparar com "300 mega" da conta
     de luz da internet so' faz sentido na escala decimal.
 
-    Devolve None — nunca 0.0 — quando nao houve transferencia ou quando o
+    Devolve None (nunca 0.0) quando nao houve transferencia ou quando o
     resultado nao alcanca o piso de exibicao. Este era o buraco central do
     modulo: `round(x, 2)` transformava qualquer coisa abaixo de ~625 B/s em
     exatamente 0.0, e esse zero seguia o caminho inteiro (fase pronta, erro
@@ -406,14 +406,14 @@ def _medivel(taxa: float | None) -> bool:
 
 def janela_util(amostras: list[tuple[float, int]], aquecimento: float = AQUECIMENTO_S,
                 janela_minima: float = JANELA_MINIMA_S) -> tuple[float, int] | None:
-    """(segundos, bytes) do trecho ja' aquecido — o pedaco que vale medir.
+    """(segundos, bytes) do trecho ja' aquecido, o pedaco que vale medir.
 
     A conta usa so' a primeira e a ultima marca uteis: entre elas o total e'
     exato, e qualquer media de fatias intermediarias so' adicionaria ruido de
     agendamento.
 
     Quando o teste foi curto demais para sobrar algo depois do aquecimento, vale
-    a serie inteira — numero conservador e' melhor que travessao.
+    a serie inteira: numero conservador e' melhor que travessao.
 
     Existe separada de `taxa_estavel` porque o VOLUME da janela responde a outra
     pergunta, tao importante quanto a taxa: se o que foi transferido cabe dentro
@@ -440,7 +440,7 @@ def taxa_estavel(amostras: list[tuple[float, int]], aquecimento: float = AQUECIM
 
     Nada transferido devolve None, e "nada" inclui o byte solto: a guarda em
     bytes (`b1 <= b0`) so' pega o caso exato de zero, e quem barra o resto e' o
-    piso de `mbps()` — um unico byte em seis segundos nao e' uma medicao lenta,
+    piso de `mbps()`: um unico byte em seis segundos nao e' uma medicao lenta,
     e' uma medicao que nao aconteceu.
     """
     janela = janela_util(amostras, aquecimento, janela_minima)
@@ -455,12 +455,12 @@ def teto_da_janela(sndbuf: int, ping_ms: float | None, fluxos: int) -> float | N
 
     `buffer x 8 x fluxos / RTT`: enquanto o outro lado nao confirma, o fluxo nao
     pode ter mais que um buffer em voo, entao o buffer dividido pela ida e volta
-    e' um teto duro — independente da banda contratada.
+    e' um teto duro, independente da banda contratada.
 
     Com o buffer padrao do Windows (65536) e 16 ms isso da' 131 Mbps para quatro
     fluxos, que era exatamente o que este modulo media. Serve para duas coisas:
     dizer na tela quanto vale o teto e delatar o dia em que o `setsockopt` nao
-    pegar — porque ai' o numero volta a ser baixo, e calado.
+    pegar: porque ai' o numero volta a ser baixo, e calado.
     """
     if not sndbuf or not ping_ms or ping_ms <= 0 or fluxos <= 0:
         return None
@@ -473,11 +473,11 @@ def teto_do_processo(bytes_movidos: int, cpu_s: float) -> float | None:
     Nao e' estimativa: sao os bytes que os fluxos moveram divididos pelo tempo de
     CPU que essas mesmas threads gastaram para move-los. Como o interpretador so'
     executa bytecode de uma thread por vez, "um nucleo" e' o teto natural do
-    caminho em Python — o que roda dentro do OpenSSL e do kernel de fato escapa
+    caminho em Python: o que roda dentro do OpenSSL e do kernel de fato escapa
     da trava, entao o numero e' CONSERVADOR: o teto real e' um pouco maior.
 
     Medido nesta maquina: 0,59 s de CPU por GB com blocos de 64 KB (~13 Gbps) e
-    3,01 s por GB com blocos de 8 KB (~2,7 Gbps) — cinco vezes mais caro pelo
+    3,01 s por GB com blocos de 8 KB (~2,7 Gbps), cinco vezes mais caro pelo
     mesmo resultado, e num app de MONITORAMENTO essa CPU contamina os proprios
     numeros da tela. Dai' o bloco de 64 KB na conexao de upload.
     """
@@ -487,11 +487,11 @@ def teto_do_processo(bytes_movidos: int, cpu_s: float) -> float | None:
 
 
 def taxa_instantanea(amostras: list[tuple[float, int]], janela: float = 1.0) -> float | None:
-    """Taxa dos ultimos instantes — e' o numero que corre na tela enquanto mede.
+    """Taxa dos ultimos instantes: e' o numero que corre na tela enquanto mede.
 
     Vale a mesma regra do numero fechado: sem byte novo na janela nao existe
     parcial. Com `b1 < b0` (e nao `<=`), nenhum byte chegado devolvia 0.0 e o
-    tile escrevia "0.0 Mbps · medindo…" durante toda a espera do primeiro byte —
+    tile escrevia "0.0 Mbps · medindo…" durante toda a espera do primeiro byte,
     um numero inventado no lugar do "ainda nao sei".
     """
     if len(amostras) < 2:
@@ -516,7 +516,7 @@ def latencia(medidas_ms: list[float]) -> tuple[float | None, float | None]:
 
     O jitter e' a MEDIANA da diferenca entre sondas seguidas, e nao a media. Com
     meia duzia de sondas, um unico connect que caiu numa fila (16, 16, 17, 40,
-    16 ms — acontece o tempo todo) puxava a media para 10 ms e pintava de instavel
+    16 ms, acontece o tempo todo) puxava a media para 10 ms e pintava de instavel
     uma conexao que oscila 1 ms. A mediana descreve a oscilacao tipica, que e' o
     que a pessoa sente.
     """
@@ -601,7 +601,7 @@ def _absoluta(base: str, caminho: str) -> str:
 
     Dois detalhes medidos na lista real: o campo `server` as vezes vem sem
     esquema ("//host/path") e precisa ser normalizado, e o caminho pode ser na
-    raiz ou em /backend conforme a instalacao — por isso a juncao e' relativa ao
+    raiz ou em /backend conforme a instalacao: por isso a juncao e' relativa ao
     que o proprio servidor declarou, e nao um caminho chutado por nos.
     """
     base = base.strip()
@@ -617,7 +617,7 @@ def provedores_da_lista(itens) -> tuple[Provedor, ...]:
 
     Entrada malformada e' descartada em silencio, nao propagada: a lista vem da
     internet e nao ha' nada que possa ser feito com um item quebrado alem de
-    ignora-lo. Tudo que vem de fora entra com `perto=False` — nao ha' um campo
+    ignora-lo. Tudo que vem de fora entra com `perto=False`: nao ha' um campo
     confiavel de pais na lista, e prometer proximidade que nao existe seria
     justamente o tipo de mentira que este modulo combate.
     """
@@ -642,12 +642,12 @@ def provedores_da_lista(itens) -> tuple[Provedor, ...]:
 
 
 def lista_em_cache() -> tuple[Provedor, ...]:
-    """A lista publica como ela esta' no disco AGORA — sem tocar na rede.
+    """A lista publica como ela esta' no disco AGORA, sem tocar na rede.
 
     O teste de hoje nunca espera a lista: ele anda com o que ja' foi guardado, e a
     busca em segundo plano so' enriquece o de amanha. Sem essa regra, um servidor
     de lista lento seguraria a fase de latencia inteira para acrescentar
-    candidatos que, medidos, ficam a 134 ms — ou seja, para piorar.
+    candidatos que, medidos, ficam a 134 ms, ou seja, para piorar.
     """
     return provedores_da_lista(ler_estado().get("lista") or [])
 
@@ -675,7 +675,7 @@ def atualizar_lista(rede, url: str = LISTA_URL, timeout: float = LISTA_TIMEOUT_S
     estado = ler_estado()
     try:
         codigo, corpo, etag = rede.texto(url, timeout, estado.get("lista_etag"))
-    except Exception as e:  # noqa: BLE001 — lista e' bonus, nunca motivo de falha
+    except Exception as e:  # noqa: BLE001: lista e' bonus, nunca motivo de falha
         _log.debug("lista pública não veio: %s", e)
         return 0
     if codigo == 304:
@@ -720,7 +720,7 @@ def _sem_repetir(provedores) -> tuple[Provedor, ...]:
 def _por_latencia(provedores, latencias: dict):
     """Ordena pela ida e volta medida, com quem nao respondeu no fim.
 
-    `sorted` e' estavel, entao empate — inclusive o empate de todo mundo mudo —
+    `sorted` e' estavel, entao empate (inclusive o empate de todo mundo mudo)
     preserva a ordem da semente. Quem nao respondeu NAO e' descartado: sonda
     perdida pode ser um pacote azarado, e uma fila vazia mede menos que uma fila
     duvidosa.
@@ -744,7 +744,7 @@ def escolher(download, upload, latencias: dict, fixado: str | None = None,
 
     A regra, nesta ordem:
 
-    1. servidor fixado pelo usuario, se ele fixou um — vontade declarada ganha de
+    1. servidor fixado pelo usuario, se ele fixou um: vontade declarada ganha de
        medicao, sempre; a fila automatica continua atras, como reserva;
     2. entre os que responderam, quem tem download E upload no mesmo host;
     3. entre esses, a menor latencia;
@@ -778,7 +778,7 @@ def escolher(download, upload, latencias: dict, fixado: str | None = None,
 
 
 class RespostaMagra(OSError):
-    """O servidor respondeu, aceitou a conexao — e nao entregou dados de medir.
+    """O servidor respondeu, aceitou a conexao; e nao entregou dados de medir.
 
     Corpo vazio, 204, objeto cortado por limite de volume, pagina de portal
     cativo: nada disso levanta excecao, e sem um nome proprio esse caso ou virava
@@ -813,7 +813,7 @@ def mensagem_de_erro(exc: BaseException) -> str:
     if isinstance(motivo, TimeoutError) or isinstance(exc, TimeoutError):
         return "o servidor de teste não respondeu a tempo"
     if isinstance(motivo, ssl.SSLError) or isinstance(exc, ssl.SSLError):
-        return ("a conexão segura com o servidor de teste falhou — antivírus ou proxy "
+        return ("a conexão segura com o servidor de teste falhou: antivírus ou proxy "
                 "da rede pode estar no meio do caminho")
     if isinstance(motivo, ConnectionError) or isinstance(exc, ConnectionError):
         return "a conexão com o servidor de teste caiu no meio do teste"
@@ -855,33 +855,33 @@ def _normalizar(falhas) -> list[tuple[str, BaseException, bool]]:
 
 
 def _fila_muda(tentados: int, exc: BaseException) -> str:
-    """Frase para o caso em que NINGUEM respondeu — o mais mal contado de todos.
+    """Frase para o caso em que NINGUEM respondeu, o mais mal contado de todos.
 
     N casas independentes, em redes diferentes, caladas ao mesmo tempo e' a prova
     mais forte que existe de que o problema esta' do lado de ca'. O texto antigo
     juntava essa evidencia e jogava a conclusao fora: "nenhum dos 4 servidores
-    respondeu — linode: o servidor de teste nao respondeu a tempo", no singular,
+    respondeu, linode: o servidor de teste nao respondeu a tempo", no singular,
     apontando o dedo justamente para quem nao tem culpa.
     """
     motivo = getattr(exc, "reason", exc)
     if isinstance(motivo, socket.gaierror) or isinstance(exc, socket.gaierror):
         return (f"sem conexão: não consegui nem resolver o endereço de nenhum dos "
-                f"{tentados} servidores de teste — confira se a internet está de pé "
+                f"{tentados} servidores de teste: confira se a internet está de pé "
                 f"(ou se o DNS da rede responde) e tente de novo")
     if isinstance(motivo, TimeoutError) or isinstance(exc, TimeoutError):
         return (f"os {tentados} servidores de teste, em redes independentes, não "
-                f"responderam a tempo — quando todos falham juntos o problema costuma "
+                f"responderam a tempo: quando todos falham juntos o problema costuma "
                 f"estar na sua conexão; confira o Wi-Fi ou o cabo e tente de novo")
-    return (f"não consegui falar com nenhum dos {tentados} servidores de teste — "
+    return (f"não consegui falar com nenhum dos {tentados} servidores de teste; "
             f"confira a conexão e tente de novo ({mensagem_de_erro(exc)})")
 
 
 def erro_da_cadeia(falhas, tentados: int) -> str:
-    """Uma frase para a fila INTEIRA de servidores — e a conclusao certa dela.
+    """Uma frase para a fila INTEIRA de servidores; e a conclusao certa dela.
 
     Guardar so' a ultima falha era o primeiro defeito: com a Cloudflare em 429 e a
     reserva caindo por RemoteDisconnected, o que sobrava na tela era "a conexao
-    caiu", e o 429 — a unica informacao acionavel — morria pelo caminho.
+    caiu", e o 429 (a unica informacao acionavel) morria pelo caminho.
 
     O segundo defeito era a frase unica. "Nenhum dos N servidores respondeu"
     aparecia tambem quando todos responderam 404, quando todos entregaram bytes e
@@ -906,14 +906,14 @@ def erro_da_cadeia(falhas, tentados: int) -> str:
         return frase
     if isinstance(exc, urllib.error.HTTPError):
         return (f"os {tentados} servidores de teste responderam, mas nenhum aceitou "
-                f"medir — {host}: {frase}")
+                f"medir, {host}: {frase}")
     if isinstance(exc, RespostaMagra):
         return (f"os {tentados} servidores de teste aceitaram a conexão e não enviaram "
-                f"dados para medir — se você está numa rede pública, pode haver um "
+                f"dados para medir: se você está numa rede pública, pode haver um "
                 f"portal de login no caminho; tente de novo em alguns minutos")
     if entregou or any(e for _, _, e in itens):
         return (f"os {tentados} servidores de teste enviaram dados, mas as "
-                f"transferências caíram no meio em todos — o problema está na sua "
+                f"transferências caíram no meio em todos: o problema está na sua "
                 f"conexão, e não neles; confira o Wi-Fi ou o cabo e tente de novo")
     return _fila_muda(tentados, exc)
 
@@ -935,7 +935,7 @@ def _recusa_definitiva(exc: BaseException) -> bool:
 def _sem_cache(url: str) -> str:
     """Impede que um proxy no caminho sirva o arquivo do cache dele.
 
-    Cache no meio do caminho nao mede a internet, mede a rede da casa — e o
+    Cache no meio do caminho nao mede a internet, mede a rede da casa; e o
     numero sai absurdamente alto sem nenhum aviso de que e' mentira.
 
     Quem decide se isso e' aplicavel e' o Provedor: em servidor de arquivo
@@ -992,7 +992,7 @@ class _Rodada(NamedTuple):
     """O que UMA tentativa num servidor produziu.
 
     `entregou` separa "a casa nao respondeu" de "a casa mandou bytes e a
-    transferencia caiu" — sem isso a frase final culpa o servidor quando a
+    transferencia caiu": sem isso a frase final culpa o servidor quando a
     evidencia aponta para a conexao de quem mede.
     """
 
@@ -1046,7 +1046,7 @@ class _Trilho:
     Junta o contador, o sinal de fim e o registro das quedas. O numero de fluxos
     que desistiram e' tao importante quanto os bytes: fase que terminou com
     metade dos fluxos mortos mediu meia banda, e entregar isso como resultado
-    seria mentir baixo — o unico tipo de mentira que o usuario acredita.
+    seria mentir baixo, o unico tipo de mentira que o usuario acredita.
     """
 
     def __init__(self, parar: threading.Event) -> None:
@@ -1055,7 +1055,7 @@ class _Trilho:
         self.erros: list[BaseException] = []
         self.mortos = 0
         self.cpu = 0.0
-        """Tempo de CPU somado das threads de fluxo — o teto do processo sai daqui."""
+        """Tempo de CPU somado das threads de fluxo, o teto do processo sai daqui."""
         self._parar = parar
         self._lock = threading.Lock()
 
@@ -1093,12 +1093,12 @@ def _arrebentar(sock) -> None:
     - `shutdown()` avisa o outro lado e, no Linux, ja' solta o `recv` pendurado;
     - `_real_close()` fecha o descritor DE VERDADE. No Windows o shutdown nao
       cancela leitura em andamento (medido: o read seguiu preso os 3 s inteiros
-      depois de um shutdown bem-sucedido) — so' o `closesocket` derruba. E tem que
+      depois de um shutdown bem-sucedido); so' o `closesocket` derruba. E tem que
       ser o `_real_close`: o `close()` normal apenas marca o objeto como fechado
       enquanto o `makefile()` da resposta segurar uma referencia, que e'
       exatamente o estado em que o socket esta' quando ha' um read em curso.
 
-    Fechar o descritor por baixo de um read em andamento tem um custo conhecido —
+    Fechar o descritor por baixo de um read em andamento tem um custo conhecido:
     a janela de microssegundos em que aquele numero de descritor pode ser
     reaproveitado. E' o preco de cancelar de verdade: a alternativa era esperar o
     read voltar, e no socket empacado isso e' o timeout inteiro na cara de quem
@@ -1139,7 +1139,7 @@ def _socket_de(objeto):
 def _fechar_calado(objeto) -> None:
     try:
         objeto.close()
-    except Exception:  # noqa: BLE001 — fechar o que ja' morreu nao e' erro
+    except Exception:  # noqa: BLE001: fechar o que ja' morreu nao e' erro
         pass
 
 
@@ -1147,10 +1147,10 @@ def _derrubar(objeto) -> None:
     """Arrebenta uma conexao SEM bloquear quem pediu o cancelamento.
 
     `HTTPResponse.close()` pega a trava do buffer, e essa trava fica com a thread
-    que esta' dentro do `read()` — durante o read INTEIRO. Com o socket empacado
+    que esta' dentro do `read()`, durante o read INTEIRO. Com o socket empacado
     (link que caiu, VPN que virou, Wi-Fi que sumiu, que e' exatamente quando se
     clica em Cancelar) o close so' voltava no timeout do socket: 10 s congelando
-    quem chamou. Como quem chama e' a thread do Qt, o bloqueio nao sumia — apenas
+    quem chamou. Como quem chama e' a thread do Qt, o bloqueio nao sumia; apenas
     mudava da thread de trabalho para a da interface, e a janela ia para "Não
     Respondendo". Cancelar tem que ser um empurrao, nao uma espera.
     """
@@ -1159,7 +1159,7 @@ def _derrubar(objeto) -> None:
         _arrebentar(sock)
         return
     # Sem socket a vista (duble de teste, transporte exotico): o close pode
-    # bloquear, entao vai para uma thread descartavel — nunca na de quem cancelou.
+    # bloquear, entao vai para uma thread descartavel, nunca na de quem cancelou.
     threading.Thread(target=_fechar_calado, args=(objeto,), daemon=True,
                      name="dbx-fecha").start()
 
@@ -1170,12 +1170,12 @@ def pedir_buffer_de_envio(sock, tamanho: int) -> int:
     O `min` com o pedido nao e' desconfianca: o Linux devolve o DOBRO do que foi
     pedido (ele conta a contabilidade interna junto), e usar esse numero dobrado
     na conta do teto faria o app achar que tem o triplo da folga que tem. Quando
-    o sistema concede menos que o pedido — limite administrativo — o valor de
+    o sistema concede menos que o pedido (limite administrativo) o valor de
     volta e' o verdadeiro, e e' ele que interessa.
 
     Falhar aqui nao e' motivo para abortar nada: sem o buffer maior o upload
     volta a ser o de antes, baixo, e quem denuncia isso e' o teto da janela na
-    tela — em vez de o numero sair baixo e calado.
+    tela, em vez de o numero sair baixo e calado.
     """
     if sock is None or tamanho <= 0:
         return 0
@@ -1191,7 +1191,7 @@ class _Rastreando:
     """Mistura que entrega o socket ao dono assim que ele existe.
 
     O urllib so' devolve algo palpavel depois de ler o cabecalho da resposta; ate'
-    la' — connect, handshake TLS, espera do primeiro byte — nao havia nada para
+    la' (connect, handshake TLS, espera do primeiro byte) nao havia nada para
     cancelar, e um fluxo parado no TTFB era invisivel ao `abortar()`. Ele
     sobrevivia ao fim da fase, atravessava a fronteira e ficava consumindo link no
     meio da medicao seguinte (a fase de upload rodava com quatro downloads ainda
@@ -1229,14 +1229,14 @@ def _conexao_rastreada(base, registrar, cancelado, sndbuf: int = 0, anotar_buffe
     E' tambem o unico ponto do caminho em que o socket ainda esta' CRU: depois do
     handshake o objeto que sobra e' o SSLSocket, e pedir buffer de envio ali ja'
     seria tarde para a fase de subida. Por isso o `setsockopt` mora dentro de
-    `rastreando()`, colado no `registrar(s)` — os dois querem a mesma coisa, o
+    `rastreando()`, colado no `registrar(s)`: os dois querem a mesma coisa, o
     socket recem-nascido.
     """
 
     class Conexao(base):
         def __init__(self, *args, **kw):
             # Bloco de 64 KB em vez dos 8 KB padrao do http.client. Nao muda a
-            # velocidade (medido: 757 contra 775 Mbps), muda a CPU — 0,59 s por
+            # velocidade (medido: 757 contra 775 Mbps), muda a CPU: 0,59 s por
             # GB contra 3,01 s, cinco vezes menos. Num app de MONITORAMENTO isso
             # importa: 37,6% de um nucleo durante o teste contamina os proprios
             # numeros que ele mostra na tela.
@@ -1283,7 +1283,7 @@ class Rede:
 
         Menor, e nao o ultimo: o teto da subida e' ditado pelo fluxo mais
         apertado, e um unico socket que ficou com 64 KB puxa a fase inteira.
-        Zero significa "ninguem pediu" — e' o caso do download e o dos testes.
+        Zero significa "ninguem pediu": e' o caso do download e o dos testes.
         """
         with self._lock:
             return self._sndbuf
@@ -1302,12 +1302,12 @@ class Rede:
     def abortar(self) -> None:
         """Derruba na marra tudo que estiver aberto, sem segurar quem chamou.
 
-        Sem isso o cancelamento so' valeria quando o read() em curso voltasse — e
+        Sem isso o cancelamento so' valeria quando o read() em curso voltasse; e
         num socket travado isso e' o timeout inteiro. Fechar o app no meio de um
         teste deixaria a conexao de pe' esperando dado que ninguem quer mais.
 
         Volta em microssegundos por construcao: aqui ninguem espera trava de
-        buffer nem leitura em andamento — so' se mexe no descritor (`_arrebentar`).
+        buffer nem leitura em andamento; so' se mexe no descritor (`_arrebentar`).
         """
         with self._lock:
             abertos, self._abertos = list(self._abertos), set()
@@ -1358,12 +1358,12 @@ class Rede:
         rapido; as seguintes vao direto nesse mesmo endereco. Duas razoes:
 
         - ha' servidor cujo IPv6 esta' publicado mas recusa conexao, e sondar so'
-          o primeiro da lista apagava a latencia da tela enquanto o download —
-          que tenta todos — ia bem;
+          o primeiro da lista apagava a latencia da tela enquanto o download
+          (que tenta todos) ia bem;
         - o resolvedor do Windows devolve os enderecos em ordem rotativa, entao
           "o primeiro da lista" era um host DIFERENTE a cada sonda. As medidas
           alternavam 16 e 38 ms e o jitter saia em 21 ms numa conexao que oscila
-          2 — jitter de diversidade de caminho, nao de oscilacao da rede.
+          2: jitter de diversidade de caminho, nao de oscilacao da rede.
 
         Se o endereco fixado parar de responder, ele e' esquecido e a proxima
         sonda resolve o nome de novo.
@@ -1438,7 +1438,7 @@ class Rede:
         Leitura com TETO: `LISTA_MAX_BYTES` e' o que separa "buscar uma lista de
         6 KB" de "um endereco sequestrado empurrando um arquivo sem fim para
         dentro de um app de monitoramento". O 304 volta como codigo, e nao como
-        excecao, porque para quem chama ele e' a resposta feliz — nada mudou.
+        excecao, porque para quem chama ele e' a resposta feliz, nada mudou.
         """
         cabecalhos = dict(_CABECALHOS)
         if etag:
@@ -1464,7 +1464,7 @@ class TesteDeVelocidade:
 
     Roda numa thread so' (mais as dos fluxos), publica o andamento num snapshot
     protegido por trava e para na hora quando mandam parar. Nenhuma thread e'
-    non-daemon e nenhum socket sobrevive ao cancelamento — fechar o app no meio
+    non-daemon e nenhum socket sobrevive ao cancelamento: fechar o app no meio
     de um teste nao pode segurar o processo vivo.
     """
 
@@ -1487,7 +1487,7 @@ class TesteDeVelocidade:
         self._tentativas = max(1, int(tentativas))
         self._lista_publica = bool(lista_publica)
         """Se a lista publica entra na roda. Desligado, o app anda so' com a
-        semente embutida — e' o modo dos testes, que nunca tocam a internet."""
+        semente embutida: e' o modo dos testes, que nunca tocam a internet."""
 
         self._lock = threading.Lock()
         self._parar = threading.Event()
@@ -1497,7 +1497,7 @@ class TesteDeVelocidade:
         self._fixado = servidor_fixado() if self._lista_publica else None
         self._latencias: dict[str, float | None] = {}
         """Ultima varredura. A tela mostra a latencia de quem esta' medindo AGORA,
-        e nao a do escolhido — descer na fila sem trocar o numero ao lado seria
+        e nao a do escolhido: descer na fila sem trocar o numero ao lado seria
         casar o host de um servidor com a latencia de outro."""
         self._estado = self._zerado()
 
@@ -1513,7 +1513,7 @@ class TesteDeVelocidade:
                 "quando": None}
 
     def candidatos(self) -> tuple[Provedor, ...]:
-        """Todas as casas que este teste conhece — semente mais lista em disco.
+        """Todas as casas que este teste conhece: semente mais lista em disco.
 
         E' o que a tela mostra na lista de "fixar servidor": nao adianta oferecer
         um servidor que o motor nao usaria.
@@ -1529,7 +1529,7 @@ class TesteDeVelocidade:
     def fixar(self, host: str | None) -> None:
         """Fixa um servidor (ou volta ao automatico) e grava a escolha.
 
-        Vontade declarada ganha de medicao — mas a fila automatica continua atras
+        Vontade declarada ganha de medicao; mas a fila automatica continua atras
         como reserva: fixar um servidor nao pode ser o mesmo que ficar sem teste
         no dia em que aquela casa estiver fora do ar.
         """
@@ -1543,7 +1543,7 @@ class TesteDeVelocidade:
             if "progresso" in campos:
                 # A barra so' anda para frente. Cada tentativa de servidor
                 # reinicia o relogio da fase, e sem esta trava a barra caia de
-                # 0,60 para 0,08 ao trocar de provedor — na cara do usuario, no
+                # 0,60 para 0,08 ao trocar de provedor, na cara do usuario, no
                 # momento em que ele ja' esta' desconfiado da demora.
                 anterior = self._estado.get("progresso") or 0.0
                 campos["progresso"] = max(anterior, float(campos["progresso"]))
@@ -1574,12 +1574,12 @@ class TesteDeVelocidade:
         self._rede.abortar()
 
     def stop(self, timeout: float = 2.0) -> None:
-        """Encerra de vez — usado ao fechar o app."""
+        """Encerra de vez, usado ao fechar o app."""
         self.cancel()
         self.aguardar(timeout)
 
     def aguardar(self, timeout: float = 30.0) -> bool:
-        """Espera o teste acabar DE VERDADE — o motor e os fluxos.
+        """Espera o teste acabar DE VERDADE: o motor e os fluxos.
 
         So' o motor era esperado antes, e o `True` saia com quatro fluxos ainda
         segurando socket: quem chamou `stop()` para fechar o app acreditava que
@@ -1608,7 +1608,7 @@ class TesteDeVelocidade:
             baixado = self._rodar_fila(FASE_DOWNLOAD, escolha.download)
             enviado = self._rodar_fila(FASE_UPLOAD, escolha.upload)
             self._concluir(baixado, enviado)
-        except Exception as e:  # noqa: BLE001 — thread solta nao pode morrer calada
+        except Exception as e:  # noqa: BLE001: thread solta nao pode morrer calada
             _log.warning("teste de velocidade quebrou: %s", e)
             self._publicar(fase=FASE_ERRO, rodando=False, parcial=None,
                            erro=mensagem_de_erro(e), progresso=1.0)
@@ -1624,17 +1624,17 @@ class TesteDeVelocidade:
         # `_medivel`, e nao `is None`: a taxa que nasce 0.0 nao pode entrar aqui
         # pelo caminho do sucesso, com badge verde e sem uma palavra de ressalva.
         if not _medivel(dl.taxa):
-            avisos.append(f"Download ficou de fora — {dl.erro or 'nenhum servidor respondeu'}.")
+            avisos.append(f"Download ficou de fora: {dl.erro or 'nenhum servidor respondeu'}.")
         else:
             avisos.extend(_ressalvas("Download", dl))
         if not _medivel(ul.taxa):
-            avisos.append(f"Upload ficou de fora — {ul.erro or 'nenhum servidor respondeu'}.")
+            avisos.append(f"Upload ficou de fora: {ul.erro or 'nenhum servidor respondeu'}.")
         else:
             avisos.extend(_ressalvas("Upload", ul))
 
         if not _medivel(dl.taxa) and not _medivel(ul.taxa):
-            # Sem nenhuma das duas taxas nao houve teste de velocidade — o ping
-            # sozinho nao mede banda —, e ai' e' erro mesmo. A frase precisa
+            # Sem nenhuma das duas taxas nao houve teste de velocidade (o ping
+            # sozinho nao mede banda), e ai' e' erro mesmo. A frase precisa
             # dizer que a FILA inteira falhou: "nao respondeu" no singular faz
             # parecer azar de um endereco, e o usuario repete na hora.
             self._publicar(fase=FASE_ERRO, rodando=False, parcial=None, progresso=1.0,
@@ -1653,7 +1653,7 @@ class TesteDeVelocidade:
 
         A ordem importa e e' contraintuitiva: o teste de hoje anda com o que ja'
         esta' no disco, e o que chegar agora so' enriquece o de amanha. Esperar
-        seria pagar o pior dos dois mundos — atraso na fase de latencia para
+        seria pagar o pior dos dois mundos: atraso na fase de latencia para
         acrescentar candidatos que, medidos, ficam a 134 ms.
 
         A thread nao se chama "speed…" de proposito: ela nao e' fluxo de medicao,
@@ -1667,7 +1667,7 @@ class TesteDeVelocidade:
     def _lista_em_segundo_plano(self) -> None:
         try:
             quantos = atualizar_lista(self._rede)
-        except Exception as e:  # noqa: BLE001 — thread solta nao morre calada
+        except Exception as e:  # noqa: BLE001: thread solta nao morre calada
             _log.debug("atualização da lista falhou: %s", e)
             return
         if quantos:
@@ -1679,7 +1679,7 @@ class TesteDeVelocidade:
         Duas medicoes diferentes moram nesta fase, e juntar as duas era o erro
         antigo. A VARREDURA compara casas: poucas sondas em cada uma, em paralelo,
         so' para saber quem esta' perto. O PING descreve a conexao do usuario, e
-        para isso precisa de uma sequencia de sondas no MESMO destino — jitter
+        para isso precisa de uma sequencia de sondas no MESMO destino: jitter
         calculado com amostras de servidores diferentes mede diversidade de
         caminho, nao oscilacao da rede, e pinta de instavel uma conexao que oscila
         1 ms.
@@ -1715,7 +1715,7 @@ class TesteDeVelocidade:
         sonda azarada nao pode custar a escolha do servidor.
 
         As threads sao poucas, curtas e daemon, e o prazo e' de relogio: quem nao
-        voltou a tempo simplesmente nao opina — o teste ja' tem fila para decidir.
+        voltou a tempo simplesmente nao opina: o teste ja' tem fila para decidir.
         """
         alvos = [p for p in candidatos if p.host]
         if not alvos:
@@ -1766,7 +1766,7 @@ class TesteDeVelocidade:
         return latencias
 
     def _medir_ping(self, alvo: Provedor | None, latencias: dict) -> None:
-        """Sequencia de sondas no servidor escolhido — o ping e o jitter da tela."""
+        """Sequencia de sondas no servidor escolhido, o ping e o jitter da tela."""
         if alvo is None:
             return
         medidas: list[float] = []
@@ -1805,7 +1805,7 @@ class TesteDeVelocidade:
             # O nome na tela e' o de quem esta' medindo AGORA, e nao o do primeiro
             # da fila que ja' recusou. As duas fases tem campo proprio: com um
             # campo so', a tela dizia "via fulano" ao lado de um numero de upload
-            # que tinha vindo de outra casa — engana justamente quem for conferir.
+            # que tinha vindo de outra casa: engana justamente quem for conferir.
             campos = {"parcial": None}
             if fase == FASE_DOWNLOAD:
                 campos.update(servidor=prov.host, servidor_nome=prov.rotulo,
@@ -1878,7 +1878,7 @@ class TesteDeVelocidade:
         taxa = mbps(janela[1], janela[0]) if janela else None
         if _medivel(taxa) and trilho.mortos * 2 >= self._fluxos:
             # Metade dos fluxos morreu: o que sobrou mediu um pedaco da banda e
-            # devolveria algo como 150 Mbps num link de 600 — numero baixo com
+            # devolveria algo como 150 Mbps num link de 600, numero baixo com
             # cara de medicao, que e' pior que erro nenhum. Vale mais tentar o
             # proximo servidor da fila.
             _log.info("fase %s em %s: %d de %d fluxos cairam, medida descartada",
@@ -1901,7 +1901,7 @@ class TesteDeVelocidade:
         A terceira resposta e' a mais importante e a menos obvia: `inflado`. O
         contador soma o que foi entregue ao SOCKET, e com um buffer de 4 MB por
         fluxo isso pode ser 16 MB que o servidor ainda nao viu. Em regime esse
-        excesso e' um offset constante e cancela na subtracao — mas se a janela de
+        excesso e' um offset constante e cancela na subtracao; mas se a janela de
         medicao for curta, ele vira a medida inteira. Medido: numa janela de 0,5 s
         o numero mentiria +323%. Entao, quando o buffer somado chega perto do
         volume da janela, o resultado sai com ressalva em vez de sair limpo.
@@ -1929,7 +1929,7 @@ class TesteDeVelocidade:
         seguraria a fase pelo timeout inteiro.
 
         O `join` gasta o orcamento SOMADO, e nao 50 ms garantidos por fluxo depois
-        do prazo — era assim que a fase seguia em frente com os fluxos vivos. Quem
+        do prazo: era assim que a fase seguia em frente com os fluxos vivos. Quem
         nao morreu vira orfa registrada: a proxima fase espera por ela em vez de
         medir com o link ocupado, e `aguardar()` deixa de mentir que acabou.
         """
@@ -1957,7 +1957,7 @@ class TesteDeVelocidade:
         Fluxo preso dentro do urlopen atravessava a fronteira de fase: a medicao
         de UPLOAD rodava com quatro downloads ainda baixando, e o numero de upload
         saia abaixo do real sem uma palavra de aviso. Aqui a fase espera (com
-        orcamento) e, se mesmo assim sobrar alguem, devolve True — o resultado sai
+        orcamento) e, se mesmo assim sobrar alguem, devolve True: o resultado sai
         com ressalva em vez de sair limpo.
         """
         orfas = self._fluxos_vivos()
@@ -1973,7 +1973,7 @@ class TesteDeVelocidade:
     def _fluxo(self, fase: str, prov: Provedor, trilho: _Trilho) -> None:
         """Um fluxo paralelo: reabre a conexao ate a fase acabar.
 
-        Reabrir e' necessario porque o arquivo do servidor tem tamanho fixo — num
+        Reabrir e' necessario porque o arquivo do servidor tem tamanho fixo: num
         link rapido ele acaba antes do relogio, e sem a repeticao a segunda metade
         da janela seria medida como zero.
 
@@ -1981,19 +1981,19 @@ class TesteDeVelocidade:
         arquivo: um fluxo que morre no meio e nao volta deixa a fase inteira
         medindo com menos banda do que o link tem. So' desiste de vez quando o
         servidor recusa por decisao propria (4xx, incluindo o 429) ou quando as
-        tentativas acabam — e a desistencia fica registrada, porque medida com
+        tentativas acabam; e a desistencia fica registrada, porque medida com
         fluxo faltando nao pode passar por medida boa.
 
         Reabrir tem PISO. O caminho de sucesso nao tinha nenhum: resposta que
         termina sem erro e sem bytes (Content-Length: 0, 204, objeto cortado) fazia
-        o laco girar solto — milhoes de aberturas por fase, uma tempestade de
+        o laco girar solto: milhoes de aberturas por fase, uma tempestade de
         conexoes contra o provedor e um "Mbps" que media a reconexao do app. Agora
         abertura que nao entrega volume conta como tropeco, com recuo e com
         desistencia registrada, igual a um erro.
         """
         # O tempo de CPU desta thread e' medido de ponta a ponta: e' com ele que
         # `teto_do_processo` responde se o numero de upload fala da internet ou do
-        # proprio app. `thread_time` conta so' esta thread — `process_time`
+        # proprio app. `thread_time` conta so' esta thread; `process_time`
         # contaria tambem o coletor e a interface, e o teto sairia pessimista por
         # culpa de trabalho que nao e' do teste.
         cpu_inicial = time.thread_time()
@@ -2052,7 +2052,7 @@ class TesteDeVelocidade:
 
 
 def _texto_taxa(mbps_: float) -> str:
-    """Mbps ou Gbps, conforme o tamanho — "1400 Mbps" ninguem le' de primeira."""
+    """Mbps ou Gbps, conforme o tamanho: "1400 Mbps" ninguem le' de primeira."""
     return f"{mbps_ / 1000:.1f} Gbps".replace(".", ",") if mbps_ >= 1000 else f"{mbps_:.0f} Mbps"
 
 
@@ -2096,14 +2096,14 @@ def _ressalvas(rotulo: str, medida: _Medida) -> list[str]:
     if medida.contaminado:
         # Medir upload com download ainda no ar da' um numero baixo com cara de
         # numero bom. Se nao deu para enterrar a fase anterior a tempo, isso e'
-        # dito — calar seria repetir o defeito que a ressalva existe para cobrir.
+        # dito; calar seria repetir o defeito que a ressalva existe para cobrir.
         fora.append(f"Fluxos da fase anterior ainda estavam no ar durante o "
                     f"{rotulo.lower()}; o valor pode sair abaixo do real.")
     return fora
 
 
 def _fila(itens) -> tuple[Provedor, ...]:
-    """Aceita URLs soltas ou Provedores — string vira Provedor com os padroes."""
+    """Aceita URLs soltas ou Provedores: string vira Provedor com os padroes."""
     if isinstance(itens, (str, Provedor)):
         itens = (itens,)
     return tuple(i if isinstance(i, Provedor) else Provedor(str(i)) for i in itens)
@@ -2116,7 +2116,7 @@ def _host(url: str) -> str:
 def _porta(url: str) -> int:
     """Porta do connect da latencia: nem todo servidor de teste fala TLS.
 
-    Fixar 443 sondava uma porta que o servidor podia nem estar ouvindo — a
+    Fixar 443 sondava uma porta que o servidor podia nem estar ouvindo: a
     latencia sumia da tela por um detalhe que nao tem nada a ver com a rede.
     """
     partes = urllib.parse.urlsplit(url)

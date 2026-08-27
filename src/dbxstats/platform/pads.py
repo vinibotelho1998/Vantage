@@ -2,7 +2,7 @@
 
 O `gamepad.py` le entrada por XInput, e o XInput so' expoe dispositivos
 Xbox-compativeis. Um DualSense pareado direto por Bluetooth aparece para o
-Windows como HID generico e fica invisivel la' — o que da' a impressao de que o
+Windows como HID generico e fica invisivel la', o que da' a impressao de que o
 app "nao reconhece o controle" quando na verdade ele nunca foi oferecido.
 
 Esta tela conta a verdade: varre a lista de interfaces HID pelo SetupAPI, filtra
@@ -164,7 +164,7 @@ SONY_HID = {0x0CE6, 0x0DF2, 0x09CC, 0x05C4, 0x0BA0}
 """Controles da Sony que o app le' direto por HID, sem passar pelo XInput.
 
 Mora aqui, e nao no leitor, porque identificar dispositivo e' o assunto deste
-modulo — e porque a tela precisa saber quem e' legivel antes de qualquer leitor
+modulo, e porque a tela precisa saber quem e' legivel antes de qualquer leitor
 existir. Ver `dualsense.py`, que consome esta lista.
 """
 
@@ -188,8 +188,8 @@ class Pad:
     def readable(self) -> bool:
         """O app consegue ler este controle, por qualquer caminho.
 
-        Separado de `xinput` de proposito. `xinput` e' o fato tecnico — se o
-        Windows expoe o controle naquela API — e continua valendo para a
+        Separado de `xinput` de proposito. `xinput` e' o fato tecnico (se o
+        Windows expoe o controle naquela API) e continua valendo para a
         vibracao, que so' existe la'. Legibilidade e' outra coisa desde que o app
         passou a ler os controles da Sony direto por HID: um DualSense e'
         `xinput=False` e legivel ao mesmo tempo. Confundir os dois e' o que
@@ -246,7 +246,7 @@ def _open(path: str):
 
     Acesso zero e' de proposito: um controle ja' aberto em modo exclusivo por um
     jogo recusaria leitura, e a tela ficaria mentindo que ele sumiu. Sem pedir
-    acesso, o Windows entrega o handle mesmo assim — da' para perguntar VID, PID
+    acesso, o Windows entrega o handle mesmo assim: da' para perguntar VID, PID
     e nome, que e' tudo que esta tela precisa.
     """
     handle = kernel32.CreateFileW(path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE,
@@ -384,7 +384,7 @@ def list_pads() -> list[Pad]:
     interface HID. O casamento entre as duas e' por ordem, que e' o unico laco
     disponivel: o XInput nao revela VID, PID nem caminho do dispositivo.
 
-    Legiveis primeiro na lista — sao os que respondem quando o usuario aperta.
+    Legiveis primeiro na lista: sao os que respondem quando o usuario aperta.
     """
     try:
         pads = _hid_pads()
@@ -419,7 +419,7 @@ def input_report_length(path: str) -> int:
     Quem le' precisa do numero exato: `ReadFile` num HID recusa buffer menor que
     o relatorio, e um chute grande demais nao ajuda porque o driver so' entrega
     de relatorio inteiro em relatorio inteiro. O DualSense por Bluetooth usa 78,
-    e o mesmo controle por USB usa 64 — nao da' para fixar.
+    e o mesmo controle por USB usa 64; nao da' para fixar.
     """
     handle = _open(path)
     if handle is None:

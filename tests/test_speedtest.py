@@ -1,7 +1,7 @@
 """Conta e maquina de estados do teste de velocidade.
 
 Nenhum teste aqui toca a internet: o transporte e' um duble. O que esta' sendo
-protegido e' a honestidade do numero — nao subestimar link rapido por causa do
+protegido e' a honestidade do numero: nao subestimar link rapido por causa do
 slow start, nao somar errado os fluxos paralelos e, acima de tudo, nunca mostrar
 zero Mbps quando na verdade a rede caiu.
 
@@ -72,7 +72,7 @@ def test_nada_transferido_nao_vira_zero_mbps():
 
 
 def test_um_byte_solto_tambem_nao_e_medicao():
-    """A guarda em bytes so' pegava o zero exato — um byte escapava por baixo.
+    """A guarda em bytes so' pegava o zero exato; um byte escapava por baixo.
 
     `round(x, 2)` transforma qualquer coisa abaixo de ~625 B/s em exatamente 0.0,
     e esse 0.0 percorria o modulo inteiro como medida boa: fase pronta, erro
@@ -126,7 +126,7 @@ def test_uma_sonda_azarada_nao_pinta_a_conexao_de_instavel():
     """Sequencia real: cinco connects colados e um que caiu numa fila.
 
     Com media, esse unico 40 ms virava "jitter de 10 ms" numa conexao que oscila
-    menos de 1 ms — e o usuario iria caçar problema onde nao havia.
+    menos de 1 ms, e o usuario iria caçar problema onde nao havia.
     """
     ms, jitter = sp.latencia([16.4, 16.8, 16.7, 16.0, 40.4, 16.3])
     assert ms == 16.0
@@ -173,8 +173,8 @@ def test_http_recusado_diz_o_codigo():
 def test_limite_de_requisicoes_manda_esperar_e_nao_culpa_a_internet():
     """429 e' o unico codigo cuja acao certa e' nao fazer nada por alguns minutos.
 
-    Empacotado no texto generico de "recusou o pedido" — ou pior, no de "conexao
-    caiu", que era o que sobrava na tela —, ele mandava a pessoa mexer no roteador
+    Empacotado no texto generico de "recusou o pedido" (ou pior, no de "conexao
+    caiu", que era o que sobrava na tela), ele mandava a pessoa mexer no roteador
     por causa de um castigo por volume que expira sozinho.
     """
     texto = sp.mensagem_de_erro(urllib.error.HTTPError("u", 429, "Too Many Requests", {}, None))
@@ -192,7 +192,7 @@ def test_falha_de_tls_nao_vaza_texto_de_maquina():
     """Proxy corporativo que intercepta TLS saia como frase, nao como traceback.
 
     Antes esse caso caia no ramo final e imprimia em vermelho, no card, algo como
-    "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed" — exatamente o
+    "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed", exatamente o
     que o modulo promete nunca mostrar.
     """
     import ssl
@@ -210,7 +210,7 @@ def test_erro_da_cadeia_guarda_o_429_e_nao_o_ultimo_tropeco():
     """O caso real: Cloudflare em 429 e reserva caindo por RemoteDisconnected.
 
     Guardando so' a ultima falha, o que chegava na tela era "a conexao caiu no
-    meio do teste" — e a unica informacao acionavel do teste inteiro (esperar
+    meio do teste", e a unica informacao acionavel do teste inteiro (esperar
     alguns minutos) era descartada no caminho.
     """
     falhas = [("speed.cloudflare.com",
@@ -226,7 +226,7 @@ def test_erro_da_cadeia_diz_que_foi_a_fila_inteira():
 
     Tres provedores em redes independentes, calados ao mesmo tempo, sao a prova
     mais forte que existe de que o problema esta' do lado de ca'. A frase antiga
-    reunia essa evidencia e escrevia "nenhum dos 3 servidores de teste respondeu —
+    reunia essa evidencia e escrevia "nenhum dos 3 servidores de teste respondeu;
     a: o servidor de teste nao respondeu a tempo": no singular, apontando o dedo
     justamente para quem nao tem culpa, e sem dizer o que fazer.
     """
@@ -239,7 +239,7 @@ def test_erro_da_cadeia_diz_que_foi_a_fila_inteira():
 
 
 def test_fila_que_respondeu_com_codigo_nao_diz_que_ninguem_respondeu():
-    """404 na fila inteira e' resposta, e resposta e' informacao — nao silencio."""
+    """404 na fila inteira e' resposta, e resposta e' informacao, nao silencio."""
     def _404(host):
         return (host, urllib.error.HTTPError("u", 404, "Not Found", {}, None))
 
@@ -276,7 +276,7 @@ def test_arquivo_estatico_nao_leva_cache_buster():
 
     A Hetzner derruba a conexao sem responder quando a URL tem querystring, e o
     cache-buster era aplicado em toda URL. Com a Cloudflare de castigo, o
-    principal recusava e a reserva quebrava sozinha — o teste nao media nada.
+    principal recusava e a reserva quebrava sozinha; o teste nao media nada.
     """
     prov = sp.Provedor("https://ash-speed.hetzner.com/100MB.bin")
     assert prov.pedido() == "https://ash-speed.hetzner.com/100MB.bin"
@@ -343,7 +343,7 @@ def test_sonda_fixa_o_endereco_em_vez_de_alternar_entre_hosts(monkeypatch):
     """Nome com varios IPs sondado "no primeiro da lista" mede hosts diferentes.
 
     O resolvedor do Windows rotaciona a ordem, entao as sondas iam alternando de
-    destino: 16 ms, 38 ms, 16 ms, 38 ms — e o jitter saia em 21 ms numa conexao
+    destino: 16 ms, 38 ms, 16 ms, 38 ms, e o jitter saia em 21 ms numa conexao
     que oscila 2. Isso e' diversidade de caminho com nome de instabilidade, e
     manda o usuario caçar defeito onde nao ha'.
     """
@@ -452,7 +452,7 @@ class RedeDirigida(sp.Rede):
 
     def enviar(self, url, cancelado, contar, timeout, tamanho):
         if self.motor is not None and not self.espiado:
-            # Retrato do snapshot no instante em que a fase de upload comeca —
+            # Retrato do snapshot no instante em que a fase de upload comeca:
             # e' onde se ve' se o download ja' chegou na tela.
             self.espiado.append(self.motor.snapshot())
         self._correr("upload", url, cancelado, contar)
@@ -544,7 +544,7 @@ def test_terceiro_servidor_da_fila_ainda_salva_a_medicao():
 
 
 def test_todos_os_servidores_fora_diz_que_foi_a_fila_inteira():
-    """Quando nada responde, a frase precisa dizer isso — e nunca sair 0 Mbps."""
+    """Quando nada responde, a frase precisa dizer isso, e nunca sair 0 Mbps."""
     rede = RedeDirigida({"um": _429(), "dois": _429(), "tres": _429()},
                         sonda=None)
     motor = _motor(rede, urls_download=("https://um/a", "https://dois/b", "https://tres/c"),
@@ -588,8 +588,8 @@ def test_download_fora_nao_apaga_upload_e_ping():
     """A assimetria antiga: upload que falha virava aviso, download que falha
     virava fracasso total.
 
-    A tela ficava se contradizendo — Upload e Latencia com numeros validos ao lado
-    de um "nao deu para medir" em vermelho — e o usuario jogava fora duas medidas
+    A tela ficava se contradizendo: Upload e Latencia com numeros validos ao lado
+    de um "nao deu para medir" em vermelho, e o usuario jogava fora duas medidas
     boas para refazer o teste.
     """
     rede = RedeDirigida({"dl": _429()})
@@ -624,7 +624,7 @@ def test_upload_nao_pisca_com_o_numero_do_download():
     """A parcial da fase anterior tem que morrer junto com a fase.
 
     Sem isso, o tile de Upload abria mostrando a velocidade do DOWNLOAD em cinza
-    com "medindo…" — numero errado no lugar errado, justamente na tela em que a
+    com "medindo…": numero errado no lugar errado, justamente na tela em que a
     pessoa esta' conferindo numeros.
     """
     rede = RedeDirigida()
@@ -654,7 +654,7 @@ def test_maioria_dos_fluxos_derrubada_nao_vira_medicao_baixa():
 
     O 429 estoura no meio da rajada de pedidos paralelos e mata alguns fluxos,
     nao todos. Com tres de quatro mortos e um vivo, a fase rodava inteira com um
-    quarto da banda e devolvia ~150 Mbps num link de 600, sem aviso nenhum — e o
+    quarto da banda e devolvia ~150 Mbps num link de 600, sem aviso nenhum, e o
     usuario acreditava no numero e ia reclamar da operadora.
     """
     class SoUmSobrevive(RedeDirigida):
@@ -686,7 +686,7 @@ def test_fluxo_que_cai_uma_vez_e_reaberto(monkeypatch):
     """Fluxo morto e nao reposto mede menos banda do que o link tem.
 
     Um tropeco isolado (RST no meio da rajada) nao pode custar um quarto da
-    medicao pelo resto da fase — o fluxo volta, com recuo, e o numero fecha limpo.
+    medicao pelo resto da fase; o fluxo volta, com recuo, e o numero fecha limpo.
     """
     monkeypatch.setattr(sp, "RECUO_S", 0.02)
 
@@ -797,7 +797,7 @@ def esperar_ate(condicao, limite=5.0, recado="condição nunca aconteceu"):
 def test_link_que_solta_migalha_depois_do_aquecimento_nao_publica_zero():
     """Fim a fim do buraco do 0.0: servidor que aceita e entrega um byte.
 
-    A conta era feita em bytes, mas quem convertia arredondava para duas casas —
+    A conta era feita em bytes, mas quem convertia arredondava para duas casas:
     um byte depois do aquecimento virava exatamente 0.0, e dai' para a frente
     ninguem mais perguntava: `_rodar_fila` e `_concluir` so' testavam `is None`.
     O resultado era fase=pronto, erro=None, aviso=None, badge VERDE e "0.0 Mbps"
@@ -829,7 +829,7 @@ def test_link_que_solta_migalha_depois_do_aquecimento_nao_publica_zero():
 class _RespostaCurta(RedeDirigida):
     """Servidor que responde 200 na hora e entrega quase nada.
 
-    Content-Length: 0, um 204 ou o objeto cortado por limite de volume — nenhum
+    Content-Length: 0, um 204 ou o objeto cortado por limite de volume: nenhum
     deles levanta excecao, entao nenhum fluxo era contado como morto.
     """
 
@@ -855,9 +855,9 @@ def test_corpo_vazio_nao_vira_rajada_de_requisicoes(monkeypatch):
     """O caminho de SUCESSO nao tinha piso nenhum: entregou nada, reabre na hora.
 
     Medido antes do conserto: 10.131.329 aberturas em 2 s de fases com 4 fluxos.
-    Com sockets de verdade isso e' uma tempestade de TCP+TLS contra o provedor —
+    Com sockets de verdade isso e' uma tempestade de TCP+TLS contra o provedor:
     o app fabricando sozinho o HTTP 429 por volume que a fila inteira existe para
-    evitar — e quatro threads em giro de CPU maxima dentro de um app de
+    evitar, e quatro threads em giro de CPU maxima dentro de um app de
     MONITORAMENTO, contaminando os proprios numeros da tela.
     """
     monkeypatch.setattr(sp, "RECUO_S", 0.01)
@@ -879,7 +879,7 @@ def test_resposta_minuscula_nao_vira_medicao_da_propria_reconexao(monkeypatch):
 
     Pagina de erro de proxy ou portal cativo (1500 B) devolvia 200 e uns bytes; o
     motor somava tudo e publicava 2,4 Mbps de download com badge verde. Esse
-    numero nao mede link nenhum — mede quantas vezes por segundo a maquina
+    numero nao mede link nenhum; mede quantas vezes por segundo a maquina
     consegue reabrir uma conexao.
     """
     monkeypatch.setattr(sp, "RECUO_S", 0.01)
@@ -929,7 +929,7 @@ def test_arquivo_que_acaba_continua_sendo_reaberto(monkeypatch):
 
 # ── cancelamento: quem cancela nao pode ser quem congela ─────────────────────
 class _ServidorLocal:
-    """Servidor de mentira em 127.0.0.1 — nenhum byte sai da máquina.
+    """Servidor de mentira em 127.0.0.1; nenhum byte sai da máquina.
 
     `resposta=None` e' o mudo de proposito: aceita a conexao e nunca responde. E'
     o caso em que o fluxo fica preso DENTRO do urlopen, antes de existir qualquer
@@ -980,7 +980,7 @@ def _puxar_em_thread(rede, url, timeout=30.0):
     def correr():
         try:
             rede.baixar(url, lambda: False, lambda n: None, timeout)
-        except Exception:  # noqa: BLE001 — o que importa e' ter voltado
+        except Exception:  # noqa: BLE001, o que importa e' ter voltado
             pass
         fim.set()
 
@@ -992,7 +992,7 @@ def test_cancelar_nao_congela_quem_chamou_com_o_socket_travado():
     """O congelamento da interface: `close()` num HTTPResponse pega a trava do
     buffer, e a trava fica com a thread que esta' dentro do `read()`.
 
-    Com o socket empacado (link que caiu, VPN que virou — exatamente quando se
+    Com o socket empacado (link que caiu, VPN que virou, exatamente quando se
     clica em Cancelar), esse close so' voltava no timeout do socket: 9,01 s
     medidos com os padroes de producao, ~75 quadros do timer perdidos e a janela
     em "Não Respondendo". O bloqueio nao sumia, apenas mudava da thread de
@@ -1057,7 +1057,7 @@ def test_cancelar_nao_espera_transporte_que_demora_a_fechar():
 
 # ── orfas: fim de fase precisa ser fim de verdade ────────────────────────────
 class _Grudenta(RedeDirigida):
-    """Fluxo que ignora o cancelamento por um tempo — o mesmo que um socket
+    """Fluxo que ignora o cancelamento por um tempo, o mesmo que um socket
     empacado dentro do urlopen faz na vida real."""
 
     def __init__(self, vida=0.6) -> None:
@@ -1090,7 +1090,7 @@ def test_aguardar_nao_diz_que_acabou_com_fluxo_ainda_no_ar(monkeypatch):
     """`aguardar()` so' conhecia o motor, nunca os fluxos.
 
     Depois de `stop(30 s)` o motor reportava fim com quatro threads vivas e os
-    sockets de pe' — quem chamou para fechar o app acreditava que estava tudo
+    sockets de pe'; quem chamou para fechar o app acreditava que estava tudo
     parado. Agora o True significa "acabou", e o False e' informacao util.
     """
     monkeypatch.setattr(sp, "JOIN_TOTAL_S", 0.05)
@@ -1114,7 +1114,7 @@ def test_upload_medido_com_download_no_ar_sai_com_ressalva(monkeypatch):
 
     O orcamento de encerramento caia para 50 ms por fluxo assim que o prazo
     passava, e a fase seguinte comecava com os fluxos anteriores ainda baixando.
-    O upload saia abaixo do real — sem uma palavra —, que e' o mesmo tipo de
+    O upload saia abaixo do real (sem uma palavra), que e' o mesmo tipo de
     defeito que a regra dos fluxos mortos existe para matar.
     """
     monkeypatch.setattr(sp, "JOIN_TOTAL_S", 0.05)
@@ -1133,7 +1133,7 @@ def test_upload_medido_com_download_no_ar_sai_com_ressalva(monkeypatch):
 
 def test_fim_de_fase_espera_os_fluxos_antes_da_proxima():
     """No caso normal (socket derrubado responde ao cancelamento), a fase seguinte
-    comeca com o link livre — e nao ha' ressalva nenhuma a dar."""
+    comeca com o link livre, e nao ha' ressalva nenhuma a dar."""
     rede = _Grudenta(vida=0.05)
     motor = _motor(rede, fluxos=2, duracao=0.3,
                    urls_download=("https://dl/a",), urls_upload=("https://ul/b",))
@@ -1147,7 +1147,7 @@ def test_fim_de_fase_espera_os_fluxos_antes_da_proxima():
 
 # ── mensagens da fila: a conclusao certa da evidencia reunida ────────────────
 def test_fila_inteira_muda_nao_culpa_o_servidor_de_teste():
-    """Quatro provedores, em redes independentes, calados — e um upload de pé.
+    """Quatro provedores, em redes independentes, calados, e um upload de pé.
 
     Esta e' a evidencia mais forte possivel de que o link de quem mede e' que
     esta' ruim, e o texto antigo escrevia, no singular, "o servidor de teste NÃO
@@ -1187,7 +1187,7 @@ def test_fila_que_recusou_com_codigo_nao_vira_nenhum_respondeu():
 def test_transferencia_que_cai_em_todos_os_servidores_aponta_a_conexao():
     """Os quatro entregaram bytes e metade dos fluxos caiu em todos.
 
-    A medida e' descartada — certissimo —, mas a frase dizia "nenhum dos 4
+    A medida e' descartada (certissimo), mas a frase dizia "nenhum dos 4
     servidores de teste respondeu", quando todos responderam E transferiram. O
     que esta' derrubando as transferencias e' a conexao de quem mede, e era
     exatamente isso que nao era dito.
@@ -1228,7 +1228,7 @@ def _prov(host, envio=False, **kw):
 def test_fila_e_remontada_pela_latencia_medida():
     """O coração da escolha automática: a ordem da semente é só um palpite.
 
-    Antes, a fila era fixa e o teste media pelo primeiro que aceitasse — se o
+    Antes, a fila era fixa e o teste media pelo primeiro que aceitasse: se o
     servidor da frente ficasse a 130 ms, era ele que media, e o número saía a um
     oitavo do real sem ninguém perguntar se havia coisa melhor na lista.
     """
@@ -1243,7 +1243,7 @@ def test_escolha_prefere_quem_mede_as_duas_fases_no_mesmo_lugar():
     """Medido: Cachefly 15,3 ms só desce; Cloudflare 15,8 ms desce E sobe.
 
     Meio milissegundo não paga o preço de a tela anunciar "via Cachefly" e o
-    número de upload ter vindo de outra casa — quem for conferir é enganado por
+    número de upload ter vindo de outra casa; quem for conferir é enganado por
     um campo que parece exato.
     """
     cdn, completo = _prov("cachefly"), _prov("cloudflare", envio=True)
@@ -1256,7 +1256,7 @@ def test_escolha_prefere_quem_mede_as_duas_fases_no_mesmo_lugar():
 
 
 def test_empate_de_latencia_mantem_a_ordem_da_semente():
-    """Sem casa nenhuma medida (ou todas iguais) a semente é que decide — e ela
+    """Sem casa nenhuma medida (ou todas iguais) a semente é que decide, e ela
     foi escolhida a dedo, com número. Reordenar por acaso jogaria isso fora."""
     fila = (_prov("um"), _prov("dois"), _prov("tres"))
     escolha = sp.escolher(fila, (), {"um": 16.0, "dois": 16.0, "tres": 16.0})
@@ -1267,7 +1267,7 @@ def test_casa_muda_vai_para_o_fim_da_fila_em_vez_de_sumir():
     """Sonda perdida não é prova de servidor morto: pode ter sido um pacote.
 
     Descartar quem não respondeu deixaria a fila vazia numa rede que bloqueia
-    connect solto — e fila vazia mede menos que fila duvidosa.
+    connect solto, e fila vazia mede menos que fila duvidosa.
     """
     escolha = sp.escolher((_prov("mudo"), _prov("vivo")), (),
                           {"mudo": None, "vivo": 20.0})
@@ -1285,7 +1285,7 @@ def test_ninguem_respondeu_ainda_devolve_uma_fila_para_tentar():
 
 def test_fila_escolhida_tem_teto_de_tamanho():
     """A lista pública tem 22 casas. Sem teto, um dia ruim seriam 22 tentativas
-    de 6 s cada — dois minutos de "medindo…" para não medir nada."""
+    de 6 s cada: dois minutos de "medindo…" para não medir nada."""
     fila = tuple(_prov(f"h{i}") for i in range(10))
     escolha = sp.escolher(fila, (), {f"h{i}": float(i + 10) for i in range(10)})
     assert len(escolha.download) == sp.FILA_MAXIMA
@@ -1293,7 +1293,7 @@ def test_fila_escolhida_tem_teto_de_tamanho():
 
 
 def test_servidor_fixado_ganha_da_medicao_e_mantem_reserva():
-    """Vontade declarada ganha de latência — mas fixar não pode ser o mesmo que
+    """Vontade declarada ganha de latência, mas fixar não pode ser o mesmo que
     ficar sem teste no dia em que aquela casa estiver fora do ar."""
     escolha = sp.escolher((_prov("rapido"), _prov("preferido")), (),
                           {"rapido": 10.0, "preferido": 90.0}, fixado="preferido")
@@ -1327,7 +1327,7 @@ def test_lista_publica_normaliza_o_endereco_e_descarta_lixo():
 
 def test_servidor_da_lista_publica_nunca_se_apresenta_como_perto():
     """Não há campo confiável de país na lista, e medido não há uma única casa
-    brasileira nela — a mais perto é Atlanta, a 134 ms. Prometer proximidade que
+    brasileira nela: a mais perto é Atlanta, a 134 ms. Prometer proximidade que
     não existe é a mentira que este módulo inteiro existe para não contar."""
     assert sp.provedores_da_lista([_ITEM])[0].perto is False
 
@@ -1362,7 +1362,7 @@ def test_lista_e_guardada_em_disco_e_nao_e_pedida_de_novo(tmp_path, monkeypatch)
 
 
 def test_lista_sem_novidade_renova_a_validade_com_o_etag(tmp_path, monkeypatch):
-    """304 custa ~300 bytes contra os 6.115 da resposta cheia — e o cache não
+    """304 custa ~300 bytes contra os 6.115 da resposta cheia, e o cache não
     pode ser apagado por uma resposta que justamente diz "nada mudou"."""
     _sandbox(tmp_path, monkeypatch)
     sp.atualizar_lista(_RedeDeLista(corpo=json.dumps([_ITEM]), etag="v1"))
@@ -1377,7 +1377,7 @@ def test_lista_sem_novidade_renova_a_validade_com_o_etag(tmp_path, monkeypatch):
 
 
 def test_lista_que_nao_responde_nao_atrapalha_ninguem(tmp_path, monkeypatch):
-    """Sem lista o app mede com a semente embutida — que é o que ele fazia antes
+    """Sem lista o app mede com a semente embutida, que é o que ele fazia antes
     de existir lista nenhuma. Falhar o teste por causa disso seria trocar um
     bônus por um defeito."""
     _sandbox(tmp_path, monkeypatch)
@@ -1432,7 +1432,7 @@ def test_motor_mede_pelo_servidor_de_menor_latencia():
 
 def test_ping_e_jitter_saem_de_sondas_no_mesmo_servidor():
     """Jitter calculado com amostras de casas diferentes mede diversidade de
-    caminho, não oscilação da rede — e pinta de instável uma conexão que oscila
+    caminho, não oscilação da rede, e pinta de instável uma conexão que oscila
     1 ms. A varredura compara casas; o ping descreve a conexão."""
     rede = RedeDirigida(latencias={"a": 90.0, "b": 20.0})
     motor = _motor(rede, sondas=4, urls_download=("https://a/x", "https://b/y"),
@@ -1459,7 +1459,7 @@ def test_motor_respeita_o_servidor_fixado_pelo_usuario():
 
 def test_a_tela_diz_qual_casa_mediu_o_upload():
     """O campo que enganava: `servidor` era preenchido só na fase de download,
-    então o relatório dizia "via fulano" sem nunca contar de onde veio o upload —
+    então o relatório dizia "via fulano" sem nunca contar de onde veio o upload,
     e as duas fases podem perfeitamente estar em casas diferentes."""
     rede = RedeDirigida()
     motor = _motor(rede, urls_download=("https://dl/a",), urls_upload=("https://ul/b",))
@@ -1511,7 +1511,7 @@ def test_lista_em_disco_entra_como_candidata_no_proximo_teste(tmp_path, monkeypa
 def test_servidor_fora_do_pais_avisa_mesmo_sendo_o_primeiro_da_fila():
     """Antes a ressalva só saía quando a casa distante era reserva. Com escolha
     automática e lista pública (que não tem uma casa brasileira sequer), a casa
-    distante pode ser a primeira — e aí o número baixo sairia sem explicação."""
+    distante pode ser a primeira, e aí o número baixo sairia sem explicação."""
     rede = RedeDirigida()
     motor = _motor(rede, urls_download=(sp.Provedor("https://longe/a", perto=False),),
                    urls_upload=("https://ul/b",))
@@ -1545,7 +1545,7 @@ def test_upload_pede_janela_de_envio_maior_no_socket_cru():
 
     Nenhum byte sai da máquina: o servidor é 127.0.0.1. O que se prova aqui é que
     o SO_SNDBUF é pedido ANTES do TLS, no socket recém-criado, e que o sistema
-    concedeu bem mais que os 65536 padrão — o número que limitava o upload a um
+    concedeu bem mais que os 65536 padrão: o número que limitava o upload a um
     oitavo do link.
     """
     padrao = socket.socket().getsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF)
@@ -1612,7 +1612,7 @@ class _ComBuffer(RedeDirigida):
 def test_upload_no_teto_da_janela_nao_e_apresentado_como_velocidade_do_link():
     """A promessa central: número que encostou no teto do envio deixou de falar
     sobre a internet. Reportar 118 Mbps calado foi exatamente o defeito que este
-    módulo tinha — o app media a si mesmo e chamava de "sua velocidade"."""
+    módulo tinha: o app media a si mesmo e chamava de "sua velocidade"."""
     rede = _ComBuffer(65536, sonda=16.0)
     motor = _motor(rede, urls_download=("https://dl/a",), urls_upload=("https://ul/b",))
     motor.start()
@@ -1641,7 +1641,7 @@ def test_janela_curta_com_buffer_grande_sai_com_ressalva():
     """A armadilha que nasce junto com o conserto: o contador soma o que foi
     entregue ao SOCKET. Com 4 MB por fluxo isso são megabytes que o servidor
     ainda não viu; em regime o excesso cancela, mas numa janela curta ele vira a
-    medida inteira — medido, +323%."""
+    medida inteira: medido, +323%."""
     rede = _ComBuffer(8 << 20, por_chamada=10_000, sonda=16.0)
     motor = _motor(rede, urls_download=("https://dl/a",), urls_upload=("https://ul/b",))
     motor.start()
@@ -1652,7 +1652,7 @@ def test_janela_curta_com_buffer_grande_sai_com_ressalva():
 
 
 def test_ressalva_do_teto_do_app_diz_o_numero():
-    """Quando o Python é o gargalo, a tela precisa dizer QUANTO ele aguenta — sem
+    """Quando o Python é o gargalo, a tela precisa dizer QUANTO ele aguenta, sem
     o número, "o app é o limite" não ajuda ninguém a decidir nada."""
     medida = sp._Medida(taxa=900.0, provedor=sp.Provedor("https://x/y"),
                         teto_processo=950.0)
@@ -1709,7 +1709,7 @@ def test_a_tela_oferece_os_servidores_que_o_motor_usaria(tmp_path, monkeypatch):
 
 
 def test_escolher_um_servidor_na_tela_fixa_ele_no_motor(tmp_path, monkeypatch):
-    """A escolha manual precisa chegar ao motor E ao disco — senão ela vale até o
+    """A escolha manual precisa chegar ao motor E ao disco, senão ela vale até o
     app fechar, que é o mesmo que não valer."""
     _, v = _tela(tmp_path, monkeypatch)
     try:
@@ -1736,7 +1736,7 @@ def test_servidor_fixado_reaparece_selecionado_na_proxima_abertura(tmp_path, mon
 
 def test_casa_nova_da_lista_publica_aparece_sem_reabrir_o_app(tmp_path, monkeypatch):
     """A busca da lista roda em segundo plano e só termina depois que o teste já
-    começou — o que ela traz nunca está na tela no instante em que chega."""
+    começou, o que ela traz nunca está na tela no instante em que chega."""
     _, v = _tela(tmp_path, monkeypatch)
     try:
         antes = v.test_srv.count()

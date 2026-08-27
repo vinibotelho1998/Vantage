@@ -25,7 +25,7 @@ def test_desgaste_nvme_vira_vida_restante():
 
 
 def test_vida_ja_pronta_nao_e_recalculada():
-    """SSD SATA publica 'Remaining Life' direto — inverter de novo seria erro."""
+    """SSD SATA publica 'Remaining Life' direto: inverter de novo seria erro."""
     d = diskhealth.from_lhm_tree([
         _no("Crucial MX500", "Level", "Remaining Life", 91.0),
     ])
@@ -100,7 +100,7 @@ def test_campo_nulo_do_cim_nao_vira_zero():
 
 
 def test_zero_em_contador_de_erro_e_leitura_valida():
-    """Aqui zero e' boa noticia e precisa aparecer — nao e' ausencia de dado."""
+    """Aqui zero e' boa noticia e precisa aparecer; nao e' ausencia de dado."""
     d = diskhealth.parse_physical(
         '[{"id":"0","nome":"NVMe","erros_leitura":0,"erros_escrita":0,"horas":9000}]')
     assert d[0]["errors_read"] == 0.0

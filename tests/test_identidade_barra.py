@@ -1,7 +1,7 @@
 """Identidade do processo na barra de tarefas do Windows.
 
 Sem um AppUserModelID proprio, o Windows agrupa a janela sob o executavel que
-hospeda o Python e mostra o icone DELE — e fixar na barra fixa a coisa errada.
+hospeda o Python e mostra o icone DELE; e fixar na barra fixa a coisa errada.
 """
 from dbxstats.__main__ import _identidade_na_barra
 

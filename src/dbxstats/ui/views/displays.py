@@ -42,8 +42,8 @@ _KPIS = [
 def _index_of(box: QComboBox, value) -> int:
     """Indice do item com esse valor, comparando por igualdade.
 
-    QComboBox.findData nao serve aqui: com payload Python opaco — uma tupla
-    (largura, altura) — ele compara por identidade, entao procurar (1920, 1080)
+    QComboBox.findData nao serve aqui: com payload Python opaco, uma tupla
+    (largura, altura), ele compara por identidade, entao procurar (1920, 1080)
     devolvia -1 mesmo com o item guardando exatamente (1920, 1080). O seletor
     ficava parado no primeiro item, que e' o maior modo da lista: numa TV 4K
     isso mostrava "4096 x 2160 escalonada" com a tela em 3840 x 2160 nativo, e
@@ -118,7 +118,7 @@ class ArrangeCanvas(QWidget):
             if disp.primary:
                 self.primary = disp.monitor_id
 
-        # A apagada nao tem posicao no desktop — o Windows nao guarda uma para
+        # A apagada nao tem posicao no desktop: o Windows nao guarda uma para
         # quem esta' fora dele. Entao ela e' encostada a direita do conjunto, so'
         # para existir no mapa; arrastar continua valendo so' para as ligadas.
         borda = max((r.right() for r in self.rects.values()), default=0)
@@ -446,7 +446,7 @@ class _DisplayCard(Card):
         self.btn_off_default = PillButton("", theme.MUTE)
         self.btn_off_default.clicked.connect(self._toggle_off_by_default)
         # So' as duas acoes do dia a dia ficam a' vista. As outras cinco sao
-        # ajuste de arranjo — coisa que se mexe uma vez e nao se olha mais — e
+        # ajuste de arranjo (coisa que se mexe uma vez e nao se olha mais) e
         # deixavam sete pilulas coloridas competindo por atencao em cada tela.
         actions.addWidget(self.btn_apply)
         actions.addWidget(self.btn_primary)
@@ -458,7 +458,7 @@ class _DisplayCard(Card):
 
         # Segunda fileira, escondida ate' o "⋯". Fica numa fileira propria, e
         # nao num menu suspenso, porque os botoes aqui mudam de texto e somem
-        # conforme o estado da tela — e `_sync_state` continua mandando neles
+        # conforme o estado da tela, e `_sync_state` continua mandando neles
         # exatamente como antes.
         self.mais = QWidget()
         extras = QHBoxLayout(self.mais)
@@ -618,8 +618,8 @@ class _DisplayCard(Card):
 
         Diferente de "Tornar primaria", que vale so' agora: esta escolha e'
         reimposta quando um monitor e' conectado, quando um jogo fecha e quando
-        o app abre. Sem ela, plugar a TV entrega a primaria a ela — o Windows
-        promove sozinho a tela que acabou de chegar — e a barra de tarefas some
+        o app abre. Sem ela, plugar a TV entrega a primaria a ela (o Windows
+        promove sozinho a tela que acabou de chegar) e a barra de tarefas some
         para um canto onde ninguem esta'.
         """
         cfg = self.view.cfg
@@ -794,7 +794,7 @@ class DisplaysView(View):
         self.c_nativa.setToolTip(
             "O Windows escolhe um modo conservador ao reanexar uma tela: numa TV 4K "
             "vira 60 Hz, e num painel de 144 vira 120. Vale na abertura do app e "
-            "quando um monitor entra ou sai — nunca no meio do uso.")
+            "quando um monitor entra ou sai, nunca no meio do uso.")
         self.c_nativa.setChecked(bool(self.cfg.display_force_native))
         self.c_nativa.toggled.connect(self._set_nativa)
         card.add(self.c_nativa)
@@ -841,7 +841,7 @@ class DisplaysView(View):
             partes.append("apagadas: " + ", ".join(apagadas))
         if self.cfg.display_force_native:
             partes.append("modo nativo")
-        self.resumo_padrao.setText("Arranjo padrão — " + "   ·   ".join(partes))
+        self.resumo_padrao.setText("Arranjo padrão: " + "   ·   ".join(partes))
 
     def _aplicar_padrao(self) -> None:
         aplicar = getattr(self.app, "_enforce_display_defaults", None)
@@ -902,7 +902,7 @@ class DisplaysView(View):
             if espelho:
                 resumo = f"espelho · {resumo}"
             if padrao:
-                resumo = f"{resumo}  —  é para cá que tudo volta"
+                resumo = f"{resumo}, é para cá que tudo volta"
             col = QVBoxLayout()
             col.setSpacing(0)
             titulo = QHBoxLayout()
@@ -979,7 +979,7 @@ class DisplaysView(View):
         self.cfg.display_default_profile = virou
         self.cfg.save()
         self._refresh_profiles()
-        self.notify(f"'{profile['name']}' é o arranjo padrão — é para cá que as telas "
+        self.notify(f"'{profile['name']}' é o arranjo padrão, é para cá que as telas "
                     "voltam depois do jogo e ao fechar o app" if virou
                     else "sem perfil padrão; volta para o estado de quando o app abriu",
                     theme.OK if virou else theme.MUTE)
@@ -1050,7 +1050,7 @@ class DisplaysView(View):
             return True
         kept = ask_confirm(description, seconds, undo, self.window())
         self.reload()
-        self.notify(f"{description} — mantido" if kept
+        self.notify(f"{description}, mantido" if kept
                     else "sem confirmação, voltei ao estado anterior",
                     theme.OK if kept else theme.WARN)
         return kept

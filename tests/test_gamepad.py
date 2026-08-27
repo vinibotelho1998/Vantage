@@ -82,7 +82,7 @@ def test_area_de_trabalho_exige_os_dois_gatilhos():
     """Win+D e um INTERRUPTOR: a segunda apertada traz as janelas de volta.
 
     Num gatilho sozinho, que e analogico e dispara com um rocar, isso virava "o
-    jogo volta sozinho toda hora" — foi o relato de uso.
+    jogo volta sozinho toda hora": foi o relato de uso.
     """
     assert G.DEFAULT_BINDINGS["LT+RT"] == "desktop"
     assert G.DEFAULT_BINDINGS["RT"] == ""
@@ -118,7 +118,7 @@ def test_descricao_sai_do_mapeamento_em_uso():
 
 
 def test_par_de_gatilhos_cala_os_individuais():
-    """Sem isso, apertar os dois dispararia tres acoes de uma vez — e a acao de
+    """Sem isso, apertar os dois dispararia tres acoes de uma vez, e a acao de
     cada gatilho ficaria presa quando o par se desfizesse."""
     cfg = _CfgFalso({"LT": "key_esc", "RT": "key_enter", "LT+RT": "desktop"})
     eng = G.GamepadMouse.__new__(G.GamepadMouse)

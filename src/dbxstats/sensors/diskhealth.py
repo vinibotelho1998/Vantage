@@ -6,7 +6,7 @@ Duas fontes, nessa ordem de preferencia:
    (ou o log de saude NVMe) direto do controlador, entao sai de graca no mesmo
    ciclo de coleta. E' de la' que vem vida restante, total escrito e temperatura.
 2. Storage Spaces (`Get-PhysicalDisk` + `Get-StorageReliabilityCounter`). Cobre o
-   que o LHM nao expoe — horas ligado, contadores de erro, temperatura maxima — e
+   que o LHM nao expoe (horas ligado, contadores de erro, temperatura maxima) e
    e' quem da' nome, serial, barramento e as letras de cada disco fisico.
 
 A regra que vale para as duas: dado que a maquina nao entrega simplesmente nao
@@ -96,7 +96,7 @@ def from_lhm_tree(nodes) -> list[dict]:
     saida = []
     for entrada in por_disco.values():
         # "Percentage Used" e' o inverso de vida restante. Quando o disco so'
-        # publica o desgaste, a conversao e' exata — nao e' estimativa.
+        # publica o desgaste, a conversao e' exata: nao e' estimativa.
         if "life" not in entrada and "used_pct" in entrada:
             entrada["life"] = round(max(0.0, 100.0 - entrada.pop("used_pct")), 1)
         entrada.pop("used_pct", None)
@@ -208,8 +208,8 @@ def combinar(fisicos: list[dict], do_lhm: list[dict]) -> list[dict]:
     quais letras moram em cada um. O LHM entra por cima com o que so' ele tem
     (vida restante, total escrito, temperatura do controlador).
 
-    O casamento e' pelo modelo normalizado. Quando o nome nao bate — acontece com
-    adaptador USB e com RAID, onde o LHM ve' um nome e o Windows outro — cai para
+    O casamento e' pelo modelo normalizado. Quando o nome nao bate (acontece com
+    adaptador USB e com RAID, onde o LHM ve' um nome e o Windows outro) cai para
     a ordem de enumeracao, que e' a mesma nas duas APIs na esmagadora maioria das
     maquinas. Um disco do LHM que nao casa com nenhum entra sozinho: e' melhor
     mostrar um disco a mais do que esconder a vida util de um deles.

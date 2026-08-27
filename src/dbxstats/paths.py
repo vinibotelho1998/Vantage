@@ -22,7 +22,7 @@ SANDBOX_ENV = "DBXSTATS_DATA_DIR"
 """Aponta os dados para outra pasta. Testes e scripts de screenshot usam isso.
 
 Sem essa valvula, qualquer script que instancie a UI acaba gravando por cima do
-settings.json de verdade — foi assim que uma rodada de preview apagou os atalhos
+settings.json de verdade; foi assim que uma rodada de preview apagou os atalhos
 de jogo do usuario. Dado de producao nao pode estar a um import de distancia.
 """
 

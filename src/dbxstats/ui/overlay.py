@@ -3,9 +3,9 @@
 O painel esta' organizado na ordem em que uma queda de FPS se investiga, e nao
 na ordem em que os sensores existem:
 
-    veredito  — o que esta' acontecendo (FPS, traco, quem esta' no limite)
-    limite    — quem esta' segurando (CPU e GPU, com clock, tensao e calor)
-    memoria   — o que esta' estourando (VRAM e RAM, com o quanto o jogo pegou)
+    veredito: o que esta' acontecendo (FPS, traco, quem esta' no limite)
+    limite: quem esta' segurando (CPU e GPU, com clock, tensao e calor)
+    memoria: o que esta' estourando (VRAM e RAM, com o quanto o jogo pegou)
 
 Dai' a tensao morar entre o clock e a temperatura da mesma peca: clock caindo
 com tensao caindo e temperatura no teto e' limite termico; clock serrilhando com
@@ -62,7 +62,7 @@ _HOTSPOT_JUNTOS = 2.0
 _HOTSPOT_SEPARA = 4.0
 """Histerese do ponto quente. Nesta RX 9070 XT o hotspot marca igual ao nucleo
 ("74/74" e' meia coluna gasta para nao dizer nada), mas no Ryzen o Tctl salta
-15 graus em milissegundos — sem as duas bordas a celula piscaria a 3 Hz."""
+15 graus em milissegundos; sem as duas bordas a celula piscaria a 3 Hz."""
 
 _LOW_AFUNDOU = 0.5
 """Fracao da media abaixo da qual o 1% low ganha a seta. E' texto, e nao cor,
@@ -80,7 +80,7 @@ Medido com a fonte real do sistema (a plataforma offscreen do Qt nao tem
 familia nenhuma e devolve caixas de 13 px, o que subestimava a altura em 40%):
 o arranjo completo ocupa entre 24% e 27% da tela em todas as resolucoes, porque
 _auto_scale ja' encolhe o painel pela largura da tela. Em 0.26 sobravam menos de
-4% de folga — qualquer linha nova rebaixava o padrao, e numa TV 720p ele ja'
+4% de folga: qualquer linha nova rebaixava o padrao, e numa TV 720p ele ja'
 nascia rebaixado. Em 0.36 a folga vai de 27% (720p, o pior caso) a 43% (1080p),
 que e' o que absorve tanto uma linha a mais quanto uma fonte mais alta (Cascadia
 Mono no lugar da Consolas, quando ela existe na maquina) sem deixar de rebaixar
@@ -101,14 +101,14 @@ def _alpha_do_fundo(opacidade: float) -> int:
     """Opacidade escolhida (0.30 a 1.00) -> alpha 0..255 do fundo do painel.
 
     O mapa antigo era `opacidade * 165`: o controle no maximo pintava 65% de
-    opacidade. Sobre uma cena clara — neve, deserto, menu branco — o fundo
+    opacidade. Sobre uma cena clara (neve, deserto, menu branco) o fundo
     compunha para um cinza medio em que nem o vermelho de alarme aparecia, e nao
     havia posicao do controle que resolvesse. Um controle sem posicao boa e'
     decoracao, e ainda faz a pessoa concluir que o app e' que esta' quebrado.
 
     Aqui o mapa e' o obvio: 88% no controle sao 88% de opacidade na tela, e o fim
     do curso e' solido de verdade. Quem baixar continua vendo o jogo atraves do
-    painel — a diferenca e' que agora isso e' uma escolha, e nao o unico estado
+    painel; a diferenca e' que agora isso e' uma escolha, e nao o unico estado
     possivel.
     """
     return round(max(0.0, min(1.0, opacidade)) * 255)
@@ -175,7 +175,7 @@ def _largura_cauda(metrics: set[str]) -> int:
 
     Ela carrega watts nas linhas de peca e a cauda das linhas de memoria. Como a
     reserva e' feita uma vez, na construcao, ela tem que caber no maior texto que
-    as opcoes ligadas conseguem produzir — senao a coluna cresce no meio do jogo.
+    as opcoes ligadas conseguem produzir, senao a coluna cresce no meio do jogo.
     """
     watts = (9 if "teto_watts" in metrics else 5) if "watts" in metrics else 0
     vram = (8 if "mem_ctrl" in metrics else 0) + (9 if "mem_clock" in metrics else 0)
@@ -212,7 +212,7 @@ def _barra(usado: float | None, total: float | None, cor: str,
     Existe porque "falta de memoria" e' a unica das quatro causas que se le'
     melhor como proporcao: 15.8/16.0 pede um segundo de leitura, barra cheia pede
     zero. A fatia destacada entrega de graca, em dez caracteres, a relacao que o
-    par de numeros nao conta — quanto do total e' o jogo.
+    par de numeros nao conta: quanto do total e' o jogo.
     """
     if not total or usado is None:
         return ""
@@ -223,7 +223,7 @@ def _barra(usado: float | None, total: float | None, cor: str,
     # Meio tom solido em vez de alpha: rich text de QLabel nao mistura com o
     # fundo translucido do overlay, entao a transparencia sairia como cor chapada.
     # Escurece pouco (0.25): a 0.55 o "resto do sistema" caia para 2:1 contra um
-    # fundo claro atravessando o painel, e a fatia do meio sumia — sobrava so' o
+    # fundo claro atravessando o painel, e a fatia do meio sumia: sobrava so' o
     # pedaco do jogo, que e' o contrario do que a barra quer dizer. O degrau para
     # a fatia do jogo continua visivel porque ela e' a unica com a cor cheia.
     meio = theme.mix(cor, theme.BG_SUNKEN, 0.25)
@@ -237,7 +237,7 @@ def _barra(usado: float | None, total: float | None, cor: str,
         # Trilho em MUTE, nao no cinza FAINT: o '░' ja' cobre um quarto da celula,
         # entao ele sai discreto de qualquer jeito. No FAINT ele sumia sobre cena
         # clara e a barra perdia exatamente a proporcao que ela existe para
-        # mostrar — sobrava um bloco solto, sem escala.
+        # mostrar: sobrava um bloco solto, sem escala.
         partes.append(f"<span style='color:{theme.MUTE}'>"
                       f"{'░' * (_CELULAS_BARRA - cheias)}</span>")
     return "".join(partes)
@@ -292,7 +292,7 @@ class GameOverlay(QWidget):
         Duas coisas inflam o overlay num 4K: a fonte e' medida em pontos, entao a
         escala do Windows ja' multiplica tudo; e a tela e' o dobro de larga, o que
         pede um pouco mais de corpo para continuar legivel de longe. O primeiro
-        fator e' desfeito, o segundo entra limitado — o resultado e' um painel que
+        fator e' desfeito, o segundo entra limitado: o resultado e' um painel que
         ocupa mais ou menos a mesma fracao da tela em 1080p e em 4K.
         """
         screen = self._screen()
@@ -361,7 +361,7 @@ class GameOverlay(QWidget):
             lay.addWidget(self._sub)
 
         # Numero sozinho nao mostra queda: o traco e' o que denuncia o engasgo que
-        # ja' passou. Janela curta de proposito — o desenho fica mais liso.
+        # ja' passou. Janela curta de proposito: o desenho fica mais liso.
         if "graph" in metrics:
             self._graph = Sparkline(theme.FPS, height=int(46 * scale),
                                     from_zero=True, line_width=2.4)
@@ -379,7 +379,7 @@ class GameOverlay(QWidget):
         linha.setSpacing(int(8 * scale))
         # "LIMITE" sozinho nao dizia nada: limite de que? O painel ja' chama
         # essa mesma leitura de "Gargalo", que e' o termo que se usa entre
-        # jogadores — dois nomes para a mesma coisa so' confundiam.
+        # jogadores: dois nomes para a mesma coisa so' confundiam.
         self._limite_tag = QLabel("GARGALO")
         self._limite_tag.setFont(_mono(8, QFont.Weight.Bold, scale))
         self._limite_tag.setStyleSheet(f"color: {theme.MUTE};")
@@ -394,7 +394,7 @@ class GameOverlay(QWidget):
         linha.addStretch(1)
         linha.addWidget(self._engasgo)
         self._limite_box.setVisible(False)
-        # Desligada, a linha nem entra no layout — e' por isso que o estado vive
+        # Desligada, a linha nem entra no layout; e' por isso que o estado vive
         # aqui: um setVisible(True) num widget sem pai viraria uma janelinha
         # solta no meio da tela do jogo.
         self._limite_on = "limite" in metrics
@@ -448,7 +448,7 @@ class GameOverlay(QWidget):
                 # colunas de clock e tensao. Dar celula propria a cada um
                 # obrigava as colunas a caber o texto mais longo das quatro
                 # linhas, e abria um vao entre o clock e a tensao da CPU e da
-                # GPU — o alinhamento certo de uma linha estragava o das outras.
+                # GPU: o alinhamento certo de uma linha estragava o das outras.
                 colunas_linha = (CARGA, TEMP, CAUDA)
             for c in colunas_linha:
                 cel = QLabel("")
@@ -508,7 +508,7 @@ class GameOverlay(QWidget):
         marca.setStyleSheet(f"color: {theme.rgba(theme.accent_color(cfg.accent), 0.55)};")
 
         # O rebaixamento apaga metade das metricas marcadas, e quem esta' jogando
-        # nao tem como saber que foi o painel que cortou — procuraria o defeito no
+        # nao tem como saber que foi o painel que cortou; procuraria o defeito no
         # sensor ou na configuracao. Uma palavra no rodape e' o suficiente para
         # ligar "liguei Tensao e nao apareceu" ao unico motivo que existe.
         self._marca_compacto = QLabel("compacto")
@@ -527,7 +527,7 @@ class GameOverlay(QWidget):
         rodape.addWidget(marca)
         lay.addLayout(rodape)
 
-        # Um aviso, uma vez, no rodape — nunca um aviso por celula. Sem elevacao
+        # Um aviso, uma vez, no rodape, nunca um aviso por celula. Sem elevacao
         # a tensao do processador e a temperatura dos pentes nem aparecem na
         # arvore do LHM: some a coluna inteira, e o motivo tem que caber em algum
         # lugar ou a pessoa conclui que a maquina nao tem os sensores.
@@ -535,7 +535,7 @@ class GameOverlay(QWidget):
         # A pergunta e' sobre o que a pessoa marcou, e nao sobre o que sobrou do
         # corte: no compacto as duas chaves ja' foram removidas de `metrics`, e
         # olhar so' para elas fazia o aviso sumir junto com as colunas que ele
-        # explica — restando uma tela de opcoes toda marcada e nenhuma pista.
+        # explica, restando uma tela de opcoes toda marcada e nenhuma pista.
         pedidas = set(cfg.overlay_metrics)
         self._aviso = QLabel("Vcore e temp dos pentes pedem administrador")
         self._aviso.setFont(pequena)
@@ -563,7 +563,7 @@ class GameOverlay(QWidget):
         self._dados.clear()
         self._build()
         # Pinta antes de posicionar: a grade nova nasce vazia, e sem isto o painel
-        # ficaria em branco ate' o proximo tique — um terco de segundo de overlay
+        # ficaria em branco ate' o proximo tique: um terco de segundo de overlay
         # apagado bem no momento em que ele mudou de forma.
         self._pintar()
         self.place()
@@ -667,7 +667,7 @@ class GameOverlay(QWidget):
         self._limite.setStyleSheet(f"color: {cor};")
         # A janela do veredito e' a de analise (60 s por padrao), e o painel
         # repinta a 3 Hz: o rotulo responde "quem segurou o ultimo minuto", nao
-        # "quem esta' segurando agora". A porcentagem ao lado existe para isso —
+        # "quem esta' segurando agora". A porcentagem ao lado existe para isso:
         # ela diz o quanto do minuto sustenta a afirmacao.
         engasgo = (f"engasgo {m.stutter_pct:.1f}%"
                    if m.frames and self._engasgo_on else "")
@@ -688,7 +688,7 @@ class GameOverlay(QWidget):
             self._set("cpu", CLOCK, _ghz(d.get("cpu_mhz")))
             self._set("cpu", VOLT, _volt(d.get("cpu_volts")) if volts else "")
             # Duas temperaturas por peca: a de trabalho e o ponto quente. Uma so'
-            # sempre mente para algum lado — a media esconde throttle, o pico
+            # sempre mente para algum lado: a media esconde throttle, o pico
             # assusta a toa. Juntas dizem se o calor esta' espalhado ou concentrado.
             self._temps("cpu", d.get("cpu_temp_cores"),
                         d.get("cpu_temp_package") or d.get("cpu_temp"),
@@ -707,7 +707,7 @@ class GameOverlay(QWidget):
 
     def _pintar_memoria(self, d: dict, g: dict, stream, metrics: set[str]) -> None:
         # A coluna de tensao ficava vazia nas duas linhas de memoria. Quando a
-        # placa expoe o trilho, ele cabe exatamente ali — e um numero util vale
+        # placa expoe o trilho, ele cabe exatamente ali; e um numero util vale
         # mais que uma coluna reservada para nada.
         volts_mem = "volts" in metrics
         if "vram" in self._dados:
@@ -715,7 +715,7 @@ class GameOverlay(QWidget):
             # A VRAM do jogo segue a mesma regra da RAM: so' vale a do processo
             # que o motor de quadros esta' medindo AGORA. Comparar o pid evita o
             # numero ficar congelado no ultimo jogo por um ciclo inteiro do
-            # coletor depois que ele fecha — valor parado mente.
+            # coletor depois que ele fecha: valor parado mente.
             pid_v = stream.pid if stream is not None else 0
             jogo_v = (d.get("game_vram")
                       if "jogo_vram" in metrics and d.get("game_pid") == pid_v and pid_v
@@ -747,7 +747,7 @@ class GameOverlay(QWidget):
             usado, total = d.get("ram_used"), d.get("ram_total")
             # Jogo vivo e' o que o motor de FPS esta' medindo agora. Comparar o pid
             # evita a cauda congelar no ultimo valor por um ciclo do coletor
-            # inteiro depois de o jogo fechar — numero parado mente.
+            # inteiro depois de o jogo fechar: numero parado mente.
             pid = stream.pid if stream is not None else 0
             jogo = d.get("game_ram_private") if d.get("game_pid") == pid and pid else None
             par = f"{usado:.1f}/{total:.1f}GB" if total else ""
@@ -755,7 +755,7 @@ class GameOverlay(QWidget):
                            destaque=(jogo or 0) / 1024.0 if jogo else None)
             # A fatia do jogo entra na MESMA celula da barra, logo a seguir:
             # ela e' um pedaco do numero que a barra desenha, e leitura que se
-            # compara precisa ficar ao lado do que se compara com ela — na ponta
+            # compara precisa ficar ao lado do que se compara com ela; na ponta
             # direita ficava solta, parecendo outro assunto.
             self._set("ram", CARGA, f"{par}&nbsp;&nbsp;{barra}" if par else "")
             self._set("ram", TEMP, "")
@@ -763,7 +763,7 @@ class GameOverlay(QWidget):
             # direita: ela e' uma fatia do numero que esta' na barra, e leitura
             # que se compara precisa ficar perto do que se compara com ela. A
             # coluna e' a mesma da tensao, que nesta linha quase sempre esta'
-            # vazia — trilho de memoria com nome identificavel e' raro.
+            # vazia: trilho de memoria com nome identificavel e' raro.
             jogo_txt = (f"jogo {jogo / 1024:.1f}GB"
                         if "jogo_ram" in metrics and jogo else "")
             if volts_mem and d.get("ram_volts"):
@@ -880,7 +880,7 @@ class GameOverlay(QWidget):
         Sao tres casos e nenhuma excecao: coluna vazia em todas as linhas some
         (a maquina nao publica aquilo); celula vazia numa coluna que serve a outra
         linha fica em branco, com a largura reservada mantida; peca inteira
-        ausente derruba a linha. Travessao nao entra em nenhum dos tres — ele diz
+        ausente derruba a linha. Travessao nao entra em nenhum dos tres: ele diz
         "quebrou" quando nada quebrou.
         """
         vivas = {k for k, cels in self._dados.items()
@@ -910,7 +910,7 @@ def _veredito(m) -> tuple[str, str]:
 
     Sem quadros pareados o motor devolve "indisponivel" ou "coletando": nesses
     dois casos a linha inteira some, porque um veredito sem base e' pior que
-    nenhum — ele parece uma resposta.
+    nenhum: ele parece uma resposta.
     """
     # A porcentagem pode faltar mesmo com o veredito presente: um resultado
     # relido do disco traz o rotulo salvo, mas nao necessariamente os campos que

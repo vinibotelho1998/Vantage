@@ -1,7 +1,7 @@
 """Favoritos da aba Sensores: fixar sensor no topo sem perder o resto da lista.
 
 A arvore do LibreHardwareMonitor tem centenas de linhas e muda de tamanho a cada
-ciclo — sensor entra quando a peca acorda, some quando ela desliga, e o filtro
+ciclo: sensor entra quando a peca acorda, some quando ela desliga, e o filtro
 corta o meio. Tudo aqui gira em volta disso: a marca tem que sobreviver ao
 fechamento do app, tem que ser presa a um sensor (nao a uma posicao de linha), e
 o favorito de um hardware que nao esta' ligado agora nao pode virar linha morta
@@ -149,7 +149,7 @@ def test_desmarcar_tira_da_secao_e_do_settings():
 def test_badge_conta_os_favoritos_no_ato_do_clique():
     """Barra dizendo so' '4 sensores' com a secao ja' desenhada e' contradicao.
 
-    O contador so' era refeito no tick do coletor — ate' 2 s de atraso no
+    O contador so' era refeito no tick do coletor; ate' 2 s de atraso no
     intervalo mais lento, tempo de sobra para a pessoa achar que nao pegou.
     """
     view = _tela()

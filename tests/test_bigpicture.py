@@ -205,8 +205,8 @@ def _app_para_gesto(botoes=0):
 def test_back_ja_apertado_na_abertura_nao_abre_sozinho():
     """O app subiu no Big Picture porque o controle ja' reportava Back.
 
-    Sem exigir a borda, um botao preso — ou apertado no instante em que o app
-    sobe — abre a grade sozinho um segundo depois.
+    Sem exigir a borda, um botao preso (ou apertado no instante em que o app
+    sobe) abre a grade sozinho um segundo depois.
     """
     import time
 

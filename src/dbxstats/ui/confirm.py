@@ -3,7 +3,7 @@
 Mexer em resolucao, rotacao ou topologia e' a unica coisa no app que pode deixar
 a maquina sem imagem. O padrao do Windows resolve isso com um dialogo modal e um
 relogio correndo: se ninguem confirmar, desfaz sozinho. E' o mesmo aqui, porque
-sem imagem nao ha' como clicar em nada — o relogio e' a saida de emergencia.
+sem imagem nao ha' como clicar em nada; o relogio e' a saida de emergencia.
 """
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ class ConfirmRevertDialog(QDialog):
     def __init__(self, description: str, seconds: int, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("SettingsRoot")
-        self.setWindowTitle("DBX Stats — confirmar telas")
+        self.setWindowTitle("DBX Stats: confirmar telas")
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
         self.setWindowFlag(Qt.WindowType.WindowContextHelpButtonHint, False)
         self.setModal(True)
@@ -126,7 +126,7 @@ class ConfirmDialog(QDialog):
 
     Nao e' QMessageBox porque o app desenha a propria barra de titulo e vive num
     tema escuro: o dialogo nativo abre branco no meio da tela e parece de outro
-    programa — justo na hora em que a pessoa precisa confiar no que esta' lendo.
+    programa; justo na hora em que a pessoa precisa confiar no que esta' lendo.
     """
 
     def __init__(self, titulo: str, texto: str, rotulo_ok: str = "Confirmar",

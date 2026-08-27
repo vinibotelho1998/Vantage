@@ -28,7 +28,7 @@ _TESTE_KPIS = [
 ]
 
 _AUTOMATICO = "Automático (menor latência)"
-"""Primeira opção da lista de servidores — e o padrão, sempre."""
+"""Primeira opção da lista de servidores, e o padrão, sempre."""
 
 
 def _taxa(mbps: float | None) -> str:
@@ -39,7 +39,7 @@ def _taxa(mbps: float | None) -> str:
 
 
 def _texto_servidor(s: dict) -> str:
-    """Quem está medindo, onde fica e a que distância — numa linha só.
+    """Quem está medindo, onde fica e a que distância, numa linha só.
 
     A latência que sai aqui é a de QUEM ESTÁ MEDINDO, e não a do servidor
     escolhido no começo: quando a fila desce para a reserva, casar o host de um
@@ -167,7 +167,7 @@ class NetworkView(View):
         # sonda todas as casas antes de medir e usa a mais proxima, que e' o certo
         # em quase todo caso. A lista existe para quem tem um servidor melhor (o
         # do proprio provedor, por exemplo) ou quer comparar com o Ookla usando a
-        # mesma casa — sem isso, "por que o numero deles e' outro?" nao tem
+        # mesma casa: sem isso, "por que o numero deles e' outro?" nao tem
         # resposta possivel.
         self.test_srv = QComboBox()
         self.test_srv.setMinimumWidth(theme.scaled(210))
@@ -210,7 +210,7 @@ class NetworkView(View):
         # Duas linhas que so' aparecem quando tem o que dizer: o servidor de
         # upload, quando ele nao e' o mesmo do download, e o teto do envio, que
         # so' existe depois de uma medicao de upload. Travessao fixo numa linha
-        # diz "isto quebrou" — e nao e' o caso.
+        # diz "isto quebrou", e nao e' o caso.
         for chave in ("envio", "teto"):
             self.test_rows.row(chave).setVisible(False)
 
@@ -237,7 +237,7 @@ class NetworkView(View):
 
         Nao adianta oferecer uma casa que o motor nao conhece, entao a lista sai
         dele: semente embutida mais o que a lista publica ja' deixou no disco. Um
-        servidor fixado que sumiu da lista continua aparecendo — apagar da tela a
+        servidor fixado que sumiu da lista continua aparecendo: apagar da tela a
         escolha que ainda esta' valendo seria mentir sobre o proprio estado.
         """
         fixado = self._teste.fixado
@@ -245,7 +245,7 @@ class NetworkView(View):
         self.test_srv.clear()
         self.test_srv.addItem(_AUTOMATICO, "")
         for prov in self._teste.candidatos():
-            self.test_srv.addItem(f"{prov.rotulo} — {prov.host}", prov.host)
+            self.test_srv.addItem(f"{prov.rotulo} ({prov.host})", prov.host)
         if fixado and self.test_srv.findData(fixado) < 0:
             self.test_srv.addItem(f"{fixado} (fixado)", fixado)
         self.test_srv.setCurrentIndex(max(0, self.test_srv.findData(fixado or "")))
@@ -263,7 +263,7 @@ class NetworkView(View):
 
         A busca da lista roda em segundo plano e só termina depois que o teste já
         começou, então o que ela traz nunca está na tela no momento em que chega.
-        Reconstruir a lista custa nada e só acontece quando ela de fato mudou —
+        Reconstruir a lista custa nada e só acontece quando ela de fato mudou:
         mexer no combo à toa roubaria a seleção de quem estivesse escolhendo.
         """
         atual = [self.test_srv.itemData(i) for i in range(1, self.test_srv.count())]
@@ -280,7 +280,7 @@ class NetworkView(View):
 
         `cancel()` derruba os sockets sem esperar quem esta' lendo, entao os
         fluxos saem quase na hora. A espera curta existe so' para o caso raro de
-        um fluxo teimoso — segurar a saida do app por segundos seria trocar um
+        um fluxo teimoso: segurar a saida do app por segundos seria trocar um
         congelamento por outro.
         """
         self._teste_timer.stop()
@@ -312,12 +312,12 @@ class NetworkView(View):
         self.test_bar.setValue(int(s["progresso"] * 1000))
 
         # Enquanto a fase corre, o tile dela mostra a parcial em cinza: e' um
-        # numero vivo, ainda nao o resultado — pintar de cor final daria ao
+        # numero vivo, ainda nao o resultado: pintar de cor final daria ao
         # aquecimento do TCP a mesma autoridade da medida fechada.
         #
         # Quem manda no "medindo…" e' a FASE, e nao a existencia da parcial: o
         # motor so' publica parcial quando byte novo chegou, e enquanto ele nao
-        # chega o tile fica no travessao — dizer "0.0 Mbps · medindo…" enquanto se
+        # chega o tile fica no travessao: dizer "0.0 Mbps · medindo…" enquanto se
         # espera o primeiro byte era inventar numero no lugar de "ainda nao sei".
         parcial = s["parcial"] if rodando else None
         for chave, valor, cor_final, fase_da_vez in (
@@ -349,15 +349,15 @@ class NetworkView(View):
         if outro:
             self.test_rows.set("envio", envio)
 
-        # O teto so' aparece depois que houve upload — e, quando o numero medido
+        # O teto so' aparece depois que houve upload, e, quando o numero medido
         # encosta nele, o recado ambar logo abaixo explica que o valor virou o
         # limite do envio, e nao a velocidade do link.
         teto = _texto_teto(s)
         self.test_rows.row("teto").setVisible(teto != units.DASH)
         self.test_rows.set("teto", teto, theme.MUTE)
 
-        # O erro pode chegar com o teste ainda rodando — o download morre e o
-        # upload continua —, e e' de proposito: esconder a falha ate o fim deixava
+        # O erro pode chegar com o teste ainda rodando (o download morre e o
+        # upload continua), e e' de proposito: esconder a falha ate o fim deixava
         # o usuario encarando um tile vazio sem saber que ja' nao havia o que
         # esperar. Ressalva sai em ambar, nao em cinza, senao ninguem le'.
         recado = s["erro"] or s["aviso"] or ""

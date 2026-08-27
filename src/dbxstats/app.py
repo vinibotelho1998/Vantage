@@ -1,6 +1,6 @@
 """Controlador da aplicacao: sensores, timers, janelas e ciclo de vida.
 
-A UI nunca fala com um sensor diretamente — tudo passa por aqui, o que mantem as
+A UI nunca fala com um sensor diretamente: tudo passa por aqui, o que mantem as
 telas burras (e baratas) e concentra as regras num lugar so.
 """
 from __future__ import annotations
@@ -215,7 +215,7 @@ class App:
         self._t_clock.timeout.connect(self.window.tick_clock)
         self._t_clock.start(1000)
 
-        # Varredura de processo custa caro, mas so' roda com sessao aberta — e a
+        # Varredura de processo custa caro, mas so' roda com sessao aberta, e a
         # espera depois do jogo fechar e' o que o usuario sente, entao 1 s.
         self._t_session = QTimer(self.qt)
         self._t_session.timeout.connect(self._tick_session)
@@ -304,7 +304,7 @@ class App:
             self._session_off = ""
         self._session_name = item.get("name") or Path(item["path"]).stem
         # Grava a partida inteira desde ja', quando o atalho pede. O pid do jogo
-        # ainda nao existe — quem descobre e' o proprio motor de FPS — entao o
+        # ainda nao existe: quem descobre e' o proprio motor de FPS, entao o
         # gravador comeca solto e passa a seguir o processo assim que ele aparece.
         self._session_bench = bool(item.get("bench", True))
         self._bp_voltar = bool(item.get("voltar_bp", False))
@@ -313,14 +313,14 @@ class App:
         self._session_bench_pid = 0
         self._session_priority = str(item.get("priority", ""))
         aviso = f"{self._session_name} abrindo"
-        return True, f"{aviso} — {msg}" if msg else aviso
+        return True, f"{aviso}: {msg}" if msg else aviso
 
     def _apply_target(self, target: str) -> tuple[bool, str]:
         """Traduz o alvo do atalho numa mudanca de tela. Sem alvo, nao mexe.
 
         Falhar aqui nunca cancela o jogo: quem clicou em Jogar quer jogar. O que
         deu errado vira aviso, e o primeiro item do retorno diz se alguma coisa
-        mudou de fato — so' isso e' que gera promessa de devolver depois.
+        mudou de fato; so' isso e' que gera promessa de devolver depois.
         """
         self._session_off = ""
         if not target:
@@ -356,7 +356,7 @@ class App:
         return False, ""
 
     def _tick_session(self) -> None:
-        """Vigia o jogo — o que abrimos e o que o usuario abriu por fora."""
+        """Vigia o jogo: o que abrimos e o que o usuario abriu por fora."""
         self._watch_displays()
         self._watch_any_game()
         self._follow_game_server()
@@ -370,7 +370,7 @@ class App:
         self._session = None
         self._close_session_bench()
         if self._bp_voltar:
-            # Voltou do jogo: a grade reaparece na TV, e nao a janela de mesa —
+            # Voltou do jogo: a grade reaparece na TV, e nao a janela de mesa;
             # quem esta' no sofa nao alcanca o teclado para reabrir. So' acontece
             # nos atalhos marcados para isso; quem abre o jogo da mesa espera a
             # janela normal de volta.
@@ -391,7 +391,7 @@ class App:
                          self._session_name)
             self.notify("DBX Stats",
                         f"não consegui acompanhar {self._session_name}. "
-                        "As telas ficam como estão — use a aba Telas quando terminar.")
+                        "As telas ficam como estão; use a aba Telas quando terminar.")
             return
         if primaria:
             self._restore_primary(primaria, desligar)
@@ -400,7 +400,7 @@ class App:
         try:
             if not _same_layout(restore, dsp.snapshot()):
                 dsp.apply_profile(restore)
-                self.notify("DBX Stats", f"{self._session_name} fechou — telas de volta")
+                self.notify("DBX Stats", f"{self._session_name} fechou: telas de volta")
         except Exception:
             _log.exception("falha devolvendo as telas depois do jogo")
 
@@ -410,7 +410,7 @@ class App:
         O Windows guarda, para cada conjunto de monitores, a ultima topologia
         usada com aquele conjunto. Como a ultima vez que a TV esteve junto foi
         num perfil que apaga os monitores de mesa, plugar a TV de volta apagava
-        os dois — sem o app ter feito nada. Aqui a gente devolve o padrao assim
+        os dois, sem o app ter feito nada. Aqui a gente devolve o padrao assim
         que percebe a mudanca.
 
         So' reagimos a monitor entrando ou saindo, nunca a tela sendo ligada ou
@@ -441,14 +441,14 @@ class App:
             return
         _log.info("conjunto de telas mudou: %d conectadas", len(conectados))
         try:
-            # Aqui NAO se reimpoe perfil nenhum. Perfil mexe em tudo — topologia,
-            # modos, posicoes — e reaplica-lo por causa de um monitor plugado
+            # Aqui NAO se reimpoe perfil nenhum. Perfil mexe em tudo (topologia,
+            # modos, posicoes) e reaplica-lo por causa de um monitor plugado
             # apagava o arranjo que a pessoa tinha acabado de montar na mao. O
             # que vale sao as duas escolhas explicitas: quem manda e quem apaga.
             self._enforce_display_defaults()
         finally:
             # A aba Telas so' se redesenhava ao ser aberta. Plugar a TV com ela
-            # ja' na frente nao mostrava nada — a tela nova simplesmente nao
+            # ja' na frente nao mostrava nada; a tela nova simplesmente nao
             # aparecia. Redesenhar aqui vale ate' quando nao ha' perfil padrao:
             # a lista tem de refletir o que esta' ligado na maquina, sempre.
             self.window.reload_displays()
@@ -458,14 +458,14 @@ class App:
 
         Quatro passos, e a ordem nao e' negociavel:
 
-        1. acende o que deveria estar aceso — inclusive a tela que vai mandar,
+        1. acende o que deveria estar aceso, inclusive a tela que vai mandar,
            porque o Windows nao promove tela apagada;
         2. entrega a primaria a quem foi escolhido;
         3. apaga o que deveria estar apagado, agora que ela nao manda mais;
         4. devolve cada tela acesa ao modo nativo.
 
         O passo 4 existe porque o Windows chuta um modo conservador ao reanexar
-        uma tela — e' o que fazia a maquina abrir "com resolucao doida" depois
+        uma tela; e' o que fazia a maquina abrir "com resolucao doida" depois
         de um jogo ter mexido nas telas, ou depois de um reinicio.
 
         So' roda quando um monitor entra ou sai, e na abertura do app. Nao e'
@@ -513,7 +513,7 @@ class App:
         O Windows escolhe um modo conservador ao reanexar uma tela: numa TV 4K
         isso vira 4096x2160 a 60 Hz, ou 3840x2160 a 120 em vez de 144. Quem
         escolheu outro modo de proposito na aba Telas percebe, porque isso so'
-        acontece na abertura e quando um monitor entra ou sai — nao a cada
+        acontece na abertura e quando um monitor entra ou sai, nao a cada
         segundo.
         """
         if not self.settings.display_force_native:
@@ -530,7 +530,7 @@ class App:
     def _enforce_primary(self) -> str:
         """Devolve o comando para a tela escolhida como principal da casa.
 
-        Conectar a TV entrega a primaria a ela — o Windows promove sozinho a
+        Conectar a TV entrega a primaria a ela: o Windows promove sozinho a
         tela que acabou de chegar. Como quase todo o uso do PC acontece no
         monitor da mesa, a barra de tarefas e as janelas novas iam parar numa
         tela que muitas vezes nem esta' ligada.
@@ -557,15 +557,15 @@ class App:
 
         Nao da' para fazer isso na hora de abrir: atalho de loja sobe o cliente,
         e o jogo aparece depois com outro nome. Quem sabe a resposta e' o motor
-        de FPS, que ve' quem esta' desenhando — entao a promocao espera por ele.
+        de FPS, que ve' quem esta' desenhando, entao a promocao espera por ele.
         """
         chave = self._session_priority
         if not chave:
             return
         self._session_priority = ""      # uma vez por sessao, nao a cada tique
         # O nome tem de ser o do EXECUTAVEL, e nao o apelido do atalho: a funcao
-        # confere nome contra pid antes de agir — guarda contra o Windows
-        # reciclar numero — e "CrimsonDesert" nunca casa com "CrimsonDesert.exe".
+        # confere nome contra pid antes de agir; guarda contra o Windows
+        # reciclar numero, e "CrimsonDesert" nunca casa com "CrimsonDesert.exe".
         # O atalho chamado "Forza" entao falhava calado, dizendo que o jogo ja'
         # nao estava em execucao bem no instante em que ele acabara de abrir.
         nome = _process_name(pid) or self._session_name or "jogo"
@@ -626,7 +626,7 @@ class App:
         """Abre a grade de jogos na tela de jogar, acendendo-a se preciso.
 
         Nao troca a primaria de proposito. Quem manda continua sendo assunto do
-        atalho, dentro de play_item — dois donos para a mesma regra viraria
+        atalho, dentro de play_item; dois donos para a mesma regra viraria
         briga com a principal padrao da casa.
         """
         from .ui.bigpicture import BigPicture
@@ -649,7 +649,7 @@ class App:
 
         A escolha e' do usuario, como e' a de cada jogo: `bigpicture_target`
         guarda a tela, no mesmo formato do atalho. Antes a grade sempre nascia na
-        tela marcada para ficar apagada — servia para a TV da sala, e nao servia
+        tela marcada para ficar apagada; servia para a TV da sala, e nao servia
         para mais nada: quem quisesse a grade no monitor de cima nao tinha onde
         dizer isso.
 
@@ -729,17 +729,17 @@ class App:
         """LT+RT+L3+R3 duas vezes: devolve as telas ao perfil padrao.
 
         Do sofa nao ha' teclado nem aba Telas ao alcance, e um jogo que fechou
-        errado — ou um perfil aplicado por engano — deixava a casa num arranjo
+        errado (ou um perfil aplicado por engano) deixava a casa num arranjo
         que so' dava para desfazer levantando. Este e' o caminho de volta.
 
         Reaproveita o mesmo caminho do fim do Big Picture: um so' lugar decide o
         que "padrao" significa, e ele sempre le' o perfil marcado como padrao
-        agora — nao um nome gravado em algum lugar.
+        agora, nao um nome gravado em algum lugar.
         """
         nome = self.settings.display_default_profile
         if not nome:
             self.notify("DBX Stats", "Nenhum perfil de telas está marcado como "
-                                     "padrão — marque um na aba Telas.")
+                                     "padrão; marque um na aba Telas.")
             return
         self._voltar_ao_padrao()
         self.notify("DBX Stats", f"Telas de volta ao perfil “{nome}”")
@@ -747,7 +747,7 @@ class App:
     def _voltar_ao_padrao(self, apagar: str = "") -> None:
         """Fecha a cascata do sofa: sair da grade devolve a mesa como ela era.
 
-        O caminho de volta tem tres degraus — jogo, grade, mesa — e o ultimo
+        O caminho de volta tem tres degraus (jogo, grade, mesa) e o ultimo
         faltava. Quando o jogo devolve para a grade (`voltar_bp`), quem acendeu a
         TV foi a sessao, e nao esta abertura do Big Picture: `_bp_off` ja' foi
         entregue para a sessao la' em `_big_picture_disparar`. Chegava aqui vazio,
@@ -802,7 +802,7 @@ class App:
             ok, err = dsp.set_primary(alvo.device)
             if ok:
                 self.notify("DBX Stats",
-                            f"{self._session_name} fechou — {alvo.name} de volta")
+                            f"{self._session_name} fechou: {alvo.name} de volta")
             else:
                 _log.warning("nao consegui devolver a primaria: %s", err)
                 return
@@ -848,7 +848,7 @@ class App:
         """Volta ao arranjo padrao quando QUALQUER jogo fecha.
 
         O atalho do app so' cobre o que foi aberto por ele. Na pratica o jogo
-        entra por fora — pelo launcher da loja, pelo atalho da area de trabalho —
+        entra por fora (pelo launcher da loja, pelo atalho da area de trabalho)
         e a TV ficava ligada depois de fechar. Aqui a regra e' simples: enquanto
         houver jogo em tela cheia apresentando quadros, guarda o pid; quando esse
         processo morre e as telas nao estao no padrao, devolve o padrao.
@@ -881,7 +881,7 @@ class App:
         ok, err = dsp.apply_profile(alvo, self._normal_topology())
         _log.info("%s fechou; telas de volta ao padrao (%s)", nome, "ok" if ok else err)
         if ok:
-            self.notify("DBX Stats", f"{nome} fechou — telas de volta ao padrão")
+            self.notify("DBX Stats", f"{nome} fechou: telas de volta ao padrão")
 
     def _normal_topology(self) -> str:
         nome = self.settings.display_default_profile
@@ -902,7 +902,7 @@ class App:
         """Descobre o processo real do jogo e ensina a sessao a segui-lo.
 
         Atalho de loja (.url, .lnk de protocolo) abre o cliente, e o jogo sobe
-        depois com outro nome — o nome do atalho nao serve de nada. Quem sabe a
+        depois com outro nome; o nome do atalho nao serve de nada. Quem sabe a
         resposta e' o que ja' esta' na mao: a janela em tela cheia em foco, com o
         PresentMon confirmando que ela esta' apresentando quadros.
         """
@@ -920,7 +920,7 @@ class App:
         """Devolve as telas ao arranjo de quando o app abriu.
 
         Perfil de TV apaga os monitores da mesa. Fechar o app com a maquina nesse
-        estado deixa o usuario sem imagem onde ele esta' — e sem o app para
+        estado deixa o usuario sem imagem onde ele esta', e sem o app para
         desfazer. Entao a volta e' automatica, e so' acontece se algo mudou.
         """
         if not self.settings.display_restore_on_exit:
@@ -933,7 +933,7 @@ class App:
             self._enforce_display_defaults()
             return
         # Fechar com jogo aberto volta para o estado de antes do jogo, que e' mais
-        # recente que o do boot — e' o que o usuario reconhece como "o normal".
+        # recente que o do boot; e' o que o usuario reconhece como "o normal".
         # A ordem tambem e' a de preferencia quando um alvo nao da' para aplicar.
         candidatos = [c for c in (self._normal_layout(), self._session_restore,
                                   self._display_boot) if c]
@@ -947,7 +947,7 @@ class App:
                     return
                 # Se a unica diferenca e' quem manda, trocar a primaria basta.
                 # Mandar o perfil inteiro por causa disso apagava as tres telas
-                # por varios segundos — justo na hora em que o app esta' sumindo
+                # por varios segundos, justo na hora em que o app esta' sumindo
                 # e nao tem mais como desfazer nada.
                 so_primaria = _only_primary_differs(alvo, atual)
                 if so_primaria:
@@ -1027,13 +1027,13 @@ class App:
         """Quanto esforco vale a pena agora: "painel", "overlay" ou "fundo".
 
         Ler todos os sensores custa ~17 ms, e a 1 Hz isso e' quase 2% de um
-        nucleo o tempo todo. Com um jogo na frente, esse nucleo faz falta — e
+        nucleo o tempo todo. Com um jogo na frente, esse nucleo faz falta, e
         ninguem esta' vendo o painel. Entao o ritmo passa a seguir quem esta'
         de fato olhando: a janela aberta, o overlay, ou ninguem.
         """
         # A condicao e' "tem jogo na frente", nao "tem janela grande na frente".
         # Usar tela cheia como criterio fazia o app cair para o ritmo de fundo
-        # com um terminal maximizado por cima — e ai' o painel, aberto na outra
+        # com um terminal maximizado por cima, e ai' o painel, aberto na outra
         # tela, atualizava a cada tres segundos sem motivo.
         if self.window.isVisible() and not self.game_in_focus():
             return "painel"
@@ -1069,7 +1069,7 @@ class App:
             own.add(int(self._overlay.winId()))
         if self._bigpicture is not None:
             # Sem isso o Big Picture, que e' tela cheia, seria julgado como o
-            # jogo em foco — e o app passaria a medir a si mesmo.
+            # jogo em foco, e o app passaria a medir a si mesmo.
             own.add(int(self._bigpicture.winId()))
         self._fg_fullscreen = fullscreen and hwnd not in own
         self._fg_pid = win.window_pid(hwnd) if hwnd not in own else 0
@@ -1107,8 +1107,8 @@ class App:
             self._bp_back_pronto = True
             return
         # So' conta o segurar que COMECOU com a gente olhando. Sem exigir a
-        # borda, um controle que ja' estava com Back apertado — ou que reporta o
-        # botao preso — abria a grade sozinho um segundo depois de o app subir.
+        # borda, um controle que ja' estava com Back apertado (ou que reporta o
+        # botao preso) abria a grade sozinho um segundo depois de o app subir.
         if not self._bp_back_pronto:
             return
         if not self._bp_back_desde:
@@ -1165,7 +1165,7 @@ class App:
                 continue
             if value >= limit and not self._alerted.get(key):
                 self._alerted[key] = True
-                self.notify("DBX Stats — alerta",
+                self.notify("DBX Stats: alerta",
                             f"{name}: {value:.0f}{unit} (limite {limit}{unit})")
             elif value <= limit - 4:
                 self._alerted[key] = False
@@ -1184,7 +1184,7 @@ class App:
             fps = self._stream.metrics.fps_now
             if fps:
                 parts.append(f"{fps:.0f} fps")
-        self.tray.set_tooltip("DBX Stats — " + "  ·  ".join(parts))
+        self.tray.set_tooltip("DBX Stats: " + "  ·  ".join(parts))
 
     def notify(self, title: str, message: str) -> None:
         self.tray.notify(title, message)
@@ -1318,7 +1318,7 @@ class App:
 
         True quando descobrimos o servidor do jogo ou medimos latencia no
         trafego dele; False quando procuramos tempo suficiente e nao apareceu
-        nada — jogo local, treino contra bot, campanha. None enquanto ainda da'
+        nada: jogo local, treino contra bot, campanha. None enquanto ainda da'
         para aparecer, porque a busca leva alguns segundos e chamar de "local"
         cedo demais e' pior que ficar calado.
         """
@@ -1336,7 +1336,7 @@ class App:
         "Alguem apresentando quadros" nao serve como criterio: no desktop o
         navegador e o Discord tambem apresentam, e o overlay aparecia por cima
         da area de trabalho. Jogo e' o processo em foco que esta' apresentando
-        quadros — em tela cheia, ou em janela mas com o foco na mao dele.
+        quadros: em tela cheia, ou em janela mas com o foco na mao dele.
         """
         # Tela cheia e' o que separa jogo de janela qualquer: o terminal e o
         # navegador tambem apresentam quadros, e sem esse criterio o overlay
@@ -1395,7 +1395,7 @@ class App:
         self._bench_total = float(seconds)
         self._bench_env = Accumulator()
         self.fps.capture_start(stream.pid)
-        self.notify("DBX Stats", f"Benchmark iniciado — {seconds}s de {self._bench_game}")
+        self.notify("DBX Stats", f"Benchmark iniciado: {seconds}s de {self._bench_game}")
 
     def benchmark_stop(self) -> None:
         if not self._bench_active:
@@ -1434,7 +1434,7 @@ class App:
         if self.settings.bench_autosave:
             export.export_benchmark(_summary_row(metrics), self._bench_game)
         self.notify("DBX Stats",
-                    f"Benchmark concluído — {metrics.fps_avg:.0f} fps médio, "
+                    f"Benchmark concluído: {metrics.fps_avg:.0f} fps médio, "
                     f"1% low {metrics.low_1:.0f}")
         self.show_view("benchmark")
 
@@ -1457,7 +1457,7 @@ def _tela_qt(nome: str):
     """QScreen cujo nome bate com o da tela, quando da' para casar.
 
     O Qt demora um instante para enxergar uma tela recem-acesa. Nao achando,
-    devolve None e o Big Picture abre na primaria — melhor do que nao abrir.
+    devolve None e o Big Picture abre na primaria, melhor do que nao abrir.
     """
     from PySide6.QtWidgets import QApplication
     alvo = (nome or "").strip().lower()
@@ -1545,7 +1545,7 @@ def _last_bench_file():
 def _save_last_bench(resultado: dict) -> None:
     """Guarda o resultado inteiro, menos as amostras cruas.
 
-    Frametime a frametime sao dezenas de milhares de numeros — o suficiente para
+    Frametime a frametime sao dezenas de milhares de numeros: o suficiente para
     o histograma e a curva de percentis ja' esta' na lista de frametimes, e o
     resto do relatorio sai das metricas.
     """

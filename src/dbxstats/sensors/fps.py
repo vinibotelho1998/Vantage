@@ -2,9 +2,9 @@
 
 Arquitetura em tres camadas, cada uma isolada da outra:
 
-  1. supervisor  — sobe o PresentMon, mantem a sessao viva e reinicia sozinho.
-  2. leitor      — le o named pipe em blocos e so faz parsing (nenhuma conta).
-  3. agregador   — recalcula percentis/estatisticas 4x por segundo, fora do caminho
+  1. supervisor  : sobe o PresentMon, mantem a sessao viva e reinicia sozinho.
+  2. leitor      : le o named pipe em blocos e so faz parsing (nenhuma conta).
+  3. agregador   : recalcula percentis/estatisticas 4x por segundo, fora do caminho
                    critico. A UI le apenas o cache pronto.
 
 Essa separacao e o que evita o motor "travar": o parser nunca fica lento por causa
@@ -41,7 +41,7 @@ PresentMon ficar vivo sem nunca conectar no pipe. Com o pid no nome, duas
 instancias se ignoram.
 """
 # Processos que apresentam quadros mas nunca sao "o jogo". Sem essa lista o
-# terminal, o navegador e o Discord entram na disputa — e como o painel escolhe
+# terminal, o navegador e o Discord entram na disputa; e como o painel escolhe
 # quem tem mais quadros, o "jogo em foco" acabava sendo o Warp ou o Chrome.
 EXCLUDED = (
     # shell do Windows
@@ -86,7 +86,7 @@ _COLUMNS_V2 = {
 # O CPUStartTime do v2 vem em MILISSEGUNDOS; o TimeInSeconds do v1, em segundos.
 # Medido no CSV real: captura de 20 s va de t=21 a t=19932, e o passo entre frames
 # bate com o FrameTime em ms. Tratar isso como segundos encolhia a janela de
-# analise em mil vezes — sobravam poucos quadros, e 1% e 0,1% low caiam no mesmo
+# analise em mil vezes: sobravam poucos quadros, e 1% e 0,1% low caiam no mesmo
 # punhado de frames, saindo sempre iguais.
 _TIME_SCALE = {"cpustarttime": 1e-3, "timeinseconds": 1.0}
 # Escalas plausiveis para a autocalibracao (s, ms, us, ticks de QPC).
@@ -302,7 +302,7 @@ class FpsEngine:
     def session_follow(self, pid: int) -> None:
         """Passa a seguir outro processo, mantendo o que ja' foi medido.
 
-        Atalho de loja abre o cliente, e o jogo sobe depois com outro nome —
+        Atalho de loja abre o cliente, e o jogo sobe depois com outro nome;
         quando descobrimos quem e' de verdade, a gravacao continua nele.
         """
         with self._raw_lock:
@@ -393,7 +393,7 @@ class FpsEngine:
                 stdin=subprocess.DEVNULL,
                 # CREATE_NEW_PROCESS_GROUP e' o que permite mandar CTRL+BREAK
                 # depois. Sem grupo proprio o sinal iria para o app inteiro, e a
-                # unica saida seria matar o PresentMon a forca — que e'
+                # unica saida seria matar o PresentMon a forca, que e'
                 # exatamente o que vaza a sessao ETW.
                 creationflags=(subprocess.CREATE_NO_WINDOW
                                | subprocess.CREATE_NEW_PROCESS_GROUP))
@@ -407,7 +407,7 @@ class FpsEngine:
                 # A queixa do PresentMon e' a unica pista quando ele nao sobe:
                 # "access denied" (sessao presa / sem admin) contra "in use"
                 # sao problemas diferentes, e sem isso o log fica mudo. Encerrar
-                # antes de ler e' o que fecha o stderr — com ele vivo a leitura
+                # antes de ler e' o que fecha o stderr; com ele vivo a leitura
                 # so' podia devolver "(ainda rodando)", que nao diz nada.
                 _terminate(proc)
                 erro = _stderr_tail(proc)
@@ -597,7 +597,7 @@ class FpsEngine:
         """Confere a unidade real comparando o avanco do relogio com o frametime.
 
         Em qualquer versao do PresentMon, o tempo entre dois presents da mesma
-        swapchain e' exatamente o FrameTime — entao a razao entre os dois revela a
+        swapchain e' exatamente o FrameTime; entao a razao entre os dois revela a
         unidade, mesmo que uma versao futura mude o padrao ou alguem ligue
         --qpc_time. Errar essa unidade encolhe a janela de analise e faz 1% e
         0,1% low colapsarem no mesmo numero.
@@ -699,8 +699,8 @@ class FpsEngine:
         """Solta a captura quando ela para sem morrer.
 
         O leitor bloqueia num `read` do pipe. Se o PresentMon some sem fechar a
-        ponta dele — sessao ETW roubada por outra instancia, processo morto a
-        forca — esse read nunca volta, e o supervisor fica parado para sempre
+        ponta dele (sessao ETW roubada por outra instancia, processo morto a
+        forca), esse read nunca volta, e o supervisor fica parado para sempre
         sem log nenhum. Fechar o pipe daqui e' o que faz o read levantar erro e
         o ciclo recomecar.
         """
@@ -728,7 +728,7 @@ class FpsEngine:
 
         # Fechar o pipe e matar o processo so' adianta se o supervisor ainda
         # estiver de pe' para recomecar. Quando e' ele que travou, esse aviso se
-        # repetia a cada 45s para sempre — 111 vezes no log, meia hora sem
+        # repetia a cada 45s para sempre, 111 vezes no log, meia hora sem
         # captura. Se ele nao deu nem uma volta nesse tempo todo, esta' preso:
         # aposenta e sobe outro.
         if self._threads and agora - self._loop_at > REVIVE_S:
@@ -768,7 +768,7 @@ def _run_bounded(cmd: list[str], seconds: float, what: str) -> None:
 
     subprocess.run(timeout=...) parece resolver e nao resolve: quando o prazo
     estoura ele mata o filho e *espera* o wait terminar. Se o processo estiver
-    preso no kernel — `logman` com uma sessao ETW em estado ruim faz isso — esse
+    preso no kernel (`logman` com uma sessao ETW em estado ruim faz isso), esse
     wait nunca volta, e o supervisor congela sem escrever uma linha no log. Foi
     exatamente assim que a captura morreu por meia hora com o watchdog gritando
     "reiniciando" 111 vezes e nada acontecendo.
@@ -799,16 +799,16 @@ def encerrar_presentmon_orfaos() -> int:
     """Pede a todo PresentMon largado que saia, e espera ele limpar.
 
     Ajuda, mas nao salva. Medido: matando o app a forca, o PresentMon filho
-    sobrevive alguns segundos e depois morre sozinho — e a sessao dele CONTINUA
+    sobrevive alguns segundos e depois morre sozinho; e a sessao dele CONTINUA
     de pe'. Ou seja, a sessao nao depende do processo: ela vaza no instante do
     TerminateProcess e passa a existir por conta propria.
 
     Serve para a janela curta em que o filho ainda esta' vivo: ali um CTRL+BREAK
     o faz fechar a sessao no caminho de saida. Passada essa janela, nao ha' o
-    que resgatar — o logger de sistema orfao nao volta por nenhum caminho.
+    que resgatar: o logger de sistema orfao nao volta por nenhum caminho.
 
     Matar a forca aqui seria trocar um problema por um pior: o logger de sistema
-    orfao NAO pode ser removido depois, por ninguem — nem administrador, nem
+    orfao NAO pode ser removido depois, por ninguem, nem administrador, nem
     SYSTEM, nem pela API direta. So' o reinicio do Windows. Entao o pedido e'
     CTRL+BREAK, que e' o unico caminho em que ele fecha a sessao ao sair.
 
@@ -836,7 +836,7 @@ def encerrar_presentmon_orfaos() -> int:
             os.kill(pid, signal.CTRL_BREAK_EVENT)
         except (OSError, SystemError, PermissionError):
             # Sem grupo de console em comum o sinal nao chega. Resta o caminho
-            # que ao menos libera o processo — a sessao pode ficar, mas nao ha'
+            # que ao menos libera o processo: a sessao pode ficar, mas nao ha'
             # alternativa melhor, e sem isso ela ficaria de qualquer forma.
             try:
                 psutil.Process(pid).terminate()
@@ -856,7 +856,7 @@ def sweep_stale_sessions() -> None:
     """Apaga sessoes ETW deixadas por instancias antigas do app.
 
     Como o nome agora leva o pid, uma copia que morreu de forma feia deixa a
-    sessao dela para tras — e sessao ETW e' recurso global e limitado. Cada uma
+    sessao dela para tras; e sessao ETW e' recurso global e limitado. Cada uma
     e' derrubada em processo separado para que uma travada nao impeca as outras.
     """
     saida: list[str] = []
@@ -894,7 +894,7 @@ def _conferir_remocao(alvos: list[str]) -> None:
     """Diz se a limpeza pegou, e nomeia o suspeito quando nao pega.
 
     Sem esta conferencia o log ficava afirmando "removendo sessao ETW orfa" a
-    cada 15 segundos enquanto nada acontecia — e quem lesse concluiria que o
+    cada 15 segundos enquanto nada acontecia; e quem lesse concluiria que o
     problema era outro. Custou uma hora de diagnostico na direcao errada.
 
     Quando a sessao resiste, a causa quase sempre e' outra copia do app ainda no
@@ -913,7 +913,7 @@ def _conferir_remocao(alvos: list[str]) -> None:
             # A consulta precisa ter DADO CERTO para a ausencia valer como
             # remocao. Sem esta checagem, um logman que falha devolve texto
             # vazio, nenhum nome casa, e o log anuncia "removidas" sobre sessoes
-            # que continuam de pe' — foi o que aconteceu, e me mandou procurar
+            # que continuam de pe'; foi o que aconteceu, e me mandou procurar
             # em outro lugar durante um bom tempo.
             if r.returncode != 0 or not texto.strip():
                 return
@@ -937,7 +937,7 @@ def _conferir_remocao(alvos: list[str]) -> None:
         return
 
     # A causa muda conforme haja ou nao outra copia viva, e o conselho tambem.
-    # Dizer sempre "feche as outras copias" manda procurar o que nao existe —
+    # Dizer sempre "feche as outras copias" manda procurar o que nao existe:
     # com nenhuma aberta, a sessao ja' esta' num estado que nem administrador
     # nem SYSTEM desfazem, e so' o reinicio limpa.
     outras = _outras_copias()
@@ -952,7 +952,7 @@ def _conferir_remocao(alvos: list[str]) -> None:
         "a sessao ETW %s resistiu a remocao e nao ha' outra copia do app "
         "aberta. Ela e' um logger de SISTEMA orfao: uma vez sem dono, nao sai "
         "por logman, nem por ControlTrace (por nome ou por handle), nem "
-        "alterando o DACL — nem como administrador, nem como SYSTEM. Todos "
+        "alterando o DACL, nem como administrador, nem como SYSTEM. Todos "
         "respondem 'acesso negado'. A captura so' volta reiniciando o Windows. "
         "Nasce quando o app e' encerrado a forca com a captura ativa; feche "
         "pela bandeja e isso nao acontece.",
@@ -984,7 +984,7 @@ def _orfa(nome: str) -> bool:
 
     O nome exato SESSION_PREFIX entra na conta de proposito: e' como as versoes
     antigas chamavam a sessao, e uma delas ficou para tras rodando. Enquanto
-    estava viva, todo StartTrace novo voltava "access denied" — meia hora sem
+    estava viva, todo StartTrace novo voltava "access denied"; meia hora sem
     FPS e sem overlay. Varrer so' os nomes com pid deixaria justamente ela.
     """
     if nome == SESSION:
@@ -1023,7 +1023,7 @@ def _esperar_conexao(done, proc, stop, force, esperando=None) -> bool:
     """Espera a conexao chegar, enquanto o processo estiver vivo.
 
     Separado do resto para poder ser exercitado sem um pipe de verdade: e' aqui
-    que mora a regra que estava errada — silencio com processo vivo nao e'
+    que mora a regra que estava errada: silencio com processo vivo nao e'
     falha, e' o PresentMon esperando um jogo aparecer.
     """
     while True:
@@ -1043,7 +1043,7 @@ def _wait_connect(handle: int, proc: subprocess.Popen, stop, force, esperando=No
     Espera o tempo que for preciso, enquanto o processo estiver vivo. Havia um
     prazo de 12 segundos aqui, e ele estava errado: o PresentMon so' abre o
     arquivo de saida quando tem o primeiro quadro para escrever, e a lista de
-    exclusoes do app tira justamente tudo o que apresenta quadros no desktop —
+    exclusoes do app tira justamente tudo o que apresenta quadros no desktop:
     navegador, terminal, o proprio app. Sem jogo aberto ele fica calado, de
     propria vontade, e o prazo transformava esse silencio saudavel em "falhou":
     o processo era morto e ressuscitado a cada quinze segundos, para sempre.
@@ -1055,7 +1055,7 @@ def _wait_connect(handle: int, proc: subprocess.Popen, stop, force, esperando=No
     kernel segurando esse mesmo handle. Fechar por fora um handle com I/O
     pendente de outra thread e' exatamente o tipo de coisa que congela o
     supervisor sem deixar rastro no log. Entao cancelamos a operacao e, dando ou
-    nao certo, o fechamento fica com a thread presa — ela fecha quando acordar.
+    nao certo, o fechamento fica com a thread presa; ela fecha quando acordar.
     """
     import ctypes
     k32 = ctypes.windll.kernel32
@@ -1116,14 +1116,14 @@ def _terminate(proc: subprocess.Popen) -> None:
 
     Isto nao e' delicadeza: `terminate()` no Windows e' `TerminateProcess`, e o
     PresentMon morto assim NAO remove a sessao ETW que criou. Ela e' um logger
-    de sistema, e um logger de sistema orfao nao volta — `logman`,
+    de sistema, e um logger de sistema orfao nao volta: `logman`,
     `ControlTrace` por nome ou por handle e ate' `EventAccessControl` respondem
     "acesso negado" mesmo para administrador e para SYSTEM. So' o reinicio do
     Windows limpa, e enquanto ela existir nenhuma captura nova sobe.
 
     Com CTRL+BREAK ele fecha a sessao sozinho no caminho de saida. O prazo e'
     curto porque isso roda a cada reinicio da captura, e o hard kill continua
-    ali como ultimo recurso — melhor uma sessao vazada que um app travado.
+    ali como ultimo recurso: melhor uma sessao vazada que um app travado.
     """
     import signal
 

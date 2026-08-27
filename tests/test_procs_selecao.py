@@ -2,7 +2,7 @@
 
 A tabela se reordena sozinha a cada 2,5 s. O destaque preso na linha pularia
 para outro processo entre o olhar e o clique, e o botao Finalizar acertaria quem
-nao devia — por isso a selecao segue o PID e as acoes leem a identidade guardada
+nao devia; por isso a selecao segue o PID e as acoes leem a identidade guardada
 na celula, nunca o indice da linha. Os dialogos entram no mesmo assunto: o que
 eles devolvem tem de ser exatamente o que esta' marcado na tela.
 """

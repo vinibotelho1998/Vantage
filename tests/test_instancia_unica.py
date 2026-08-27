@@ -1,6 +1,6 @@
 """Uma copia por vez: o guarda que impede duas instancias se sabotarem.
 
-Duas copias nao apenas duplicam janela — cada uma varre as sessoes ETW e derruba
+Duas copias nao apenas duplicam janela: cada uma varre as sessoes ETW e derruba
 a da outra, porque o nome carrega o pid e nenhuma reconhece a outra como
 legitima. Nenhuma das duas captura quadros, e o log nao denuncia a causa.
 """
@@ -35,7 +35,7 @@ def test_a_segunda_e_recusada():
 def test_a_vaga_volta_quando_a_primeira_sai():
     """O mutex e' do kernel: sai junto com o processo, inclusive num taskkill.
 
-    Arquivo de trava nao daria essa garantia — ficaria para tras depois de um
+    Arquivo de trava nao daria essa garantia; ficaria para tras depois de um
     travamento e o app nunca mais abriria.
     """
     primeira = InstanciaUnica()

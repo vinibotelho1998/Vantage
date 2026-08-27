@@ -1,7 +1,7 @@
 """Atalho de jogo que acorda a TV.
 
 O arranjo da casa e' a TV desligada. O atalho tem de liga-la, coloca-la na
-frente, abrir o jogo — e desfazer os dois quando o jogo fechar, sem reaplicar
+frente, abrir o jogo, e desfazer os dois quando o jogo fechar, sem reaplicar
 perfil nenhum (era o que apagava as tres telas por varios segundos).
 """
 import dbxstats.app as appmod

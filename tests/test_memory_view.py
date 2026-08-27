@@ -1,7 +1,7 @@
 """A tela de Memória & Disco mostrando saúde: buraco de dado nao pode virar numero.
 
 O card de saude e' alimentado por duas fontes que quase sempre respondem pela
-metade — o LHM nao le' disco atras de adaptador USB, e o Storage Spaces so'
+metade: o LHM nao le' disco atras de adaptador USB, e o Storage Spaces so'
 entrega os contadores de confiabilidade com elevacao. O que esta' em jogo aqui e'
 a linha que sobra: ela precisa sumir, e nao virar "0" nem "—" enfileirado.
 
@@ -111,7 +111,7 @@ def test_resultado_do_teste_chega_mesmo_com_a_aba_no_fundo():
     """O teste dura segundos; trocar de aba no meio nao pode engolir o resultado.
 
     Perguntar `isVisible()` ao botao parecia equivalente a guardar o estado, mas
-    uma tela que nao esta' na frente responde False — o resultado nunca seria
+    uma tela que nao esta' na frente responde False: o resultado nunca seria
     desenhado e o botao ficaria preso em "Testando…" para sempre.
     """
     v = _view()
@@ -207,7 +207,7 @@ def test_o_resumo_mostra_o_espaco_que_o_teste_vai_exigir():
 
 
 def test_so_leitura_marcada_avisa_que_o_arquivo_e_gravado_antes():
-    """O usuario precisa saber que 'só leitura' ainda grava — o disco vai ser escrito."""
+    """O usuario precisa saber que 'só leitura' ainda grava: o disco vai ser escrito."""
     v = _view()
     v.cfg.diskbench_phases = ["rseq"]
     v._sync_opcoes_bench()

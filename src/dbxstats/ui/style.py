@@ -103,7 +103,7 @@ QPushButton#Danger {{
 }}
 
 /* Duas pistas de estado, nao uma. Numa grade de vinte opcoes em tema escuro,
-   quadradinho cheio contra quadradinho vazio some — os dois viram "um quadrado".
+   quadradinho cheio contra quadradinho vazio some; os dois viram "um quadrado".
    O texto apagado quando desmarcado da' a leitura de relance, e o preenchimento
    confirma de perto. */
 QCheckBox, QRadioButton {{

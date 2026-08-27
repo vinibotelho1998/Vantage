@@ -1,6 +1,6 @@
 """Rodape da barra lateral: versao, sensores e captura.
 
-Ele existe para responder "por que nao aparece nada" sem abrir log — que foi
+Ele existe para responder "por que nao aparece nada" sem abrir log, que foi
 exatamente a pergunta que apareceu quando os sensores nao subiram numa maquina.
 """
 import os

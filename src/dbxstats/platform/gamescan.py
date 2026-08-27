@@ -2,7 +2,7 @@
 
 Achar um jogo pelo explorador de arquivos e' pior do que parece: o executavel
 raramente esta' na raiz da pasta (`Crimson Desert\\bin64\\CrimsonDesert.exe`), e
-a pasta ainda vem cheia de executavel que nao e' o jogo — instalador de
+a pasta ainda vem cheia de executavel que nao e' o jogo: instalador de
 redistribuivel, desinstalador, relator de travamento. Por isso so' atalho da area
 de trabalho era facil de adicionar: e' o unico que ja' aponta para o lugar certo.
 
@@ -32,7 +32,7 @@ _LIXO = (
 )
 """Nomes que nunca sao o jogo.
 
-Sem esta lista o palpite mais obvio — o maior executavel da pasta — cai no
+Sem esta lista o palpite mais obvio (o maior executavel da pasta) cai no
 instalador do redistribuivel da Microsoft com uma frequencia incomoda.
 """
 
@@ -58,7 +58,7 @@ class Achado:
     name: str
     path: str
     source: str
-    """"Steam", "pasta" ou "atalho" — a tela mostra de onde veio."""
+    """"Steam", "pasta" ou "atalho": a tela mostra de onde veio."""
 
 
 def _normal(texto: str) -> str:
@@ -219,7 +219,7 @@ def _da_area_de_trabalho() -> list[Achado]:
 
     O exe solto entra porque e' o caso que mais irrita: baixar o jogo, largar o
     executavel na area de trabalho e o app nao oferecer ele. Pior, arrastar dali
-    para a janela nao funciona — o DBX Stats roda elevado, e o Windows bloqueia
+    para a janela nao funciona: o DBX Stats roda elevado, e o Windows bloqueia
     arrastar de um Explorer comum para uma janela elevada (UIPI), sem aviso
     nenhum. Encontrar sozinho e' o que fecha esse buraco.
 
@@ -257,8 +257,8 @@ def _da_area_de_trabalho() -> list[Achado]:
                 if not alvo.lower().endswith(".exe") or not Path(alvo).is_file():
                     continue
                 # So' entra se o alvo mora numa pasta de jogo. A area de trabalho
-                # e' cheia de atalho de programa — navegador, monitor de sensor,
-                # cliente de conversa — e sem este filtro a lista de "jogos
+                # e' cheia de atalho de programa (navegador, monitor de sensor,
+                # cliente de conversa) e sem este filtro a lista de "jogos
                 # encontrados" vinha com Chrome e CPU-Z dentro.
                 if not _em_pasta_de_jogo(alvo):
                     continue

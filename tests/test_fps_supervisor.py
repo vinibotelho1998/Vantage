@@ -127,7 +127,7 @@ class _ProcFalso:
 def test_processo_vivo_e_calado_nao_conta_como_falha():
     """O PresentMon so' abre a saida quando tem o primeiro quadro a escrever.
 
-    A lista de exclusoes do app tira tudo o que apresenta quadros no desktop —
+    A lista de exclusoes do app tira tudo o que apresenta quadros no desktop:
     navegador, terminal, o proprio app. Sem jogo aberto, ficar calado e' o
     comportamento certo dele. O prazo de 12 s transformava esse silencio em
     "falhou", matando e ressuscitando o processo a cada quinze segundos.

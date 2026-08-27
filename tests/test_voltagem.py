@@ -2,7 +2,7 @@
 
 O risco coberto aqui e' o pior tipo de erro de sensor: o numero plausivel e
 errado. Nesta maquina o "Core #N VID" marcou 0,463 V com o processador em 98 W e
-5225 MHz — impossivel — e o app publicava exatamente isso como "voltagem da CPU".
+5225 MHz (impossivel) e o app publicava exatamente isso como "voltagem da CPU".
 Um travessao seria honesto; 0,46 V com cara de medida nao e'. Os testes fixam que
 VID nunca vira Vcore, que o rail anonimo da placa so' e' adotado depois de provar
 que acompanha a carga, e que a procedencia viaja junto do numero.
@@ -118,7 +118,7 @@ def test_vcore_da_placa_ganha_do_sensor_da_cpu_nas_duas_ordens():
 
 
 def test_voltagem_da_gpu_sai_do_rail_do_nucleo():
-    """A tensao da GPU e' a metrica sadia da maquina — nao pode se perder."""
+    """A tensao da GPU e' a metrica sadia da maquina; nao pode se perder."""
     leitor = _leitor()
     gpus: list[dict] = []
     leitor._read_gpu(_Hardware("AMD Radeon RX 9070 XT", [

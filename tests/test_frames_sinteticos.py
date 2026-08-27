@@ -77,7 +77,7 @@ def test_vsync_travado_da_nota_quase_cheia():
 
 
 def test_fluidez_cai_de_forma_monotona_com_a_variacao():
-    """Mais variacao tem de valer menos nota, sempre — senao o numero nao ordena nada."""
+    """Mais variacao tem de valer menos nota, sempre; senao o numero nao ordena nada."""
     notas = [fr.compute(_amostras(_limitado(10.0, 30, sigma))).smoothness
              for sigma in (0.0, 0.3, 0.8, 1.5, 3.0, 6.0)]
     assert notas == sorted(notas, reverse=True)
@@ -175,7 +175,7 @@ def test_gpu_alta_nao_atropela_a_cpu_mais_alta_ainda():
     """GPU em 92,5% do quadro com a CPU em 99%: nao e' gargalo de GPU, e' empate.
 
     A regra antiga testava primeiro "GPU acima de 92% do frametime" e devolvia GPU
-    sem nunca olhar a CPU — o veredito mandava mexer no lado errado.
+    sem nunca olhar a CPU: o veredito mandava mexer no lado errado.
     """
     m = fr.compute(_amostras([10.0] * 300, cpu=9.9, gpu=9.25))
     assert m.bottleneck == fr.BOTTLENECK_BALANCED
@@ -185,7 +185,7 @@ def test_limitador_nao_e_confundido_com_gargalo_de_gpu():
     """Cap de 60 fps com CPU e GPU folgadas: dizer 'GPU' aqui manda o usuario mexer no lugar errado.
 
     A regra antiga so' reconhecia o limitador quando o desvio padrao ficava abaixo
-    de 1,2 ms — um cap real oscila mais que isso e caia na comparacao de medias,
+    de 1,2 ms; um cap real oscila mais que isso e caia na comparacao de medias,
     onde 0,30 contra 0,18 virava veredito de GPU.
     """
     m = fr.compute(_amostras(_vsync(60, 30, jitter_ms=1.6), cpu=3.0, gpu=5.0))
@@ -194,7 +194,7 @@ def test_limitador_nao_e_confundido_com_gargalo_de_gpu():
 
 
 def test_gargalo_empatado_quando_os_dois_se_revezam():
-    """Metade dos quadros de cada lado e' empate — e nao 'sem gargalo nenhum'.
+    """Metade dos quadros de cada lado e' empate, e nao 'sem gargalo nenhum'.
 
     Com media por coluna os dois lados davam 6,75 ms num quadro de 10 e a conta
     antiga concluia que ninguem estava saturado, quando na verdade os dois estavam,
@@ -256,7 +256,7 @@ def test_gargalo_nao_pisca_entre_tiques():
 def test_fluidez_nao_tem_penhasco_no_limiar_de_travada():
     """A punicao contava quadros acima de 50 ms absolutos.
 
-    Um pico de 49 ms valia 96 e um de 51 ms valia 19 — 77 pontos por 2 ms de
+    Um pico de 49 ms valia 96 e um de 51 ms valia 19: 77 pontos por 2 ms de
     diferenca. E depois do degrau a nota voltava a SUBIR com picos maiores,
     porque so' a contagem importava e o pico grande nao pesava mais que o
     pequeno.

@@ -1,7 +1,7 @@
 """Ritmo de coleta conforme quem esta' olhando.
 
 Ler todos os sensores custa ~17 ms. A 1 Hz isso e' quase 2% de um nucleo o
-tempo todo — e com um jogo na frente esse nucleo faz falta, justamente quando
+tempo todo, e com um jogo na frente esse nucleo faz falta, justamente quando
 ninguem esta' vendo o painel.
 """
 from dbxstats.app import BACKGROUND_INTERVAL_S, App
@@ -77,7 +77,7 @@ def test_nao_reaplica_sem_mudanca():
 def test_janela_grande_na_frente_nao_e_jogo():
     """Tela cheia sozinha nao serve de criterio.
 
-    Com um terminal maximizado por cima, o app caia para o ritmo de fundo — e o
+    Com um terminal maximizado por cima, o app caia para o ritmo de fundo, e o
     painel, aberto na outra tela, passava a atualizar a cada tres segundos sem
     ninguem ter saido dele.
     """

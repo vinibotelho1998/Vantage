@@ -2,7 +2,7 @@
 
 O risco principal e' o grafico que despenca sozinho: o working set e' so' o que
 esta' residente agora, e o Windows o poda quando a janela perde o foco. Medindo o
-RadeonSoftware deu 50 MB de working set contra 1150 MB comprometidos — em alt-tab
+RadeonSoftware deu 50 MB de working set contra 1150 MB comprometidos: em alt-tab
 um jogo faria a mesma curva sem ter liberado nada. O segundo risco e' o oposto:
 quando o jogo fecha, a chave tem de sumir do snapshot; um zero parado na tela le'
 como "o jogo nao usa RAM".

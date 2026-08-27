@@ -14,7 +14,7 @@ from .. import log
 
 _log = log.get("gpu")
 
-# nvmlClocksThrottleReasons — bitmask -> rotulo legivel
+# nvmlClocksThrottleReasons: bitmask -> rotulo legivel
 THROTTLE_REASONS = (
     (0x0000000000000001, "Ocioso"),
     (0x0000000000000002, "Limite de clock do usuário"),
@@ -28,7 +28,7 @@ THROTTLE_REASONS = (
 
 # NVML_FI_DEV_MEMORY_TEMP: a temperatura da VRAM nao tem funcao propria na NVML,
 # so' existe pela tabela de campos. Nas placas que nao expoem o campo a chamada
-# volta com erro por campo — dai' o desligamento apos a primeira recusa, para nao
+# volta com erro por campo: dai' o desligamento apos a primeira recusa, para nao
 # pagar uma ida ao driver por segundo por um numero que nunca vem.
 _FI_MEMORY_TEMP = 82
 
@@ -182,7 +182,7 @@ class GpuReader:
             return self._smi_watts
 
     def watts_estimate(self, usage=None, freq=None) -> float | None:
-        """Modelo potencia x (uso, clock) suavizado — so quando nao ha leitura real."""
+        """Modelo potencia x (uso, clock) suavizado, so quando nao ha leitura real."""
         if not self._ok:
             return None
         p, h = self._pynvml, self._hdl
@@ -240,7 +240,7 @@ def _field_number(campo) -> float | None:
     """Le o numero de um nvmlFieldValue_t.
 
     O valor chega numa union: ler o membro errado nao levanta erro nenhum, so'
-    devolve outro numero — 45 °C viraria algo como 1,1e-43. Por isso o tipo
+    devolve outro numero: 45 °C viraria algo como 1,1e-43. Por isso o tipo
     declarado no proprio campo e' quem escolhe o membro, e campo que voltou com
     erro (placa que nao publica aquilo) nao vira leitura.
     """

@@ -67,7 +67,7 @@ def test_as_ferramentas_que_medem_texto_pedem_a_fonte_real_do_sistema():
 
     QFontDatabase.families() volta vazia, todo glifo mede o mesmo avanco e o
     painel sai 12% mais estreito e 41% mais baixo que o de verdade. E' a altura
-    que decide o rebaixamento para o modo compacto — uma ferramenta medindo no
+    que decide o rebaixamento para o modo compacto: uma ferramenta medindo no
     offscreen calibra o limiar por um painel que nao existe em maquina nenhuma.
     O repositorio ja' tinha a convencao (preview.py, make_installer_art.py); o
     que faltava era ela valer para quem mede, e nao so' para quem desenha.

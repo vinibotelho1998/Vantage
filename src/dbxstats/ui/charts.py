@@ -3,7 +3,7 @@
 Tudo desenhado a mao com QPainter para ter controle total sobre suavizacao e
 densidade de informacao:
 
-* interpolacao cubica monotona (Fritsch–Carlson) — curva lisa que **nunca**
+* interpolacao cubica monotona (Fritsch–Carlson): curva lisa que **nunca**
   inventa picos que nao existem nos dados;
 * envelope min/max quando ha mais amostras que pixels, entao um spike de 1 frame
   continua visivel mesmo com 5 minutos de historico na tela;
@@ -263,7 +263,7 @@ class TimeSeriesChart(QWidget):
 
         columns = max(8, int(area.width()))
         active = [pl for pl in self._plots if pl.visible and len(pl.values) >= 2]
-        # quanto mais linhas, mais leve o preenchimento — senao vira sopa de cores
+        # quanto mais linhas, mais leve o preenchimento; senao vira sopa de cores
         fill_alpha = (104, 104, 72, 46, 34)[min(len(active), 4)]
         series_points: dict[str, list[tuple[float, float]]] = {}
         for plot in active:
@@ -660,7 +660,7 @@ class Sparkline(QWidget):
         grad = QLinearGradient(0, 0, 0, h)
         c0, c1 = QColor(self._color), QColor(self._color)
         # Com o chao no zero a linha vive no alto, e o preenchimento cheio vira um
-        # bloco solido — mais leve ele volta a ser fundo, nao figura.
+        # bloco solido; mais leve ele volta a ser fundo, nao figura.
         c0.setAlpha(46 if self._from_zero else 88)
         c1.setAlpha(0)
         grad.setColorAt(0.0, c0)

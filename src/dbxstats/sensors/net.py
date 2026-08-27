@@ -1,7 +1,7 @@
 """Latencia, jitter e perda de pacotes.
 
 Por padrao mede contra um host fixo (DNS publico). Quando ha' jogo em foco, o
-alvo passa a ser o servidor com que o proprio jogo esta' falando — que e' a
+alvo passa a ser o servidor com que o proprio jogo esta' falando, que e' a
 latencia que importa para quem esta' jogando, e nao a de um DNS qualquer.
 
 A medicao prefere ICMP: servidor de jogo quase sempre e' UDP, e abrir TCP na
@@ -99,7 +99,7 @@ class PingMonitor:
         Nao devolve mais o alvo de reserva. Sem partida identificada o ping vai
         para um DNS publico so' para ter alguma referencia de latencia, e mostrar
         "8.8.8.8" no overlay dava a entender que aquele numero tinha a ver com o
-        jogo. Sem rotulo, sobra so' o ping — que e' o que ele e'.
+        jogo. Sem rotulo, sobra so' o ping: que e' o que ele e'.
         """
         with self._lock:
             return self._auto_label
@@ -122,7 +122,7 @@ class PingMonitor:
                         "best": self._best, "worst": self._worst}
             # Os dois medem "rede + algo a mais que nunca e' negativo": a sonda
             # carrega o tempo de tratar o ICMP, a medida passiva carrega o tick
-            # do servidor. Entao a latencia de rede honesta e' a menor das duas —
+            # do servidor. Entao a latencia de rede honesta e' a menor das duas:
             # e' o que faz o numero bater com o que o jogo mostra na tela.
             ms = self._measured
             if self._ms is not None and ms is not None:
@@ -178,7 +178,7 @@ class PingMonitor:
         """Alvo automatico que nao respondeu nada volta para o host fixo.
 
         Muito servidor de jogo simplesmente ignora ICMP. Continuar apontado para
-        ele mostraria "100% de perda" com a partida rodando lisa — mentira que
+        ele mostraria "100% de perda" com a partida rodando lisa, mentira que
         assusta e nao ajuda em nada.
         """
         with self._lock:
@@ -231,7 +231,7 @@ def game_server(pid: int) -> tuple[str, int] | None:
     """Endereco do servidor com que o processo esta' falando.
 
     UDP tem preferencia: e' por onde o jogo troca estado com o servidor. TCP
-    costuma ser loja, chat ou telemetria — latencia dali nao diz nada sobre a
+    costuma ser loja, chat ou telemetria: latencia dali nao diz nada sobre a
     partida.
     """
     if pid <= 4:            # System e Idle devolvem a tabela inteira da maquina

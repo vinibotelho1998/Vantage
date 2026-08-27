@@ -75,7 +75,7 @@ def test_bottleneck_capped():
 
 
 def test_bottleneck_unknown_without_columns():
-    """Sem CPUBusy/GPUBusy o veredito e' 'indisponivel' — travessao parecia falta de dado."""
+    """Sem CPUBusy/GPUBusy o veredito e' 'indisponivel': travessao parecia falta de dado."""
     m = fr.compute(make([10.0, 11.0, 9.0] * 50))
     assert m.bottleneck == fr.BOTTLENECK_NA
 

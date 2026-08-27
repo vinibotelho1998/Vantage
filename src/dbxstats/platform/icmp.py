@@ -2,7 +2,7 @@
 
 Servidor de jogo quase sempre fala UDP: abrir TCP na porta dele nao mede nada
 util, quando muito devolve "recusado". ICMP e' o que da' latencia e perda de
-verdade — e por esta API, sem socket raw e sem privilegio especial.
+verdade, e por esta API, sem socket raw e sem privilegio especial.
 """
 from __future__ import annotations
 

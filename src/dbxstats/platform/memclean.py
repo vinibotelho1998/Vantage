@@ -6,11 +6,11 @@ O que a limpeza faz de verdade
 processo as paginas que ele tem residentes. Elas nao somem: as limpas vao para a
 lista de standby (continuam na RAM, mas disponiveis) e as sujas vao para a lista
 de modificadas e depois para o arquivo de paginacao. O processo nao morre nem
-perde nada — apenas volta a puxar do disco o que precisar de novo.
+perde nada: apenas volta a puxar do disco o que precisar de novo.
 
 `NtSetSystemInformation(SystemMemoryListInformation, MemoryPurgeStandbyList)`
 descarta a lista de standby inteira. Standby e' a copia em RAM de paginas ja'
-lidas do disco que o Windows guarda de graca — e' cache, nao e' memoria ocupada.
+lidas do disco que o Windows guarda de graca: e' cache, nao e' memoria ocupada.
 
 O que a limpeza NAO faz
 -----------------------
@@ -19,7 +19,7 @@ se ganha e' espaco vazio, nao velocidade: a lista de standby nunca esteve
 atrapalhando ninguem, porque o Windows ja' a entrega no instante em que qualquer
 programa pede RAM. Logo depois da limpeza o sistema tende a ficar MAIS lento por
 alguns segundos ou minutos, ja' que tudo o que foi descartado precisa ser lido do
-disco outra vez — e o jogo que estava aberto e' justamente quem mais sofre.
+disco outra vez, e o jogo que estava aberto e' justamente quem mais sofre.
 
 Serve para: medir consumo a partir de um estado limpo antes de um teste, e
 destravar o caso especifico de um aplicativo que segurou working set enorme sem
@@ -27,7 +27,7 @@ estar usando. Fora disso, e' um botao de cosmetica.
 
 Este modulo foi escrito a partir da documentacao publica das APIs do Win32
 (EmptyWorkingSet, SetProcessWorkingSetSizeEx, AdjustTokenPrivileges e
-NtSetSystemInformation). Nada aqui foi copiado de outro projeto — a licenca do
+NtSetSystemInformation). Nada aqui foi copiado de outro projeto: a licenca do
 DBX Stats e' MIT e precisa continuar sendo.
 """
 from __future__ import annotations
@@ -86,7 +86,7 @@ ERROR_NOT_ALL_ASSIGNED = 1300
 SE_PROFILE_SINGLE_PROCESS = "SeProfileSingleProcessPrivilege"
 
 SYSTEM_MEMORY_LIST_INFORMATION = 0x50
-"""SYSTEM_INFORMATION_CLASS 80 — a classe que aceita comandos de lista de memoria."""
+"""SYSTEM_INFORMATION_CLASS 80: a classe que aceita comandos de lista de memoria."""
 
 MEMORY_PURGE_STANDBY_LIST = 4
 """SYSTEM_MEMORY_LIST_COMMAND: 2 = esvaziar working sets, 4 = descartar standby."""
@@ -97,7 +97,7 @@ STATUS_ACCESS_DENIED = 0xC0000022
 # Processos que nao se toca. Nao e' superstição: o gerenciador de sessao e o
 # subsistema de tempo de execucao segurando pagina residente e' o que mantem a
 # maquina em pe', e o DWM perde o quadro na hora (a tela pisca) se o working set
-# dele for zerado. Nenhum deles guarda memoria a toa — nao ha' nada a ganhar ali.
+# dele for zerado. Nenhum deles guarda memoria a toa: nao ha' nada a ganhar ali.
 CRITICOS = frozenset({
     "system", "system idle process", "registry", "memory compression",
     "secure system", "smss.exe", "csrss.exe", "wininit.exe", "winlogon.exe",
@@ -135,7 +135,7 @@ def e_critico(pid: int, nome: str) -> bool:
 
 
 def resumo(r: Resultado) -> str:
-    """Frase unica para a UI — diz o que aconteceu, sem prometer desempenho."""
+    """Frase unica para a UI: diz o que aconteceu, sem prometer desempenho."""
     partes = [f"{r.limpos} processos liberados"]
     if r.falhas:
         partes.append(f"{r.falhas} recusaram")
@@ -166,7 +166,7 @@ def habilitar_privilegio(nome: str = SE_PROFILE_SINGLE_PROCESS) -> tuple[bool, s
     """Liga um privilegio no token do processo atual.
 
     Todo processo elevado recebe SeProfileSingleProcessPrivilege no token, mas
-    desabilitado — ter o privilegio e usa-lo sao coisas diferentes no Windows.
+    desabilitado: ter o privilegio e usa-lo sao coisas diferentes no Windows.
     Sem esse passo o NtSetSystemInformation devolve STATUS_PRIVILEGE_NOT_HELD.
     """
     token = wintypes.HANDLE()
@@ -199,7 +199,7 @@ def esvaziar_working_set(pid: int) -> bool:
 
     Precisa de PROCESS_QUERY_INFORMATION + PROCESS_SET_QUOTA. Processos
     protegidos (anti-cheat, antivirus, servicos do sistema) recusam o
-    OpenProcess, e isso e' esperado — a funcao devolve False e a vida segue.
+    OpenProcess, e isso e' esperado: a funcao devolve False e a vida segue.
     """
     for acesso in (PROCESS_QUERY_INFORMATION | PROCESS_SET_QUOTA,
                    PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SET_QUOTA):
@@ -290,7 +290,7 @@ def limpar(processos=None, esvaziar=None, standby=None, disponivel=None) -> Resu
     avisos = []
     if falhas:
         avisos.append(f"{falhas} processos recusaram a liberação (protegidos pelo "
-                      "sistema ou por anticheat) — é esperado.")
+                      "sistema ou por anticheat), é esperado.")
     return Resultado(limpos=limpos, ignorados=ignorados, falhas=falhas,
                      standby=purgada, erro_standby=erro, antes_gb=antes,
                      depois_gb=disponivel(), avisos=avisos)

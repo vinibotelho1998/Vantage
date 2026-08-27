@@ -3,7 +3,7 @@
 Guardar frame a frame nao serve: uma sessao de tres horas a 144 fps passa de
 um milhao e meio de amostras, centenas de megabytes presos justamente enquanto
 o jogo precisa da memoria. O gravador troca a lista por um histograma de
-tamanho fixo — e os percentis tem de continuar batendo.
+tamanho fixo; e os percentis tem de continuar batendo.
 """
 import random
 

@@ -68,7 +68,7 @@ class GameSession:
                 argv = [str(alvo), *_split_args(self.args)]
                 self._proc = subprocess.Popen(argv, cwd=str(alvo.parent))
             else:
-                os.startfile(str(alvo))  # noqa: S606 — atalho/URL fica com o shell
+                os.startfile(str(alvo))  # noqa: S606, atalho/URL fica com o shell
         except OSError as e:
             return False, str(e)
         _log.info("sessao iniciada: %s", alvo.name)
@@ -99,7 +99,7 @@ class GameSession:
         Varrer a tabela de processos inteira uma vez por segundo, a partida toda,
         custa caro justamente enquanto o jogo esta' rodando. Entao a varredura
         acontece so' ate' achar; dai' em diante conferimos aquele pid, que e' uma
-        consulta unica. So' quando ele morre voltamos a varrer — e' assim que o
+        consulta unica. So' quando ele morre voltamos a varrer: e' assim que o
         fim da partida e' percebido sem pesar no meio dela.
         """
         if not self.names:

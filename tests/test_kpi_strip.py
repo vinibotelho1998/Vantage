@@ -1,6 +1,6 @@
 """Faixa de KPI no topo das telas.
 
-Ela nascia vazia em toda tela que nao chamasse show_only — CPU, GPU, Memoria,
+Ela nascia vazia em toda tela que nao chamasse show_only: CPU, GPU, Memoria,
 Rede, Processos, Benchmark, Telas e Controle ficavam com uma faixa em branco.
 """
 import os
@@ -20,7 +20,7 @@ _SPECS = [("cpu", "CPU", "%"), ("gpu", "GPU", "%"),
 def test_faixa_nasce_cheia():
     """Um widget recem-criado sem pai responde isHidden() verdadeiro.
 
-    O filtro do layout usava isso, entao nenhum tile entrava no grid — e sem
+    O filtro do layout usava isso, entao nenhum tile entrava no grid, e sem
     entrar no grid nenhum tile ganhava pai. A faixa nunca saia do zero.
     """
     faixa = KpiStrip(_SPECS, columns=4)

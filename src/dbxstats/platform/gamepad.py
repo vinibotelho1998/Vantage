@@ -88,7 +88,7 @@ RESET_JANELA_S = 1.5
 """Tempo maximo entre as duas apertadas do combo que devolve as telas.
 
 Duas apertadas, e nao uma, de proposito: o gesto desfaz o arranjo inteiro da
-casa, e os quatro botoes ficam justamente onde a mao descansa — uma apertada so'
+casa, e os quatro botoes ficam justamente onde a mao descansa; uma apertada so'
 viraria acidente na primeira vez que alguem apoiasse o controle no colo.
 """
 
@@ -364,13 +364,13 @@ DEFAULT_BINDINGS: dict[str, str] = {
     "Start": "key_enter",
     # Back fica livre de proposito: ele forma o combo que assume e devolve o
     # mouse, e apertar os dois botoes nunca sai perfeitamente junto. Com uma
-    # acao aqui, o caminho ate' o combo dispararia ela toda vez — Alt+F4 era o
+    # acao aqui, o caminho ate' o combo dispararia ela toda vez; Alt+F4 era o
     # padrao anterior, e fechar a janela sem querer e' o pior jeito de descobrir
     # isso. Quem quiser pode escolher uma na tela do controle.
     "Back": "",
     # Os gatilhos sozinhos ficam livres de proposito. Win+D e' um INTERRUPTOR:
     # aperta uma vez e a area de trabalho aparece, aperta de novo e as janelas
-    # voltam — o jogo junto. Num gatilho, que e' analogico e dispara com um
+    # voltam, o jogo junto. Num gatilho, que e' analogico e dispara com um
     # roçar, isso virava "o jogo volta sozinho toda hora".
     "LT": "",
     "RT": "",
@@ -451,7 +451,7 @@ class GamepadMouse(QObject):
     reset_pedido = Signal()
     """LT+RT+L3+R3 duas vezes: devolve as telas ao perfil padrao.
 
-    Quem faz a devolucao e' o App — este modulo nao sabe o que e' um monitor.
+    Quem faz a devolucao e' o App: este modulo nao sabe o que e' um monitor.
     """
 
     def __init__(self, settings, parent: QObject | None = None) -> None:
@@ -558,7 +558,7 @@ class GamepadMouse(QObject):
         """Solta tudo que estava pressionado ao devolver o mouse.
 
         Sem isso, desligar o modo com um botao apertado deixaria a tecla ou o
-        clique presos no Windows — e o usuario sem entender por que a maquina
+        clique presos no Windows, e o usuario sem entender por que a maquina
         parou de responder.
         """
         for nome, held in list(self._held.items()):
@@ -607,7 +607,7 @@ class GamepadMouse(QObject):
         self.slots = vivos
 
         # Os da Sony entram na mesma fusao dos de XInput. Para tudo que vem
-        # depois — modo mouse, grade, desenho da tela — nao ha' diferenca entre
+        # depois (modo mouse, grade, desenho da tela) nao ha' diferenca entre
         # um DualSense e um Xbox: quem estiver na mao manda no cursor.
         pads.extend(self._sony.estados())
 
@@ -621,7 +621,7 @@ class GamepadMouse(QObject):
         Devolve True enquanto os quatro estiverem apertados, e o laco para ali.
         E' o que impede o combo de disparar as acoes proprias dos botoes que ele
         usa: LT+RT ja' e' "area de trabalho", L3 e' o teclado virtual e R3 e' o
-        clique do meio — sem a parada, pedir o reset piscaria a area de trabalho
+        clique do meio: sem a parada, pedir o reset piscaria a area de trabalho
         e abriria um teclado por cima.
         """
         segurando = (pad.bLeftTrigger > TRIGGER_THRESHOLD
@@ -645,7 +645,7 @@ class GamepadMouse(QObject):
             _log.info("combo de reset: devolvendo o arranjo padrao")
             self.reset_pedido.emit()
             # Duas batidas curtas confirmam que o pedido saiu, sem depender da
-            # tela — que no sofa pode estar prestes a mudar de modo.
+            # tela, que no sofa pode estar prestes a mudar de modo.
             self._bater(2)
         else:
             self._reset_armado_em = agora
@@ -667,7 +667,7 @@ class GamepadMouse(QObject):
         Existe por causa de um sintoma dificil de atribuir: o foco andando
         sozinho pelo Windows inteiro, como se alguem batesse nas setas. Quando o
         modo mouse esta' ligado, um direcional preso em QUALQUER controle
-        conectado vira exatamente isso — o mapeamento manda o direcional para as
+        conectado vira exatamente isso: o mapeamento manda o direcional para as
         setas do teclado, e elas mexem o foco de qualquer aplicativo.
 
         Nada aqui adivinha defeito: so' relata o que o controle esta' dizendo. Um
@@ -713,7 +713,7 @@ class GamepadMouse(QObject):
         # O reset tambem vem antes de tudo, e de proposito: e' o gesto de
         # emergencia. Se so' funcionasse com o modo mouse ligado, ou fora do Big
         # Picture, faltaria exatamente quando a TV esta' na frente e o teclado
-        # longe — que e' quando ele existe para servir.
+        # longe, que e' quando ele existe para servir.
         if self._reset(pad, buttons):
             return
         # Quem assumiu o controle recebe o estado cru e o laco para por aqui.
@@ -726,7 +726,7 @@ class GamepadMouse(QObject):
 
         # O estado do combo vive fora de `_held` de proposito: desligar o modo mouse
         # chama `_release_all`, que zera `_held`. Com o combo guardado la', a borda
-        # se perdia no mesmo instante e o proximo tick religava tudo — o atalho so'
+        # se perdia no mesmo instante e o proximo tick religava tudo: o atalho so'
         # ligava, nunca desligava.
         if self.cfg.gamepad_toggle_combo and (buttons & BTN_BACK) and (buttons & BTN_START):
             if not self._combo_held:

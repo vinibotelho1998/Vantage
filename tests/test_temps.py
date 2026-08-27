@@ -1,6 +1,6 @@
 """Duas temperaturas por peca: a de trabalho e o ponto quente.
 
-Uma so' sempre mente para algum lado — a media esconde throttle e o pico
+Uma so' sempre mente para algum lado: a media esconde throttle e o pico
 assusta a toa. O overlay mostra as duas, entao o leitor precisa separa-las.
 """
 from dbxstats.sensors.lhm import LhmReader
@@ -48,7 +48,7 @@ def test_nucleo_a_nucleo_vira_a_media_quando_existe():
 
 
 def test_maquina_sem_detalhe_nao_inventa_media():
-    """Sem sensor por die nem por nucleo, sobra so' o pacote — e tudo bem."""
+    """Sem sensor por die nem por nucleo, sobra so' o pacote, e tudo bem."""
     d = _ler([_Sensor("Temperature", "CPU Package", 70.0)])
     assert d["cpu_temp_package"] == 70.0
     assert "cpu_temp_cores" not in d

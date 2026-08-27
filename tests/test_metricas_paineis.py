@@ -1,12 +1,12 @@
 """As medidas novas atravessando ate' as telas grandes, e sumindo quando faltam.
 
-O risco desta camada nao e' quebrar — e' mostrar. Uma linha com travessao fixo
+O risco desta camada nao e' quebrar; e' mostrar. Uma linha com travessao fixo
 (tensao numa placa que nao publica rail, temperatura de pente sem elevacao,
 memoria do jogo sem jogo, temperatura de VRAM numa maquina AMD sem NVML) parece
 defeito do app, e o usuario nao tem como saber que o sensor e' que nao existe.
 
 O ultimo teste guarda a migracao: sem ela, quem ja' tem settings salvo estreia o
-redesenho sem nenhuma das metricas novas — que e' justamente o dono da maquina.
+redesenho sem nenhuma das metricas novas, que e' justamente o dono da maquina.
 """
 import os
 
@@ -127,7 +127,7 @@ def test_tela_da_cpu_separa_vcore_do_vid():
 
 
 def test_vid_travado_sem_elevacao_nao_aparece():
-    """Sem admin o VID crava em 1,550 V — topo da codificacao, nao medida."""
+    """Sem admin o VID crava em 1,550 V: topo da codificacao, nao medida."""
     v = cpu_view.CpuView(_App())
     v.on_system(_dados(cpu_vid=1.55, cpu_volts=None))
     assert _linha(v.info, "vid").isHidden()
@@ -153,7 +153,7 @@ def test_tela_da_gpu_sem_sensor_de_memoria_esconde_o_card_de_vram():
 
     Os dois numeros vinham de sentinelas do coletor, nao de sensor nenhum. Com a
     leitura ausente virando None, o que precisa acontecer aqui e' o card inteiro
-    sair — barra zerada se le' como "sobrando memoria", que e' o oposto de "nao
+    sair: barra zerada se le' como "sobrando memoria", que e' o oposto de "nao
     sei medir isto".
     """
     d = _dados()
@@ -246,7 +246,7 @@ class _PingMudo:
 def test_as_duas_temperaturas_da_cpu_chegam_no_snapshot():
     """O overlay poe media e pico lado a lado; sem estas chaves ele so' tem uma.
 
-    Elas eram lidas do LHM e nunca copiadas para o dict do coletor — a celula
+    Elas eram lidas do LHM e nunca copiadas para o dict do coletor; a celula
     dupla existia no codigo e nao aparecia em maquina nenhuma.
     """
     c = Collector(_LhmTemps(), _GpuMudo(), _PingMudo())
@@ -262,7 +262,7 @@ def test_metrica_nova_nasce_ligada_para_quem_nunca_mexeu_na_lista():
     """`sanitize` so' filtra; sem migracao o redesenho estreia invisivel.
 
     Quem tem settings salvo carrega a lista da versao antiga, e nenhuma chave
-    nova entraria nela — o overlay novo apareceria igual ao velho.
+    nova entraria nela: o overlay novo apareceria igual ao velho.
     """
     antigo = {"overlay_metrics": ["fps", "graph", "low1", "frametime", "cpu", "gpu",
                                   "ram", "vram", "ping", "watts", "clock"]}

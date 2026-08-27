@@ -1,6 +1,6 @@
 """Descobre com qual servidor um jogo esta' falando.
 
-O Windows nao guarda o endereco remoto na tabela de UDP — `netstat` e psutil
+O Windows nao guarda o endereco remoto na tabela de UDP: `netstat` e psutil
 mostram as portas locais do processo e mais nada. Como jogo online quase sempre
 e' UDP, ficar so' na tabela deixa o ping apontado para um DNS publico, que nao
 diz nada sobre a partida.
@@ -11,7 +11,7 @@ promiscuo (SIO_RCVALL, exige admin) ve os pacotes; casando pela porta local,
 sobra o endereco do servidor.
 
 A varredura e' curta e espacada de proposito: alguns segundos bastam para o par
-mais falante aparecer, e o resultado vale por bastante tempo — servidor de
+mais falante aparecer, e o resultado vale por bastante tempo: servidor de
 partida nao muda a toda hora.
 """
 from __future__ import annotations
@@ -42,7 +42,7 @@ RTT_PERCENTILE = 0.10
 
 O intervalo entre o que sai e a resposta nunca e' menor que a ida e volta real,
 mas pode ser bem maior: o servidor responde no tick dele, nao no instante em que
-o pacote chega. Por isso a estimativa mora bem embaixo na distribuicao — o
+o pacote chega. Por isso a estimativa mora bem embaixo na distribuicao: o
 minimo seria refem de um pacote sortudo, e a mediana ja' carrega a cadencia do
 servidor inteira.
 """
@@ -65,7 +65,7 @@ def estimate_rtt(events: list[tuple[float, bool]]) -> tuple[float | None, float 
     """Latencia e jitter a partir do vaivem dos pacotes.
 
     `events` e' a linha do tempo do que passou: (instante, saiu_da_maquina). Cada
-    envio e' casado com a primeira resposta que vem depois dele — em jogo de
+    envio e' casado com a primeira resposta que vem depois dele: em jogo de
     tempo real o cliente manda input e o servidor devolve estado, entao esse
     intervalo contem a ida e volta.
 
@@ -95,15 +95,15 @@ def estimate_rtt(events: list[tuple[float, bool]]) -> tuple[float | None, float 
 
 
 def local_ports(pid: int) -> set[int]:
-    """Portas UDP que o processo abriu — a metade da informacao que o Windows da'."""
+    """Portas UDP que o processo abriu: a metade da informacao que o Windows da'."""
     return local_endpoints(pid)[0]
 
 
 def local_endpoints(pid: int) -> tuple[set[int], set[str]]:
     """Portas e enderecos locais do processo.
 
-    O endereco importa quando o jogo sai por outra interface — VPN, adaptador
-    virtual — porque e' nela que o trafego dele passa, e nao na rota padrao.
+    O endereco importa quando o jogo sai por outra interface (VPN, adaptador
+    virtual) porque e' nela que o trafego dele passa, e nao na rota padrao.
     """
     if pid <= 4:
         return set(), set()
@@ -150,7 +150,7 @@ def capture(ports: set[int], seconds: float, bind_ip: str | None = None,
     """Uma passada de escuta.
 
     Devolve quem falou com o processo (para descobrir o servidor) e, quando
-    `peer_ip` e' dado, a linha do tempo do vaivem com ele — que e' de onde sai a
+    `peer_ip` e' dado, a linha do tempo do vaivem com ele, que e' de onde sai a
     latencia sem sondar nada.
     """
     vazio: collections.Counter = collections.Counter()

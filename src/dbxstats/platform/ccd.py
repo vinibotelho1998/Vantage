@@ -322,7 +322,7 @@ def _rebuild(chosen: list[PATH_INFO]) -> Config:
     torna a chamada fragil, porque qualquer combinacao invalida derruba tudo.
 
     Duas telas nao podem sair da mesma origem (fora do modo clone). Quando os
-    caminhos disponiveis colidem, a origem repetida e' trocada por uma livre —
+    caminhos disponiveis colidem, a origem repetida e' trocada por uma livre:
     sem isso a segunda tela simplesmente nao acende, que era o motivo de voltar
     do jogo com o ultrawide apagado.
     """

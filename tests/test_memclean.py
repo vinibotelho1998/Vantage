@@ -6,7 +6,7 @@ O outro risco e' de comunicacao: apresentar "memoria disponivel subiu" como se
 fosse desempenho ganho, quando logo depois o sistema fica mais lento repovoando
 o cache que acabou de ser jogado fora.
 
-Nenhum teste aqui chama a API do Windows — as quatro dependencias de `limpar`
+Nenhum teste aqui chama a API do Windows: as quatro dependencias de `limpar`
 entram por parametro justamente para a regra ser exercitada sem mexer na memoria
 da maquina que roda os testes.
 """

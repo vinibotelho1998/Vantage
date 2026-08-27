@@ -122,7 +122,7 @@ def allow_drops_from_explorer(hwnd: int) -> None:
 
     O Windows bloqueia mensagens de um processo de integridade menor para um
     maior (UIPI). Como o DBX Stats se eleva para ler sensores, o Explorer (que
-    roda sem elevacao) nao consegue entregar o arquivo arrastado — o cursor vira
+    roda sem elevacao) nao consegue entregar o arquivo arrastado: o cursor vira
     "proibido" e o drop simplesmente nao acontece. Liberar as tres mensagens do
     protocolo de drop e' o caminho oficial para esse caso.
     """

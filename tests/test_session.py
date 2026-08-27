@@ -65,7 +65,7 @@ def test_resolve_shortcut_ignora_nao_atalho(tmp_path):
 
 
 def test_atalho_de_loja_nao_chuta_nome_de_processo(tmp_path):
-    """O nome do .url nao diz nada sobre o processo — seguir por ele daria falso fim."""
+    """O nome do .url nao diz nada sobre o processo: seguir por ele daria falso fim."""
     atalho = tmp_path / "Battlefield 6.url"
     atalho.write_text("[InternetShortcut]\nURL=origin2://game/launch\n")
     s = GameSession(str(atalho))

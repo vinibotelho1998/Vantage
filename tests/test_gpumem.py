@@ -16,7 +16,7 @@ def test_struct_tem_o_tamanho_que_o_windows_espera():
 
 
 def test_caminho_do_contador_usa_curinga():
-    """Um processo aparece em varias instancias — uma por adaptador e segmento.
+    """Um processo aparece em varias instancias: uma por adaptador e segmento.
     Ler so' a primeira daria um numero parcial."""
     caminho = gpumem.ProcessVram.CONTADOR.format(pid=1234)
     assert "pid_1234*" in caminho

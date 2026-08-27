@@ -1,6 +1,6 @@
 """Biblioteca de jogos: arraste o .exe, escolha a tela, clique e jogue.
 
-A ideia e' cortar o ritual de sempre — abrir Configuracoes do Windows, trocar a
+A ideia e' cortar o ritual de sempre: abrir Configuracoes do Windows, trocar a
 primaria para a TV, achar o jogo, jogar, e no fim desfazer tudo na mao. Aqui o
 atalho guarda o que fazer com as telas antes de abrir e devolve tudo sozinho
 quando o jogo fecha.
@@ -55,10 +55,10 @@ class DropZone(QWidget):
         # Rodando como administrador, o Windows BLOQUEIA arrastar de um Explorer
         # comum para esta janela (UIPI) e nao avisa ninguem: o arquivo simplesmente
         # nao chega. Dizer isso aqui evita a conclusao de que o app "nao acha" o
-        # jogo — e aponta os dois caminhos que funcionam.
-        texto = (".exe, atalho .lnk ou .url — ou clique para procurar")
+        # jogo; e aponta os dois caminhos que funcionam.
+        texto = (".exe, atalho .lnk ou .url, ou clique para procurar")
         if win.is_admin():
-            texto = ("clique para procurar — arrastar não funciona com o app "
+            texto = ("clique para procurar, arrastar não funciona com o app "
                      "como administrador")
         hint = label(texto, 8.5, color=theme.FAINT)
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -92,7 +92,7 @@ class DropZone(QWidget):
     def mousePressEvent(self, event) -> None:
         # Abre na area de trabalho: e' de longe onde o jogo recem-baixado esta',
         # e o padrao anterior ("") caia na pasta de trabalho do processo, que com
-        # o app elevado e' o System32 — um lugar sem jogo nenhum dentro.
+        # o app elevado e' o System32, um lugar sem jogo nenhum dentro.
         inicio = os.path.expandvars(r"%USERPROFILE%\Desktop")
         escolhido, _ = QFileDialog.getOpenFileName(
             self, "Escolha o jogo", inicio if os.path.isdir(inicio) else "",
@@ -110,7 +110,7 @@ def _paths_from(mime) -> list[str]:
             if u.isLocalFile() and u.toLocalFile().lower().endswith(_EXTS)]
 
 
-_COMO_FUNCIONA = """Escolha em que tela o jogo abre — inclusive uma que esteja desligada.
+_COMO_FUNCIONA = """Escolha em que tela o jogo abre, inclusive uma que esteja desligada.
 
 Ao clicar em Jogar, o DBX Stats liga essa tela se preciso, coloca ela como principal,
 abre o jogo e passa a acompanhar o processo. Quando o jogo fecha, as telas voltam
@@ -269,7 +269,7 @@ class LauncherView(View):
                                "Também abre segurando Back por 1 s, ou com Ctrl+Alt+G.")
         barra.addWidget(self.btn_bp)
         # A grade tambem escolhe em que tela abre, como qualquer jogo. Antes ela
-        # nascia sempre na tela marcada para ficar apagada — servia para a TV da
+        # nascia sempre na tela marcada para ficar apagada; servia para a TV da
         # sala, e quem quisesse a grade no monitor de cima nao tinha onde dizer.
         barra.addWidget(label("na tela", 8.5, color=theme.MUTE))
         self.bp_tela = QComboBox()
@@ -365,7 +365,7 @@ class LauncherView(View):
 
         So' telas. Perfil de tela saiu daqui: ele mexe na topologia inteira,
         apaga monitor que ninguem pediu para apagar e faz as tres telas piscarem
-        por segundos. O atalho de jogo quer uma coisa so' — abrir naquela tela —
+        por segundos. O atalho de jogo quer uma coisa so' (abrir naquela tela)
         e isso e' uma troca de primaria, que se desfaz sozinha no fim. Perfil
         continua existindo na aba Telas, para quem precisa mesmo dele.
         """
@@ -376,7 +376,7 @@ class LauncherView(View):
             # Tela apagada continua na lista: a TV vive desligada e so' acorda
             # para jogar, entao ela e' justamente a escolha mais provavel aqui.
             if not disp.active:
-                marca = " (desligada — liga ao abrir)"
+                marca = " (desligada, liga ao abrir)"
             elif disp.primary:
                 marca = " (já é a principal)"
             else:
@@ -400,7 +400,7 @@ class LauncherView(View):
         self.cfg.launch_items = itens
         self.cfg.save()
         self._refresh()
-        self.notify(f"{novos} jogo(s) adicionado(s) — escolha a tela e jogue", theme.OK)
+        self.notify(f"{novos} jogo(s) adicionado(s); escolha a tela e jogue", theme.OK)
 
     def _save(self) -> None:
         self.cfg.save()
@@ -420,8 +420,8 @@ class LauncherView(View):
     def _encher_tela_bp(self, alvos: list[tuple[str, str]]) -> None:
         """Reaproveita a lista de telas dos jogos, trocando so' o prefixo.
 
-        O Big Picture nao troca a primaria — quem manda continua sendo assunto do
-        atalho de cada jogo —, entao o valor sai como `screen:` e nao `primary:`.
+        O Big Picture nao troca a primaria (quem manda continua sendo assunto do
+        atalho de cada jogo), entao o valor sai como `screen:` e nao `primary:`.
         """
         atual = str(getattr(self.cfg, "bigpicture_target", "") or "")
         self.bp_tela.blockSignals(True)
@@ -456,7 +456,7 @@ class LauncherView(View):
         itens = self.cfg.launch_items
         if not itens:
             self.items_box.addWidget(
-                label("nenhum jogo ainda — arraste um .exe aí em cima", 9,
+                label("nenhum jogo ainda, arraste um .exe aí em cima", 9,
                       color=theme.FAINT))
             return
 
@@ -537,7 +537,7 @@ class LauncherView(View):
         prio.setCurrentIndex(max(0, prio.findData(item.get("priority", ""))))
         prio.setToolTip("Aplicada ao processo do jogo assim que ele é reconhecido. "
                         "Tempo real coloca o jogo à frente do próprio Windows e pode "
-                        "travar a máquina — use com cuidado.")
+                        "travar a máquina, use com cuidado.")
         prio.currentIndexChanged.connect(
             lambda _i, idx=index, w=prio: self._set(idx, "priority", w.currentData()))
         meio.addWidget(prio)
@@ -545,7 +545,7 @@ class LauncherView(View):
         gravar = QCheckBox("gravar métricas da partida")
         gravar.setToolTip("Acompanha o jogo do início ao fim e guarda o resumo em "
                           "Benchmark › Sessões de jogo. Custa uma soma por quadro e "
-                          "20 KB fixos — não cresce com a duração da partida.")
+                          "20 KB fixos; não cresce com a duração da partida.")
         gravar.setChecked(bool(item.get("bench", True)))
         gravar.toggled.connect(lambda on, i=index: self._set(i, "bench", bool(on)))
         meio.addWidget(gravar)

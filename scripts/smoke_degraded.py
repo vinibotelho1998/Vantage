@@ -2,7 +2,7 @@
 
 E' o que acontece num PC onde o LibreHardwareMonitor nao sobe, onde nao existe
 NVML, ou onde o usuario abriu o app sem jogo nenhum. O app tem que continuar
-util e honesto — nunca inventar numero, nunca quebrar, e dizer o que falta.
+util e honesto: nunca inventar numero, nunca quebrar, e dizer o que falta.
 
 Falha com traceback se qualquer tela quebrar, e lista o que ficou sem dado para
 a gente olhar se a tela ainda faz sentido assim.

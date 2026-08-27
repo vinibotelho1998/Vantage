@@ -1,4 +1,4 @@
-"""Tela de processos: quem esta consumindo CPU e memoria agora — e o que fazer.
+"""Tela de processos: quem esta consumindo CPU e memoria agora, e o que fazer.
 
 Ver o vilao da CPU e ter de abrir o Gerenciador de Tarefas para agir e' meio
 caminho. Aqui a mesma lista encerra, muda prioridade e prende o processo em
@@ -66,14 +66,14 @@ class PrioridadeDialog(QDialog):
     """Escolhe a faixa de prioridade do processo.
 
     O aviso de que a escolha morre com o processo esta' na tela porque o Windows
-    nao guarda isso em lugar nenhum — sem dizer, a pessoa reabre o jogo, ve tudo
+    nao guarda isso em lugar nenhum; sem dizer, a pessoa reabre o jogo, ve tudo
     em Normal de novo e acha que o app nao aplicou nada.
     """
 
     def __init__(self, nome: str, pid: int, atual, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("SettingsRoot")
-        self.setWindowTitle("DBX Stats — prioridade")
+        self.setWindowTitle("DBX Stats: prioridade")
         self.setModal(True)
         self.setMinimumWidth(theme.scaled(420))
 
@@ -87,7 +87,7 @@ class PrioridadeDialog(QDialog):
         grupo = QButtonGroup(self)
         self._botoes: dict[str, QRadioButton] = {}
         for prio in P.PRIORIDADES:
-            radio = QRadioButton(prio.rotulo + (f"  —  {prio.dica}" if prio.dica else ""))
+            radio = QRadioButton(prio.rotulo + (f": {prio.dica}" if prio.dica else ""))
             radio.setChecked(atual is not None and atual == prio.valor)
             grupo.addButton(radio)
             self._botoes[prio.chave] = radio
@@ -101,7 +101,7 @@ class PrioridadeDialog(QDialog):
         root.addWidget(self._alerta)
         self._botoes["realtime"].toggled.connect(self._pintar_alerta)
 
-        aviso = label("Vale só até o processo fechar — o Windows não guarda essa escolha.",
+        aviso = label("Vale só até o processo fechar; o Windows não guarda essa escolha.",
                       8, color=theme.FAINT)
         aviso.setWordWrap(True)
         root.addWidget(aviso)
@@ -132,7 +132,7 @@ class AfinidadeDialog(QDialog):
     def __init__(self, nome: str, pid: int, atuais, total: int, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("SettingsRoot")
-        self.setWindowTitle("DBX Stats — afinidade")
+        self.setWindowTitle("DBX Stats: afinidade")
         self.setModal(True)
         self.setMinimumWidth(theme.scaled(460))
         self._total = max(1, int(total))
@@ -185,7 +185,7 @@ class AfinidadeDialog(QDialog):
         self._resumo.setWordWrap(True)
         root.addWidget(self._resumo)
         if not atuais:
-            root.addWidget(label("Não deu para ler a afinidade atual — o que está "
+            root.addWidget(label("Não deu para ler a afinidade atual; o que está "
                                  "marcado é um palpite.", 8, color=theme.WARN))
 
         linha = QHBoxLayout()
@@ -220,7 +220,7 @@ class AfinidadeDialog(QDialog):
     def _pintar_resumo(self, *_a) -> None:
         escolhidos = self.nucleos()
         if not escolhidos:
-            self._dizer("Nenhum núcleo marcado — sem pelo menos um, o processo não roda.",
+            self._dizer("Nenhum núcleo marcado; sem pelo menos um, o processo não roda.",
                         theme.WARN)
         elif len(escolhidos) == self._total:
             self._dizer(f"Todos os {self._total} núcleos (sem restrição).", theme.MUTE)
@@ -280,7 +280,7 @@ class ProcessesView(View):
         root.addWidget(self.status)
 
         # Faixa do processo escolhido. A tabela se reordena a cada 2,5 s e o
-        # destaque da linha viaja junto — dizer em letra grande QUEM esta' na
+        # destaque da linha viaja junto: dizer em letra grande QUEM esta' na
         # mira e' o que evita apertar "Finalizar" achando que era outro.
         self.escolhido = Card("Nenhum processo selecionado", theme.FAINT,
                               "clique numa linha da lista")
@@ -422,7 +422,7 @@ class ProcessesView(View):
         """Mantem o destaque no mesmo processo mesmo quando a ordem muda.
 
         A lista se reordena por CPU a cada 2,5 s. Preso na linha, o destaque
-        pularia sozinho para outro processo entre o olhar e o clique — e o botao
+        pularia sozinho para outro processo entre o olhar e o clique, e o botao
         de finalizar acertaria quem nao devia.
         """
         if self._sel_pid is None:
@@ -454,7 +454,7 @@ class ProcessesView(View):
         menu.addAction("Mudar afinidade de CPU…", self._afinidade)
         menu.addSeparator()
         if P.bloqueio_encerrar(alvo[1], alvo[0]):
-            protegido = menu.addAction("Finalizar — protegido pelo Windows")
+            protegido = menu.addAction("Finalizar (protegido pelo Windows)")
             protegido.setEnabled(False)
         else:
             menu.addAction("Finalizar processo", self._finalizar)

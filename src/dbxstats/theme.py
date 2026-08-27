@@ -132,7 +132,7 @@ def dimm_temp_color(t: float | None, high: float | None = None,
                     critical: float | None = None) -> str:
     """Faixa do proprio pente: High Limit e Critical High vem de fabrica no SPD.
 
-    Limiar chutado no app erra nas duas pontas — DDR5 a 55 ja' e' aviso do
+    Limiar chutado no app erra nas duas pontas: DDR5 a 55 ja' e' aviso do
     fabricante, e a mesma temperatura num processador seria ociosidade.
     """
     return _band(t, high or 55.0, critical or 85.0)

@@ -2,7 +2,7 @@
 
 Janela propria, e nao a principal em tela cheia. A janela principal constroi as
 onze telas no __init__, e cada widget delas ja' chamou theme.scaled() na hora de
-nascer — a escala e' global e escrita uma vez so'. Crescer a interface para uma
+nascer; a escala e' global e escrita uma vez so'. Crescer a interface para uma
 TV a tres metros exigiria reconstruir tudo. O overlay ja' resolveu esse mesmo
 problema do mesmo jeito: janela separada, com escala propria calculada da tela
 onde ela vai aparecer.
@@ -48,7 +48,7 @@ class BigPicture(QWidget):
         self._ctl = controller
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint
                             | Qt.WindowType.WindowDoesNotAcceptFocus)
-        self.setWindowTitle("DBX Stats — Big Picture")
+        self.setWindowTitle("DBX Stats: Big Picture")
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._itens: list[dict] = []
         self._foco = 0
@@ -63,7 +63,7 @@ class BigPicture(QWidget):
         """Capa ja' carregada, por caminho do atalho.
 
         A grade repinta inteira a cada passo do foco. Ler JPG do disco dentro do
-        paintEvent faria a navegacao engasgar a cada card — o cache tira o disco
+        paintEvent faria a navegacao engasgar a cada card: o cache tira o disco
         do caminho do desenho e o QPixmap ja' fica no formato da tela."""
 
     def abrir(self, screen=None) -> None:
@@ -114,7 +114,7 @@ class BigPicture(QWidget):
                 self._pressionados.discard(mask)
 
     def sem_controle(self) -> None:
-        """Aviso quando o controle some — pilha acaba no meio, e acontece."""
+        """Aviso quando o controle some; pilha acaba no meio, e acontece."""
         if not self._sem_controle:
             self._sem_controle = True
             self.update()
@@ -179,7 +179,7 @@ class BigPicture(QWidget):
         p.setPen(QColor(theme.MUTE))
         rodape = "A abre   ·   B sai   ·   direcional escolhe"
         if self._sem_controle:
-            rodape = "Controle desconectado — use as setas e Enter"
+            rodape = "Controle desconectado: use as setas e Enter"
         p.drawText(int(60 * e), int(100 * e), rodape)
 
         if self._abrindo:
@@ -234,7 +234,7 @@ class BigPicture(QWidget):
 
         A diferenca importa no desenho: capa e' arte feita para preencher, e
         icone e' um simbolo com margem propria. Esticar o icone ate' cobrir um
-        card deitado amplia ele em varias vezes e corta o desenho pela metade —
+        card deitado amplia ele em varias vezes e corta o desenho pela metade;
         e' o que faz um icone bonito virar borrao.
 
         O teste e' a proporcao, e nao a origem do arquivo, porque uma imagem

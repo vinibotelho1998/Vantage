@@ -1,7 +1,7 @@
 """Arranjo padrao: acende, entrega a primaria, apaga e devolve o modo nativo.
 
 O PC vinha ligando "com resolucao doida": o Windows chuta um modo conservador ao
-reanexar tela, e o app so' sabia apagar e trocar a primaria — nunca acender o que
+reanexar tela, e o app so' sabia apagar e trocar a primaria: nunca acender o que
 deveria estar aceso, nem corrigir o modo.
 """
 import dbxstats.app as appmod
@@ -141,7 +141,7 @@ def test_primaria_e_reconfirmada_depois_de_apagar(monkeypatch):
     """Apagar uma tela faz o Windows reatribuir a primaria por conta propria.
 
     Medido nesta maquina: pedimos a ULTRAWIDE, a TV foi apagada em seguida, e a
-    primaria terminou na ULTRAGEAR — com o log dizendo que a troca dera certo.
+    primaria terminou na ULTRAGEAR, com o log dizendo que a troca dera certo.
     """
     telas = [_Tela("uw", "ULTRAWIDE", True, modo=_Modo(3440, 1440, 160)),
              _Tela("ug", "ULTRAGEAR", True, modo=_Modo(1920, 1080, 180)),

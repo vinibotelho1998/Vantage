@@ -81,7 +81,7 @@ def test_nunca_reaplica_perfil(monkeypatch):
     """Perfil mexe em topologia, modos e posicoes.
 
     Reaplica-lo porque um monitor foi plugado apagava o arranjo que a pessoa
-    tinha acabado de montar na mao — o relato foi "movo as telas, aplico, e
+    tinha acabado de montar na mao: o relato foi "movo as telas, aplico, e
     depois de um tempo volta sozinho".
     """
     telas = [_Tela("uw", True, True)]

@@ -191,7 +191,7 @@ def test_aba_de_jogos_mantem_a_chave_antiga():
     """O rotulo virou "Jogos", mas a chave continua "launcher".
 
     Trocar a chave faria sanitize() nao reconhecer o start_view de quem ja'
-    escolhia essa aba e cair calado para o painel — foi o que aconteceu quando a
+    escolhia essa aba e cair calado para o painel; foi o que aconteceu quando a
     tela "gaming" saiu de VIEWS.
     """
     assert "launcher" in VIEWS
@@ -209,7 +209,7 @@ def test_janela_fora_de_qualquer_tela_nao_e_restaurada():
 
     Basta fechar com a janela na TV e depois desligar a TV: a geometria salva
     aponta para o vazio, a janela nasce fora de qualquer monitor e, de fora,
-    parece que o app nao abriu — com o processo vivo na bandeja o tempo todo.
+    parece que o app nao abriu, com o processo vivo na bandeja o tempo todo.
     """
     import os
 

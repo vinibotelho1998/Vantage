@@ -2,8 +2,8 @@
 
 Cada sensor ja' tem teste proprio; o risco que sobra e' o de sempre nesta
 arquitetura: o dado ser lido corretamente e nunca chegar na UI, porque o dict de
-saida do coletor e' montado a mao e uma chave esquecida ali some sem erro nenhum
-— foi exatamente assim que a temperatura dos pentes ficou invisivel.
+saida do coletor e' montado a mao e uma chave esquecida ali some sem erro nenhum;
+foi exatamente assim que a temperatura dos pentes ficou invisivel.
 """
 import psutil
 import pytest
@@ -105,7 +105,7 @@ def test_ram_do_jogo_entra_e_sai_com_o_jogo(coletor, monkeypatch):
 _IGPU = {"gpu_ok": True, "gpu_name": "AMD Radeon(TM) Graphics", "gpu_usage": 7,
          "gpu_temp": 44}
 """Placa que o LHM enxerga mas cujos sensores de memoria nao existem com esses
-nomes — e' o caso das iGPUs, que publicam "D3D Dedicated Memory Used" em vez de
+nomes: e' o caso das iGPUs, que publicam "D3D Dedicated Memory Used" em vez de
 "GPU Memory Used"."""
 
 
@@ -114,7 +114,7 @@ def test_gpu_sem_sensor_de_memoria_nao_inventa_um_total_de_1_mib(coletor):
 
     Um total de 1 MiB e' truthy: passa por todo `if vram_total` escrito para
     esconder a VRAM em maquina sem GPU dedicada, e o painel exibia "0.0 / 0.0 GB"
-    com "Livre 1 MB" embaixo — numeros que ninguem mediu, com cara de medida.
+    com "Livre 1 MB" embaixo: numeros que ninguem mediu, com cara de medida.
     Mesma armadilha no zero de carga e de clock.
     """
     gpu = coletor._collect_gpu(dict(_IGPU))

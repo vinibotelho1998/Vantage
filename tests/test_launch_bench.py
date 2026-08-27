@@ -84,7 +84,7 @@ def test_prioridade_usa_o_nome_do_executavel(monkeypatch):
 
     O apelido do atalho ("CrimsonDesert") nunca casa com o executavel
     ("CrimsonDesert.exe"), e a promocao falhava calada dizendo que o jogo ja'
-    nao estava em execucao — no instante exato em que ele acabara de abrir.
+    nao estava em execucao, no instante exato em que ele acabara de abrir.
     """
     import dbxstats.app as appmod
 

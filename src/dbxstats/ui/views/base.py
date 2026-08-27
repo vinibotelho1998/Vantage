@@ -1,7 +1,7 @@
 """Contrato comum das telas.
 
 O controlador chama `on_system` na cadencia do coletor e `on_fps` na cadencia
-rapida — e apenas para a view visivel, entao telas ocultas custam zero CPU.
+rapida; e apenas para a view visivel, entao telas ocultas custam zero CPU.
 """
 from __future__ import annotations
 

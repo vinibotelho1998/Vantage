@@ -31,8 +31,8 @@ STUTTER_FACTOR = 1.5
 SMOOTH_FLOOR_MS = 0.2
 """Trepidacao que nao conta. 0,2 ms e' menos de 5% do refresh mais curto de um monitor
 comum (4,2 ms a 240 Hz), entao o quadro cai na mesma janela de tela de qualquer jeito.
-Sem esse piso um vsync travado a 144 fps — que oscila decimos de ms so' pelo
-escalonador do Windows — perdia mais de dez pontos por um tremor invisivel."""
+Sem esse piso um vsync travado a 144 fps (que oscila decimos de ms so' pelo
+escalonador do Windows) perdia mais de dez pontos por um tremor invisivel."""
 SMOOTH_K = 2.2
 """Decaimento da nota com a trepidacao relativa a mediana: 5% -> 90, 10% -> 80,
 20% -> 64, 50% -> 33. Exponencial para nunca estourar 0..100 nem saturar cedo."""
@@ -51,16 +51,16 @@ pico de 49 ms valia 96 contra 19 de um pico de 51 ms."""
 SMOOTH_HITCH_WEIGHT = 0.8
 """Peso das travadas por segundo. Aqui a unidade e' tempo, nao quadros: uma pausa de
 60 ms incomoda igual a 30 ou a 240 fps, e o que se percebe e' de quanto em quanto tempo
-ela acontece. Uma travada a cada 10 s tira 8% da nota; uma a cada dois segundos, 40% —
+ela acontece. Uma travada a cada 10 s tira 8% da nota; uma a cada dois segundos, 40%,
 que e' onde o texto do veredito deixa de dizer "imperceptivel"."""
 SMOOTH_PENALTY_MAX = 0.9
-"""Teto da punicao por eventos, para a nota nao zerar so' por eles — com a captura
+"""Teto da punicao por eventos, para a nota nao zerar so' por eles, com a captura
 travada de verdade a trepidacao ja' derruba o resto sozinha."""
 SMOOTH_MIN_FRAMES = 30
 """Menos que isso a mediana das diferencas e' chute; melhor a interface dizer que ainda
 esta' coletando do que mostrar uma nota que muda de 40 para 90 no tique seguinte."""
 
-# O criterio e' o do proprio PresentMon: por quadro, quem trabalhou mais — CPUBusy ou
+# O criterio e' o do proprio PresentMon: por quadro, quem trabalhou mais, CPUBusy ou
 # GPUBusy. Comparar cada um contra o frametime medio, como se fazia antes, mistura
 # quadros de regimes diferentes e ignora que os dois numeros nascem do mesmo quadro.
 BOTTLENECK_CPU = "CPU"
@@ -74,14 +74,14 @@ BOTTLENECK_MARGIN = 0.10
 disso os dois terminam praticamente juntos e o quadro entra como empate."""
 BOTTLENECK_LEAD = 0.60
 """Fatia dos quadros que um lado precisa dominar para virar veredito. Uma zona de
-empate larga e uma decisao por maioria — e nao por diferenca de medias — e' o que
+empate larga e uma decisao por maioria (e nao por diferenca de medias) e' o que
 impede o rotulo de piscar entre CPU e GPU a cada tique de 250 ms."""
 BOTTLENECK_SLACK = 0.75
 """Quando nem CPU nem GPU ocupam esta fracao do quadro, ninguem e' gargalo: o quadro
 esta' esperando vsync ou limitador de fps."""
 BOTTLENECK_MIN_FRAMES = 60
 """Piso de amostra antes de opinar. No inicio da captura chegavam poucos quadros e o
-veredito saia de dois ou tres deles — sempre errado, e ainda por cima confiante."""
+veredito saia de dois ou tres deles, sempre errado, e ainda por cima confiante."""
 
 
 def _finite(values) -> list[float]:
@@ -270,7 +270,7 @@ def _consistency(m: FrameMetrics) -> float | None:
     isso mesmo mora ao lado do desvio padrao na interface. Nao alimenta mais a
     fluidez: por depender da media da janela inteira, um unico quadro de 200 ms
     entre dez mil derruba o numero e o devolve no tique seguinte, quando o quadro
-    sai da janela — instabilidade que nao tem nada a ver com o que se sentiu.
+    sai da janela, instabilidade que nao tem nada a ver com o que se sentiu.
     """
     if not m.ft_avg or m.ft_std is None or m.ft_avg <= 0:
         return None
@@ -282,12 +282,12 @@ def _pacing(fts: list[float], mediana: float) -> tuple[float, int, float]:
     """Trepidacao tipica, quantos quadros pulam, e o quanto os pulos custaram.
 
     Mediana das diferencas, e nao media: assim uma travada isolada nao contamina
-    a medida da cadencia — ela e' contada a parte, como evento, que e' como se
+    a medida da cadencia; ela e' contada a parte, como evento, que e' como se
     percebe.
 
     A severidade e' o terceiro numero e existe por causa de um degrau feio: a
     punicao saia de uma contagem de quadros acima de 50 ms absolutos, entao um
-    pico de 49 ms valia nota 96 e um de 51 ms valia 19 — 77 pontos de diferenca
+    pico de 49 ms valia nota 96 e um de 51 ms valia 19, 77 pontos de diferenca
     por 2 ms. E pior, depois do degrau a nota subia de novo com picos maiores,
     porque so' a contagem importava. Aqui cada pulo entra pelo tamanho: quantas
     medianas ele custou a mais.
@@ -312,12 +312,12 @@ def _smoothness(m: FrameMetrics, n: int) -> float | None:
     """0..100 de qualidade da cadencia: trepidacao continua x solavancos pontuais.
 
     Mede ritmo, nao velocidade. Uma queda lenta de 120 para 60 fps nao tira pontos
-    daqui — ela aparece inteira no proprio FPS e nos lows; o que esta nota responde
+    daqui: ela aparece inteira no proprio FPS e nos lows; o que esta nota responde
     e' o quanto o intervalo entre quadros muda de um para o outro.
 
     Os dois fatores multiplicam em vez de somar: cada um vale uma fracao do que
-    sobrou (0..1), entao a nota fica presa em 0..100 sem clamp e continua monotona
-    — mais variacao ou mais eventos so' consegue baixar. A soma ponderada anterior
+    sobrou (0..1), entao a nota fica presa em 0..100 sem clamp e continua monotona:
+    mais variacao ou mais eventos so' consegue baixar. A soma ponderada anterior
     misturava tres numeros que mediam quase a mesma coisa e ainda somava contagem
     absoluta de engasgos, que crescia com a janela.
     """
@@ -327,7 +327,7 @@ def _smoothness(m: FrameMetrics, n: int) -> float | None:
     steady = math.exp(-SMOOTH_K * (excess / m.ft_med))
     # Solavanco entra pelo tamanho e pelo ritmo: "quantas medianas de atraso por
     # segundo". Exponencial de novo, para nao existir limiar onde um milimetro a
-    # mais derrube a nota de um penhasco — e para pico maior nunca pontuar
+    # mais derrube a nota de um penhasco; e para pico maior nunca pontuar
     # melhor que pico menor, que era o que acontecia com a contagem.
     taxa = (m.jump_severity / m.duration) if m.duration > 0 else 0.0
     penalty = min(SMOOTH_PENALTY_MAX, 1.0 - math.exp(-SMOOTH_EVENT_W * taxa))
@@ -385,7 +385,7 @@ def _classify_bottleneck(m: FrameMetrics, samples: list[tuple]) -> None:
     if m.capped_pct >= lead:
         m.bottleneck = BOTTLENECK_CAP
         m.bottleneck_detail = (f"nenhum motor saturado em {m.capped_pct:.0f}% "
-                               "dos quadros — VSync ou limite de fps")
+                               "dos quadros: VSync ou limite de fps")
     elif m.gpu_bound_pct >= lead:
         m.bottleneck = BOTTLENECK_GPU
         m.bottleneck_detail = f"GPU terminou por último em {m.gpu_bound_pct:.0f}% dos quadros"
@@ -397,14 +397,14 @@ def _classify_bottleneck(m: FrameMetrics, samples: list[tuple]) -> None:
         # Empate tecnico e' o caso em que ninguem "ganha" o quadro, e ai' as duas
         # porcentagens ficam perto de zero. Mostrar "CPU 0% · GPU 0%" com as duas
         # pecas a 90% do quadro parecia maquina ociosa, que e' o oposto do que
-        # esta' acontecendo — dai' a frase propria.
+        # esta' acontecendo: dai' a frase propria.
         empate = 100.0 - m.cpu_bound_pct - m.gpu_bound_pct - m.capped_pct
         if empate >= lead:
             m.bottleneck_detail = (f"CPU e GPU terminam juntas em {empate:.0f}% dos "
-                                   "quadros — os dois lados estão no limite")
+                                   "quadros: os dois lados estão no limite")
             return
         m.bottleneck_detail = (f"CPU {m.cpu_bound_pct:.0f}% · GPU {m.gpu_bound_pct:.0f}% "
-                               "dos quadros — nenhum lado domina")
+                               "dos quadros: nenhum lado domina")
 
 
 def histogram(frametimes: list[float], bins: int = 28) -> tuple[list[float], list[int]]:
@@ -447,12 +447,12 @@ def verdict(m: FrameMetrics) -> str:
     # A faixa de "excelente" comeca em 90 porque a nota nova nao gasta pontos com
     # queda de fps: o que sobra abaixo disso ja' e' trepidacao ou travada de verdade.
     if m.smoothness >= 90:
-        return "Excelente — cadência regular, praticamente sem engasgos."
+        return "Excelente: cadência regular, praticamente sem engasgos."
     if m.smoothness >= 70:
-        return "Bom — pequenas variações, imperceptíveis na maior parte do tempo."
+        return "Bom: pequenas variações, imperceptíveis na maior parte do tempo."
     if m.smoothness >= 50:
-        return "Irregular — o intervalo entre quadros oscila o bastante pra sentir."
-    return "Ruim — stutter frequente. Vale investigar limites de energia, VRAM ou CPU."
+        return "Irregular: o intervalo entre quadros oscila o bastante pra sentir."
+    return "Ruim: stutter frequente. Vale investigar limites de energia, VRAM ou CPU."
 
 SESSION_BIN_MS = 0.1
 """Largura do balde do histograma. Define a precisao dos percentis."""
@@ -464,13 +464,13 @@ class SessionRecorder:
     """Estatistica de uma partida inteira, em memoria constante.
 
     Guardar frame a frame nao serve aqui. Uma sessao de tres horas a 144 fps
-    passa de um milhao e meio de amostras, cada uma com oito numeros — centenas
+    passa de um milhao e meio de amostras, cada uma com oito numeros: centenas
     de megabytes presos no processo enquanto o jogo roda, que e' justamente
     quando a maquina precisa da memoria. Entao nada de lista: cada frame entra
     num histograma de baldes fixos e em quatro acumuladores.
 
     O custo por frame e' uma divisao, um indice e tres comparacoes, e o tamanho
-    nao cresce com a duracao — 2500 inteiros do primeiro ao ultimo minuto. Em
+    nao cresce com a duracao: 2500 inteiros do primeiro ao ultimo minuto. Em
     troca, os percentis saem com a precisao do balde (0,1 ms), o que num frame
     de 7 ms da' menos de 1,5% de erro.
     """
@@ -565,12 +565,12 @@ class SessionRecorder:
         """O histograma reduzido a poucas barras, para caber no disco.
 
         Os 2500 baldes de 0,1 ms existem para o percentil sair preciso; para
-        DESENHAR a distribuicao eles sao caros e inuteis — viraria um arquivo de
+        DESENHAR a distribuicao eles sao caros e inuteis: viraria um arquivo de
         sessoes dezenas de vezes maior para um grafico que tem uns duzentos
         pixels de largura.
 
         Sem isto a partida guardava so' numeros, e escolher uma sessao na lista
-        deixava os graficos exibindo a corrida cronometrada anterior — parecia
+        deixava os graficos exibindo a corrida cronometrada anterior; parecia
         que a tela tinha travado.
 
         Devolve {"w": largura do balde em ms, "i0": indice do primeiro,

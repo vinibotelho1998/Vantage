@@ -16,7 +16,7 @@ from .. import log, paths
 _log = log.get("lhm")
 
 # Package primeiro: Tctl/Tdie e' a temperatura do encapsulamento, que e' a que o
-# proprio processador usa para decidir boost e limite. CCD e' o die individual —
+# proprio processador usa para decidir boost e limite. CCD e' o die individual,
 # util para detalhe, mas nao e' o numero que representa a peca.
 _CPU_TEMP_PRIORITY = (
     "Core (Tctl/Tdie)", "Tctl/Tdie", "Tdie", "CPU Package", "Package",
@@ -28,7 +28,7 @@ _GPU_INTEGRATED_KW = ("uhd graphics", "iris", "radeon(tm) graphics", "radeon gra
                       "hd graphics", "vega")
 
 # Vcore de verdade x VID. No Ryzen 9800X3D o "Core #N VID" marcou 0,463 V com o
-# pacote em 98 W e os oito nucleos a 5225 MHz — fisicamente impossivel — e mal se
+# pacote em 98 W e os oito nucleos a 5225 MHz (fisicamente impossivel) e mal se
 # moveu (0,469→0,531 V) enquanto o pacote ia de 39 para 63 W. Aquilo e' o pedido
 # de tensao codificado, nao a tensao entregue, e sem elevacao trava em 1,550 V.
 # Publicar VID como "voltagem da CPU" e' um numero errado com cara de certo,
@@ -39,7 +39,7 @@ _VCORE_NOMES = ("vcore", "cpu core", "cpu vcore", "core voltage", "cpu voltage")
 _VCORE_FAIXA = (0.40, 1.70)
 # Movimento minimo para adotar um rail anonimo como Vcore. Medido nesta X870M:
 # numa janela de 15 s o Vcore andou 0,060 V e todos os outros rails da faixa
-# ficaram cravados em 0,000 — 0,020 V passa longe do ruido e longe do sinal.
+# ficaram cravados em 0,000: 0,020 V passa longe do ruido e longe do sinal.
 _VCORE_MOVIMENTO = 0.02
 # Ordem de confianca da tensao publicada; ver _publicar_volts.
 _VOLTS_RANK = {"vcore": 3, "cpu": 2, "rail": 1}
@@ -206,7 +206,7 @@ class LhmReader:
 
         O valor antigo continua na arvore entre uma leitura e outra: o LHM guarda
         o ultimo numero lido, entao pular o Update() envelhece a temperatura em
-        segundos — e nao ha temperatura de RAM que ande nesse prazo.
+        segundos; e nao ha temperatura de RAM que ande nesse prazo.
         """
         agora = time.monotonic()
         if agora - self._spd_at < _SPD_INTERVALO_S:
@@ -426,7 +426,7 @@ class LhmReader:
         """Temperatura de um pente de RAM, lida do proprio modulo pelo SPD.
 
         So' existe com o app elevado: sem admin estes hardwares nem aparecem na
-        arvore do LHM — nao ha erro, eles simplesmente somem, que e' o jeito mais
+        arvore do LHM: nao ha erro, eles simplesmente somem, que e' o jeito mais
         facil de alguem concluir que a maquina nao tem o sensor.
         """
         modulo: dict = {}
@@ -492,13 +492,13 @@ class LhmReader:
 
         Placa sem perfil no LHM entrega os rails como "Voltage #1"…"#7": sete
         numeros anonimos, e um deles e' o Vcore. O que separa o Vcore dos outros
-        nao e' o nome, e' o comportamento — ele e' o unico que anda junto com a
+        nao e' o nome, e' o comportamento: ele e' o unico que anda junto com a
         carga. Por isso o rail so' e' adotado depois de se mexer de verdade;
         enquanto nao se mexeu, o app prefere nao ter numero a ter um chute.
         """
         if rails and not getattr(self, "_rails_logados", False):
             # Uma linha, uma vez por execucao. Sem isso a unica forma de saber
-            # o que a placa publica e' adivinhar — e adivinhar trilho de tensao
+            # o que a placa publica e' adivinhar, e adivinhar trilho de tensao
             # foi exatamente o erro do VID.
             self._rails_logados = True
             _log.info("trilhos de tensao da placa: %s",
@@ -563,7 +563,7 @@ def _e_trilho_de_memoria(nome: str) -> bool:
     """O nome do sensor diz que aquela tensao e' de memoria?
 
     Exigir o nome e' proposital. Ha' placas em que o trilho existe mas chega
-    como "Voltage #7", sem identificacao — e adivinhar qual dos sete e' o da
+    como "Voltage #7", sem identificacao, e adivinhar qual dos sete e' o da
     memoria produziria um numero errado com cara de certo, que e' pior do que
     deixar a celula vazia.
     """

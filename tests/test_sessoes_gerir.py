@@ -17,7 +17,7 @@ def _gravador(frametimes) -> SessionRecorder:
 # ── histograma que vai para o disco ──────────────────────────────────────────
 def test_sessao_guarda_histograma():
     """Sem ele, escolher uma partida deixava os graficos com a corrida anterior
-    na tela — e a leitura obvia era que aqueles numeros eram da partida."""
+    na tela, e a leitura obvia era que aqueles numeros eram da partida."""
     hist = _gravador([16.6] * 50).result()["hist"]
     assert hist["c"] and sum(hist["c"]) == 50
 

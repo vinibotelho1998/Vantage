@@ -4,7 +4,7 @@ Conferir o overlay abrindo um jogo a cada mexida e' caro e nao repete: aqui ele
 e' montado de verdade (a mesma classe do app), o Qt faz o layout, e a geometria
 final de cada rotulo vira uma grade de caracteres. Da' para ver o que colapsa
 quando falta sensor, o que acontece em duas colunas e onde o painel cai para o
-modo compacto — tudo no terminal.
+modo compacto: tudo no terminal.
 
     python scripts/overlay_texto.py
 """
@@ -128,7 +128,7 @@ def texto_do_overlay(ov: GameOverlay) -> str:
     """Reconstroi o painel numa grade de caracteres a partir da geometria real."""
     # isVisibleTo, e nao isHidden: a linha do gargalo desligada esconde a caixa
     # inteira, e os filhos dela seguem "nao escondidos" com geometria de widget
-    # recem-criado — entrariam no desenho no lugar errado.
+    # recem-criado: entrariam no desenho no lugar errado.
     labels = [w for w in ov.findChildren(QLabel) if w.isVisibleTo(ov) and w.text()]
     sparks = [w for w in ov.findChildren(Sparkline) if w.isVisibleTo(ov)]
     if not labels:

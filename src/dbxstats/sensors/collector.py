@@ -178,7 +178,7 @@ class Collector:
             "gpu": gpu,
             "battery": _battery(),
         }
-        # Sem jogo, as chaves nao existem — o card some inteiro em vez de mostrar
+        # Sem jogo, as chaves nao existem: o card some inteiro em vez de mostrar
         # um zero que se parece com "o jogo nao usa RAM".
         data.update(self._game_ram.read() or {})
         # So' publica com o jogo identificado: sem pid, o numero seria de
@@ -257,7 +257,7 @@ class Collector:
         return gpu
 
     def _gpu_wmi_info(self, name: str) -> dict:
-        """Driver e modo de video via WMI — funciona em AMD e Intel, onde nao ha NVML."""
+        """Driver e modo de video via WMI: funciona em AMD e Intel, onde nao ha NVML."""
         if self._gpu_wmi is not None:
             return self._gpu_wmi
         found: dict = {}
@@ -325,7 +325,7 @@ class _GameMemory:
     """RAM do processo do jogo, com o handle preso entre os ciclos.
 
     Duas medidas, porque uma so' mente: o working set e' o que esta' residente
-    AGORA, e o Windows o poda quando a janela perde o foco — medindo o
+    AGORA, e o Windows o poda quando a janela perde o foco: medindo o
     RadeonSoftware o working set marcou 50 MB enquanto o processo mantinha
     1150 MB comprometidos, 23x de diferenca. Num jogo em alt-tab isso viraria um
     grafico despencando sem que o jogo tivesse liberado nada. Private bytes e' o
@@ -334,7 +334,7 @@ class _GameMemory:
 
     O uss (memory_full_info) seria mais correto ainda em teoria e esta' fora de
     proposito na pratica: exige elevacao, custa 1,7-2,8 ms por leitura e chegou a
-    140 ms num processo de 13,5 GB — inviavel num laco de 1 Hz. O handle fica
+    140 ms num processo de 13,5 GB, inviavel num laco de 1 Hz. O handle fica
     preso porque um process_iter completo custa 72,7 ms, contra 0,005 ms de um
     memory_info() no objeto ja' aberto.
     """

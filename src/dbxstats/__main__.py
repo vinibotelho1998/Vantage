@@ -38,7 +38,7 @@ def _identidade_na_barra() -> None:
     """Da' ao processo uma identidade propria para o Windows.
 
     Sem isso a barra de tarefas agrupa a janela sob o executavel que hospeda o
-    Python e mostra o icone DELE, nao o do app — e fixar na barra fixa a coisa
+    Python e mostra o icone DELE, nao o do app, e fixar na barra fixa a coisa
     errada. O identificador tem de ser definido antes de qualquer janela nascer;
     depois disso o Windows ja' decidiu.
     """

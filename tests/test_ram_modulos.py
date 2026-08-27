@@ -1,7 +1,7 @@
 """Temperatura dos pentes de DDR5: o dado existia e morria antes do dict.
 
 O sensor chega na arvore do LHM (40,00 °C e 39,25 °C nesta maquina), mas o
-_read_memory antigo devolvia sem ler tudo que nao se chamasse "Total Memory" —
+_read_memory antigo devolvia sem ler tudo que nao se chamasse "Total Memory";
 entao nenhum card conseguia mostrar. Os riscos cobertos: o dado atravessar ate' o
 dict, o rotulo nao carregar o lixo binario que o SPD as vezes devolve, e a
 conversa por SMBus (2,2 ms, mais cara que a CPU inteira) nao entrar no ciclo de

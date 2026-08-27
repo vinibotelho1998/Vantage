@@ -3,7 +3,7 @@
 Escrever gigabytes e' a operacao mais destrutiva que este app faz. Os testes
 abaixo cobrem, nessa ordem de gravidade: recusar unidade e espaco impossiveis,
 nao deixar sobra de execucao anterior, parar de verdade quando mandam parar, e
-so' entao a aritmetica da medida. Nada aqui toca no disco de verdade — o I/O e'
+so' entao a aritmetica da medida. Nada aqui toca no disco de verdade: o I/O e'
 substituido por contador; o unico arquivo criado e' o `tmp_path` do pytest.
 """
 import tempfile
@@ -62,7 +62,7 @@ def test_recusa_quando_o_arquivo_nao_cabe():
 
 
 def test_recusa_quando_deixaria_a_unidade_no_limite():
-    """Cabe, mas encheria o SSD — disco cheio fica lento e NTFS precisa de folga."""
+    """Cabe, mas encheria o SSD: disco cheio fica lento e NTFS precisa de folga."""
     livre = (4 << 30)
     ok, erro = diskbench.folga_suficiente(livre=livre, total=1000 << 30, tamanho=1 << 30)
     assert not ok and "livres" in erro
@@ -214,7 +214,7 @@ def test_fase_desconhecida_nao_quebra_a_barra():
 
 
 def test_barra_fecha_na_ultima_fase_marcada():
-    """Com duas fases marcadas, a barra tem de chegar a 100% — e nao a 40%.
+    """Com duas fases marcadas, a barra tem de chegar a 100%, e nao a 40%.
 
     O denominador era o teste completo; quem rodasse so' a leitura 4K veria a
     barra parar no meio e concluir, que se le' como teste interrompido.
@@ -263,7 +263,7 @@ def test_fases_fora_de_ordem_voltam_para_a_ordem_de_execucao():
 
 
 def test_lista_de_fases_vazia_vira_teste_completo():
-    """Teste sem fase nenhuma nao mede nada e ainda cria o arquivo — sem sentido."""
+    """Teste sem fase nenhuma nao mede nada e ainda cria o arquivo: sem sentido."""
     assert diskbench.Opcoes(fases=()).normalizar().fases == diskbench.CHAVES_FASES
 
 
@@ -298,7 +298,7 @@ def test_fase_desmarcada_nao_roda_nem_aparece_no_resultado():
 def test_so_leitura_marcada_grava_o_arquivo_antes_de_medir():
     """Ler um arquivo de zero byte devolveria uma taxa que nao mediu disco nenhum.
 
-    A gravacao acontece na fase "preparando" e fica fora do cronometro — o
+    A gravacao acontece na fase "preparando" e fica fora do cronometro: o
     resultado nao traz numero de escrita porque escrita nao foi o que se mediu.
     """
     motor = _MotorSemDisco()
@@ -336,7 +336,7 @@ def test_a_leitura_mede_so_o_pedaco_que_a_escrita_gravou():
 
     Ler o arquivo inteiro depois disso bateria no fim do dado valido: o Windows
     devolve zero byte na hora, e esse trecho entraria na conta como se tivesse
-    sido lido em tempo nenhum — inflando a leitura.
+    sido lido em tempo nenhum, inflando a leitura.
     """
     motor = _MotorSemDisco()
     pedidos: list[tuple[bool, int]] = []

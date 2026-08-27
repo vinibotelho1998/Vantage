@@ -2,17 +2,17 @@
 
 O total de VRAM ja' aparece no overlay, mas ele nao responde a pergunta que
 importa quando a memoria estoura: quanto disso e' o JOGO. O resto pode ser o
-compositor da area de trabalho, o navegador aberto atras, o proprio app — e num
+compositor da area de trabalho, o navegador aberto atras, o proprio app, e num
 placar de 12 GB a diferenca entre "o jogo pegou 11" e "o jogo pegou 6 e o Chrome
 levou o resto" muda completamente o que se faz a seguir.
 
 O caminho e' o mesmo do Gerenciador de Tarefas: o contador `GPU Process Memory`,
-lido por PDH. Nao existe API simples de "VRAM deste pid" fora disso — o
+lido por PDH. Nao existe API simples de "VRAM deste pid" fora disso: o
 LibreHardwareMonitor da' o total do adaptador, e a NVML nao serve nesta maquina
 (a GPU e' AMD) nem responde por processo.
 
 A instancia do contador tem a forma `pid_1234_luid_0x..._phys_0`, e um mesmo
-processo aparece em varias delas — uma por adaptador e segmento. Por isso a
+processo aparece em varias delas: uma por adaptador e segmento. Por isso a
 consulta usa curinga e SOMA o que voltar: ler so' a primeira daria um numero
 parcial, e num sistema com GPU integrada mais dedicada daria justamente a
 errada.
@@ -38,7 +38,7 @@ class PDH_FMT_COUNTERVALUE_ITEM_W(ctypes.Structure):
 
     O `_pad` e' explicito de proposito: em 64 bits o `CStatus` de 4 bytes fica
     seguido de 4 de alinhamento antes do valor de 8, e sem ele o ctypes leria o
-    numero deslocado — devolvendo lixo em vez de bytes.
+    numero deslocado, devolvendo lixo em vez de bytes.
     """
 
     _fields_ = [("szName", wintypes.LPWSTR),
@@ -73,7 +73,7 @@ class ProcessVram:
 
     A consulta fica aberta porque abrir e fechar a cada leitura custa alguns
     milissegundos e o laco roda a 1 Hz o jogo inteiro. Ela so' e' refeita quando
-    o pid muda — o curinga do caminho leva o pid dentro, entao nao da' para
+    o pid muda: o curinga do caminho leva o pid dentro, entao nao da' para
     reaproveitar entre jogos.
     """
 

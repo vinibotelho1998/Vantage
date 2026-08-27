@@ -110,7 +110,7 @@ _EXPLICACOES = {
     "jogo_ram": "Toda a memória que o jogo reservou para si, esteja ela na RAM "
                 "física ou não. Um número só: o par com o working set punha "
                 "dois valores sem rótulo na mesma célula e nao se explicava.",
-    "jogo_vram": "Quanto da VRAM é do jogo, e não do resto. O total sozinho não diz se quem encheu a placa foi o jogo ou o navegador aberto atrás — e a resposta muda o que se faz a seguir.",
+    "jogo_vram": "Quanto da VRAM é do jogo, e não do resto. O total sozinho não diz se quem encheu a placa foi o jogo ou o navegador aberto atrás; a resposta muda o que se faz a seguir.",
     "mem_clock": "Clock das memórias.",
     "teto_watts": "Limite de potência da placa, ao lado do consumo. Consumo "
                   "colado no teto explica clock abaixo do esperado.",
@@ -124,7 +124,7 @@ class _CfgPrevia:
     """Configuracao de mentira: o que esta' salvo, com a aba por cima.
 
     A previa precisa refletir o que a pessoa acabou de mexer, e nao o que ja'
-    foi confirmado — senao ela mostra o passado e nao ajuda a decidir nada.
+    foi confirmado; senao ela mostra o passado e nao ajuda a decidir nada.
     """
 
     def __init__(self, real, mudancas: dict) -> None:
@@ -139,7 +139,7 @@ class _CfgPrevia:
 
 class _PingPrevia:
     # "servidor" se lia como medicao de verdade. Na previa tudo e' exemplo, e o
-    # rotulo precisa dizer isso — senao a pessoa procura que servidor e' esse.
+    # rotulo precisa dizer isso; senao a pessoa procura que servidor e' esse.
     target_label = "exemplo"
 
 
@@ -213,7 +213,7 @@ class SettingsDialog(QDialog):
         self._ctl = controller
         self._cfg = controller.settings
         self.setObjectName("SettingsRoot")
-        self.setWindowTitle("DBX Stats — Configurações")
+        self.setWindowTitle("DBX Stats: Configurações")
         self.setMinimumSize(560, 620)
         self.resize(620, 720)
 
@@ -325,7 +325,7 @@ class SettingsDialog(QDialog):
             lay.addWidget(c)
         note = QLabel(
             "Mesmo com muitos minutos de histórico, cada coluna mostra a faixa entre o "
-            "menor e o maior valor do intervalo — picos curtos nunca somem.")
+            "menor e o maior valor do intervalo; picos curtos nunca somem.")
         note.setWordWrap(True)
         note.setStyleSheet(f"color: {theme.FAINT};")
         lay.addWidget(note)
@@ -367,7 +367,7 @@ class SettingsDialog(QDialog):
         lay.addWidget(restart)
         note = QLabel(
             "O motor usa PresentMon 2 e reinicia sozinho se a sessão de captura cair. "
-            "O cálculo do 1% low é a média dos piores frames da janela — o mesmo "
+            "O cálculo do 1% low é a média dos piores frames da janela, o mesmo "
             "critério usado em análises de hardware.")
         note.setWordWrap(True)
         note.setStyleSheet(f"color: {theme.FAINT};")
@@ -440,7 +440,7 @@ class SettingsDialog(QDialog):
         self.w_rail = QComboBox()
         self.w_rail.addItem("Não mostrar", "")
         for nome, valor in rails:
-            self.w_rail.addItem(f"{nome} — {valor:.3f} V", nome)
+            self.w_rail.addItem(f"{nome}: {valor:.3f} V", nome)
         idx = self.w_rail.findData(self._cfg.mem_volt_rail)
         self.w_rail.setCurrentIndex(max(0, idx))
         self.w_rail.currentIndexChanged.connect(self._atualizar_previa)
@@ -449,7 +449,7 @@ class SettingsDialog(QDialog):
             dica = ("A placa publica os trilhos sem nome. Compare com o que a "
                     "BIOS mostra: DDR5 costuma ficar entre 1,10 V e 1,45 V.")
         else:
-            dica = ("Nenhum trilho visível. Abra o app como administrador — sem "
+            dica = ("Nenhum trilho visível. Abra o app como administrador; sem "
                     "isso os sensores da placa-mãe nem aparecem.")
         aviso = QLabel(dica)
         aviso.setWordWrap(True)

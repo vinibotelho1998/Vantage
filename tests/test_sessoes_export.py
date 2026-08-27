@@ -1,7 +1,7 @@
 """Exportacao das sessoes de jogo.
 
 O relatorio de uma partida e' o que se leva para comparar com alguem, entao ele
-precisa abrir direito numa planilha — inclusive quando as sessoes foram gravadas
+precisa abrir direito numa planilha, inclusive quando as sessoes foram gravadas
 por versoes diferentes do app.
 """
 import csv

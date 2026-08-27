@@ -3,14 +3,14 @@
 Duas instancias nao apenas duplicam janela: elas se sabotam. Cada uma varre as
 sessoes ETW procurando orfas e derruba a da outra, porque o nome carrega o pid e
 uma nao reconhece a outra como legitima. O resultado e' um laco em que nenhuma
-das duas consegue capturar quadros — e o log de cada uma acusa "acesso negado"
+das duas consegue capturar quadros, e o log de cada uma acusa "acesso negado"
 sem dizer que ha' outra copia no ar. Levou horas para ser identificado, olhando
 contadores de tentativa intercalados no mesmo arquivo de log.
 
 Dois objetos do Windows resolvem, e nenhum deles precisa de arquivo em disco:
 
   - um mutex nomeado diz "ja' tem alguem aqui". E' liberado pelo proprio kernel
-    quando o processo morre, inclusive a forca — o que um arquivo de trava nao
+    quando o processo morre, inclusive a forca, o que um arquivo de trava nao
     garante, e por isso arquivo de trava sempre deixa o app preso depois de um
     travamento;
   - um evento nomeado deixa a segunda copia pedir para a primeira aparecer, em
@@ -36,7 +36,7 @@ SYNCHRONIZE = 0x00100000
 
 # "Local\" e' proposital: o escopo e' a sessao de logon. Assim duas contas
 # usando o mesmo PC (troca rapida de usuario) tem cada uma a sua copia, que e'
-# o certo — o que nao pode e' a MESMA pessoa abrir duas.
+# o certo: o que nao pode e' a MESMA pessoa abrir duas.
 NOME_MUTEX = r"Local\DBXStats.instancia.unica"
 NOME_EVENTO = r"Local\DBXStats.mostrar.janela"
 
@@ -72,8 +72,8 @@ class InstanciaUnica:
         """Tenta ser a instancia da vez. False quer dizer que ja' ha' outra.
 
         O mutex e' criado, e nao adquirido: o que interessa e' a existencia dele,
-        que o kernel amarra ao processo. Se este morrer de qualquer jeito — saida
-        limpa, travamento ou taskkill — o objeto some junto e a proxima copia
+        que o kernel amarra ao processo. Se este morrer de qualquer jeito (saida
+        limpa, travamento ou taskkill) o objeto some junto e a proxima copia
         entra sem precisar limpar nada.
         """
         self._mutex = kernel32.CreateMutexW(None, False, NOME_MUTEX)
@@ -99,7 +99,7 @@ class InstanciaUnica:
         """Chama `mostrar()` sempre que outra copia tentar abrir.
 
         A espera fica numa thread propria porque `WaitForSingleObject` bloqueia,
-        e o retorno tem de cair na interface — por isso quem chama passa uma
+        e o retorno tem de cair na interface: por isso quem chama passa uma
         funcao que ja' sabe voltar para o laco do Qt.
         """
         self._evento = kernel32.CreateEventW(None, False, False, NOME_EVENTO)

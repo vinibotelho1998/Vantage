@@ -83,7 +83,7 @@ def test_tela_que_nao_existe_mais_nao_quebra(monkeypatch):
 
 def test_config_so_aceita_o_formato_de_tela():
     """`primary:` e' vocabulario do atalho de jogo, que troca a principal. A
-    grade nao troca — aceitar aqui prometeria o que ela nao faz."""
+    grade nao troca; aceitar aqui prometeria o que ela nao faz."""
     for bruto, esperado in (("screen:MON", "screen:MON"), ("primary:MON", ""),
                             ("lixo", ""), (None, ""), (123, "")):
         c = Settings()

@@ -4,8 +4,8 @@ Como o numero sai honesto
 -------------------------
 Medir disco em Windows sem desligar o cache mede o cache: um arquivo recem
 escrito continua inteiro na RAM e a "leitura" volta a 20 GB/s, que nao existe.
-Por isso o arquivo e' aberto com FILE_FLAG_NO_BUFFERING e FILE_FLAG_WRITE_THROUGH
-— o I/O vai direto ao dispositivo, sem passar pelo cache do sistema. Esses flags
+Por isso o arquivo e' aberto com FILE_FLAG_NO_BUFFERING e FILE_FLAG_WRITE_THROUGH:
+o I/O vai direto ao dispositivo, sem passar pelo cache do sistema. Esses flags
 exigem que buffer, deslocamento e tamanho de cada operacao sejam multiplos do
 setor fisico, e e' isso que o resto do modulo faz com tanto cuidado de alinhamento.
 
@@ -20,10 +20,10 @@ no lugar errado destroi dado de verdade. As regras aqui sao:
 
 * a pasta e' criada por `mkdtemp` na propria unidade testada, entao o nome nunca
   colide com nada que ja' exista e o teste nunca sai da unidade escolhida;
-* o arquivo e' aberto com CREATE_NEW — se por absurdo o caminho ja' existisse, a
+* o arquivo e' aberto com CREATE_NEW: se por absurdo o caminho ja' existisse, a
   abertura falharia em vez de sobrescrever;
 * o arquivo nasce com FILE_FLAG_DELETE_ON_CLOSE, ou seja, quem apaga e' o proprio
-  Windows quando o handle fecha — inclusive se o processo morrer no meio;
+  Windows quando o handle fecha, inclusive se o processo morrer no meio;
 * `finally` e `atexit` ainda tentam remover arquivo e pasta, e uma varredura no
   inicio limpa sobra de execucao anterior que tenha escapado de tudo isso.
 
@@ -32,12 +32,12 @@ O que o usuario escolhe
 `Opcoes` carrega tamanho do arquivo, quais fases rodar e quanto tempo medir cada
 uma. Duas consequencias que o resto do modulo trata com cuidado:
 
-* o tamanho manda na checagem de espaco livre — escolher 4 GiB e continuar
+* o tamanho manda na checagem de espaco livre: escolher 4 GiB e continuar
   validando 1 GiB seria a forma mais facil de encher a unidade do usuario;
 * fase de leitura sem fase de escrita nao tem o que ler. Nesse caso o arquivo e'
   gravado antes, na fase "preparando", fora do cronometro. Sem isso a leitura
   bateria no fim do arquivo vazio e devolveria um numero que nao mediu nada, e o
-  4K aleatorio escreveria alem do fim do arquivo — o que faz o NTFS zerar o
+  4K aleatorio escreveria alem do fim do arquivo, o que faz o NTFS zerar o
   buraco no meio da medida.
 """
 from __future__ import annotations
@@ -70,7 +70,7 @@ TAMANHOS_MIB = (256, 512, 1024, 2048, 4096)
 
 Nao e' so' "rapido x demorado". O que enche o cache SLC do SSD e' o total gravado
 na fase, que e' o tamanho vezes o numero de passadas: um arquivo pequeno cabe no
-cache e e' reescrito la' dentro varias vezes, entao a taxa medida e' a do cache —
+cache e e' reescrito la' dentro varias vezes, entao a taxa medida e' a do cache:
 num SSD medido logo depois de encher o cache, 256 MiB ainda reportou 2,2 GB/s
 enquanto 4 GiB na mesma hora reportou 0,35 GB/s. Arquivo grande com tempo maior
 por fase e' o unico jeito de chegar na escrita sustentada.
@@ -81,7 +81,7 @@ TAMANHO_MAXIMO = 16 * 1024 * MIB
 
 BLOCO_SEQ = 4 * MIB
 BLOCO_ALEA = 4096
-"""4 KiB QD1 — o bloco que representa carga de sistema operacional e de jogo."""
+"""4 KiB QD1: o bloco que representa carga de sistema operacional e de jogo."""
 
 MARGEM_LIVRE = 2 * 1024 ** 3
 """Folga exigida alem do arquivo de teste.
@@ -102,11 +102,11 @@ troca de um teste mais demorado.
 """
 
 PROFUNDIDADES = (1,)
-"""Profundidades de fila oferecidas — uma so', e de proposito.
+"""Profundidades de fila oferecidas, uma so', e de proposito.
 
 Fila maior que 1 significa deixar varias operacoes pendentes no dispositivo ao
 mesmo tempo, e isso exige I/O assincrono de verdade: FILE_FLAG_OVERLAPPED, uma
-estrutura OVERLAPPED por requisicao e espera em evento — ou varios handles em
+estrutura OVERLAPPED por requisicao e espera em evento, ou varios handles em
 varias threads. Este motor usa ReadFile/WriteFile sincronos, que so' retornam
 quando a operacao terminou; repetir a chamada em laco continua sendo QD1.
 Chamar isso de QD32 daria um numero maior e falso, entao a lista tem um item so'.
@@ -229,7 +229,7 @@ class Resultado:
     cancelado: bool = False
     segundos: float = 0.0
     fases: tuple[str, ...] = CHAVES_FASES
-    """Quais fases de fato rodaram — a tela esconde as linhas das outras em vez
+    """Quais fases de fato rodaram: a tela esconde as linhas das outras em vez
     de mostrar travessao, que se le' como 'o teste falhou aqui'."""
     segundos_fase: float = TEMPO_MINIMO_FASE
     profundidade: int = 1
@@ -273,7 +273,7 @@ def tipo_aceito(tipo: int) -> tuple[bool, str]:
 def alinhar(valor: int, setor: int) -> int:
     """Arredonda para baixo ate' um multiplo do setor.
 
-    Sem alinhamento o Windows recusa toda operacao em arquivo sem buffer — e a
+    Sem alinhamento o Windows recusa toda operacao em arquivo sem buffer, e a
     recusa vem como ERROR_INVALID_PARAMETER, que nao explica nada.
     """
     setor = max(1, setor)
@@ -324,7 +324,7 @@ def setor_do_volume(raiz: str) -> int:
 def _pasta_base(mount: str) -> Path:
     """Onde criar a pasta temporaria, sempre dentro da unidade testada.
 
-    Se a unidade for a mesma do TEMP do sistema, usa o TEMP — que ja' e' area
+    Se a unidade for a mesma do TEMP do sistema, usa o TEMP, que ja' e' area
     descartavel e nao suja a raiz. Nas outras, a raiz da unidade e' o unico lugar
     que se pode garantir que existe e e' gravavel.
     """
@@ -340,7 +340,7 @@ def _pasta_base(mount: str) -> Path:
 def limpar_sobras(mount: str) -> int:
     """Remove pastas de teste esquecidas por uma execucao anterior.
 
-    So' mexe no que tem o nosso prefixo e ja' passou de uma hora — se outra
+    So' mexe no que tem o nosso prefixo e ja' passou de uma hora: se outra
     instancia estiver testando agora, a pasta dela e' recente e fica intacta.
     """
     base = _pasta_base(mount)
@@ -365,7 +365,7 @@ class DiskBench:
     """Roda o teste numa thread propria e publica o estado para a UI ler.
 
     A UI nunca chama nada bloqueante: pergunta `estado()` num timer. Cancelar e'
-    so' levantar um Event — cada laco checa entre blocos, entao a parada e'
+    so' levantar um Event: cada laco checa entre blocos, entao a parada e'
     imediata e ainda passa pelo `finally` que apaga o arquivo.
     """
 
@@ -432,7 +432,7 @@ class DiskBench:
         """Pede parada e, se for para esperar, garante que nada ficou aberto.
 
         Quem fecha o handle e' o proprio worker, no `finally`. Fechar daqui no
-        meio de um ReadFile em andamento seria pedir corrida de handle — so' se
+        meio de um ReadFile em andamento seria pedir corrida de handle; so' se
         faz isso como ultimo recurso, quando a thread ignorou o pedido de parada.
         """
         self._parar.set()
@@ -461,8 +461,8 @@ class DiskBench:
         """Guarda a fase e converte o avanco dela em avanco do teste inteiro.
 
         Quem chama passa a fracao da propria fase, que e' o que cada laco sabe.
-        Publicar isso cru fazia a barra voltar ao comeco a cada troca — 64%, 24%,
-        14%, 5% — e barra andando para tras se le' como travamento.
+        Publicar isso cru fazia a barra voltar ao comeco a cada troca (64%, 24%,
+        14%, 5%), e barra andando para tras se le' como travamento.
 
         O denominador e' o roteiro desta corrida: com uma fase so' marcada, a
         barra tem de chegar ao fim ao terminar essa fase, e nao em 20%.
@@ -478,7 +478,7 @@ class DiskBench:
             self._fase = fase
             # Nunca deixa recuar. Cada fase repete passadas ate' fechar o tempo
             # minimo de medicao, e a fracao da passada volta a zero a cada
-            # repeticao — a barra ficava indo e voltando dentro da mesma fase.
+            # repeticao: a barra ficava indo e voltando dentro da mesma fase.
             self._progresso = max(self._progresso, total)
 
     def _rodar(self, mount: str, opcoes: Opcoes) -> None:
@@ -664,7 +664,7 @@ class DiskBench:
     def _aleatorio(self, buffer: _BufferAlinhado, tamanho: int, escrever: bool,
                    fase: str, segundos: float | None = None
                    ) -> tuple[float | None, float | None]:
-        """4 KiB em posicoes sorteadas, fila 1 — mede latencia, nao vazao de fita.
+        """4 KiB em posicoes sorteadas, fila 1: mede latencia, nao vazao de fita.
 
         Fila 1 nao e' escolha de conveniencia: com ReadFile/WriteFile sincronos
         nao existe outra. Ver PROFUNDIDADES.

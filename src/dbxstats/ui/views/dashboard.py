@@ -56,7 +56,7 @@ class DashboardView(View):
     def _relayout_cards(self) -> None:
         """Reencaixa a linha de cards contando so' os visiveis.
 
-        Esconder um card sem refazer o grid deixa a coluna vazia no lugar — um
+        Esconder um card sem refazer o grid deixa a coluna vazia no lugar: um
         buraco no meio do painel, que e' pior do que o card inutil que saiu.
         """
         while self._grid.count():
@@ -141,7 +141,7 @@ class DashboardView(View):
 
         # Frametime cru vira uma cerca de espetos: cada quadro ruim e' uma barra
         # inteira, e o desenho conta mais sobre densidade do que sobre a jogada.
-        # Aqui vale a mesma leitura do overlay — linha de FPS por segundo, com os
+        # Aqui vale a mesma leitura do overlay: linha de FPS por segundo, com os
         # lows por baixo, que e' onde a queda aparece.
         self.fps_chart = TimeSeriesChart([
             Plot("fps", "FPS", theme.FPS),
@@ -235,7 +235,7 @@ class DashboardView(View):
 
         Sem LibreHardwareMonitor nao ha' temperatura nem potencia; sem GPU
         dedicada nao ha' VRAM. Deixar esses tiles no lugar, eternamente com
-        travessao, e' informacao que nao informa — e' o que faz o app parecer
+        travessao, e' informacao que nao informa; e' o que faz o app parecer
         quebrado em quem so' nao tem o sensor.
         """
         tem_sensores = bool(d.get("lhm_ok"))
@@ -386,7 +386,7 @@ class DashboardView(View):
         # ou que a captura nao traz as colunas) fica no tooltip.
         self.bottleneck.setToolTip(m.bottleneck_detail)
         self.smooth_badge.update_badge(
-            f"fluidez {m.smoothness:.0f}" if m.smoothness is not None else "fluidez —",
+            f"fluidez {m.smoothness:.0f}" if m.smoothness is not None else "fluidez indisponível",
             theme.score_color(m.smoothness))
         self.smooth_badge.setToolTip(
             f"variação típica entre quadros vizinhos: {m.ft_jitter:.2f} ms"

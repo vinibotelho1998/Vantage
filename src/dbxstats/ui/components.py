@@ -54,7 +54,7 @@ def linha_opcional(lista, chave: str, valor, texto, cor) -> None:
     """Preenche uma linha de MetricList, ou faz a linha sumir se nao ha' leitura.
 
     Travessao fixo numa linha diz "isto quebrou"; linha ausente diz "esta maquina
-    nao mede isso", que e' a verdade quando falta o sensor — e e' o que mantem o
+    nao mede isso", que e' a verdade quando falta o sensor, e e' o que mantem o
     card honesto numa maquina sem NVML, sem sensor de pente ou sem elevacao.
     """
     row = lista.row(chave)
@@ -166,7 +166,7 @@ class Card(QFrame):
 
 
 class StatTile(QFrame):
-    """Numero grande com legenda — usado nas faixas de KPI."""
+    """Numero grande com legenda, usado nas faixas de KPI."""
 
     def __init__(self, caption: str, unit: str = "", color: str = theme.TXT,
                  big: float = 22, parent: QWidget | None = None) -> None:
@@ -315,7 +315,7 @@ class KpiStrip(QWidget):
         A lista de escondidos vive aqui, e nao em `isHidden()` de cada tile,
         por causa de um ovo-e-galinha: um widget recem-criado, ainda sem pai,
         responde `isHidden()` verdadeiro. O filtro entao nunca punha nenhum tile
-        no grid, e sem entrar no grid ele nunca ganhava pai — a faixa inteira
+        no grid, e sem entrar no grid ele nunca ganhava pai; a faixa inteira
         ficava vazia em todas as telas que nao chamam show_only.
         """
         for key, caption, unit in specs:
@@ -343,7 +343,7 @@ class KpiStrip(QWidget):
         """Esconde os tiles que essa maquina nao tem como preencher.
 
         Travessao em metade da faixa nao informa nada e ainda faz o app parecer
-        quebrado — numa maquina sem sensor de temperatura, ou sem GPU dedicada,
+        quebrado: numa maquina sem sensor de temperatura, ou sem GPU dedicada,
         e' melhor a faixa ficar menor e inteira do que grande e furada.
         """
         ocultos = {chave for chave in self.tiles if chave not in set(keys)}
