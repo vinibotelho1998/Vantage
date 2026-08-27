@@ -5,6 +5,7 @@ para ficar aberto no segundo monitor — com telas dedicadas de CPU, GPU, memór
 disco, rede, sensores e processos, além de uma engine de FPS/frametime nível
 CapFrameX. O overlay in-game continua ali, mas agora é um acessório, não o produto.
 
+[![Build](https://github.com/vinibotelho1998/DBX-Stats/actions/workflows/release.yml/badge.svg)](https://github.com/vinibotelho1998/DBX-Stats/actions/workflows/release.yml)
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D6)
 ![UI](https://img.shields.io/badge/UI-PySide6-41CD52)
@@ -132,6 +133,10 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe scripts\smoke_fps.py    # motor de FPS contra o PresentMon real
 .\.venv\Scripts\python.exe scripts\preview.py      # regenera as imagens do README
 ```
+
+771 testes cobrem a engine de FPS, séries e métricas, telas, gerenciador de
+monitores, controle e sessões — a maioria sem depender de display nem hardware
+real.
 
 ## Arquitetura
 
