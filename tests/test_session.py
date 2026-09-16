@@ -1,7 +1,7 @@
 """Sessao de jogo: quando ela conta como viva e como os argumentos sao lidos."""
 import time
 
-from dbxstats.core.session import GameSession, _split_args, resolve_shortcut
+from vantage.core.session import GameSession, _split_args, resolve_shortcut
 
 
 def test_argumentos_vazios():

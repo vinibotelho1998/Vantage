@@ -10,7 +10,7 @@ Nenhum teste aqui chama a API do Windows: as quatro dependencias de `limpar`
 entram por parametro justamente para a regra ser exercitada sem mexer na memoria
 da maquina que roda os testes.
 """
-from dbxstats.platform import memclean
+from vantage.platform import memclean
 
 
 def _limpar(processos, esvaziar=None, standby=None, antes=8.0, depois=12.0):
@@ -80,7 +80,7 @@ def test_erro_de_sistema_ao_abrir_processo_nao_derruba_a_limpeza():
 def test_standby_recusada_nao_cancela_o_resto():
     """Sem elevacao a standby nao vai; os working sets ja' foram liberados."""
     r = _limpar([(1234, "jogo.exe")],
-                standby=lambda: (False, "Abra o Dbx Stats como administrador."))
+                standby=lambda: (False, "Abra o Vantage como administrador."))
     assert r.limpos == 1
     assert r.standby is False
     assert "administrador" in r.erro_standby

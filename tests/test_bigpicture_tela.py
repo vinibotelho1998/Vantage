@@ -2,11 +2,11 @@
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ.setdefault("DBXSTATS_NO_FILE_LOG", "1")
+os.environ.setdefault("VANTAGE_NO_FILE_LOG", "1")
 
-import dbxstats.app as appmod  # noqa: E402
-from dbxstats.app import App  # noqa: E402
-from dbxstats.config import Settings  # noqa: E402
+import vantage.app as appmod  # noqa: E402
+from vantage.app import App  # noqa: E402
+from vantage.config import Settings  # noqa: E402
 
 
 class _Tela:

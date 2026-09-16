@@ -2,9 +2,9 @@
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ.setdefault("DBXSTATS_NO_FILE_LOG", "1")
+os.environ.setdefault("VANTAGE_NO_FILE_LOG", "1")
 
-from dbxstats.core.frames import SESSION_BIN_MS, SessionRecorder  # noqa: E402
+from vantage.core.frames import SESSION_BIN_MS, SessionRecorder  # noqa: E402
 
 
 def _gravador(frametimes) -> SessionRecorder:
@@ -79,10 +79,10 @@ class _App:
 def _view(historico):
     from PySide6.QtWidgets import QApplication
 
-    from dbxstats.ui.views.benchmark import BenchmarkView
+    from vantage.ui.views.benchmark import BenchmarkView
 
     QApplication.instance() or QApplication([])
-    from dbxstats.config import Settings
+    from vantage.config import Settings
 
     app = _App(historico)
     app.settings = Settings()

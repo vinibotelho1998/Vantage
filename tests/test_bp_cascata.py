@@ -4,8 +4,8 @@ O degrau que faltava era o ultimo. Quando o jogo devolve para a grade, quem
 acendeu a TV foi a sessao, e `_bp_off` chega vazio ao fechamento; a grade
 sumia e a TV ficava ligada, mostrando area de trabalho para uma sala vazia.
 """
-import dbxstats.app as appmod
-from dbxstats.app import App
+import vantage.app as appmod
+from vantage.app import App
 
 PADRAO = [
     {"monitor_id": "uw", "active": True, "primary": True},

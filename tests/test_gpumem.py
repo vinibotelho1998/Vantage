@@ -2,11 +2,11 @@
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ.setdefault("DBXSTATS_NO_FILE_LOG", "1")
+os.environ.setdefault("VANTAGE_NO_FILE_LOG", "1")
 
 import ctypes  # noqa: E402
 
-from dbxstats.platform import gpumem  # noqa: E402
+from vantage.platform import gpumem  # noqa: E402
 
 
 def test_struct_tem_o_tamanho_que_o_windows_espera():

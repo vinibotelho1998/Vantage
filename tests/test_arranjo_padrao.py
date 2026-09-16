@@ -4,8 +4,8 @@ O PC vinha ligando "com resolucao doida": o Windows chuta um modo conservador ao
 reanexar tela, e o app so' sabia apagar e trocar a primaria: nunca acender o que
 deveria estar aceso, nem corrigir o modo.
 """
-import dbxstats.app as appmod
-from dbxstats.app import App
+import vantage.app as appmod
+from vantage.app import App
 
 
 class _Modo:

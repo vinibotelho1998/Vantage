@@ -2,14 +2,14 @@
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ.setdefault("DBXSTATS_NO_FILE_LOG", "1")
+os.environ.setdefault("VANTAGE_NO_FILE_LOG", "1")
 
 from PySide6.QtGui import QPixmap  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from dbxstats.config import _clean_launch_item  # noqa: E402
-from dbxstats.platform import art  # noqa: E402
-from dbxstats.ui.bigpicture import BigPicture  # noqa: E402
+from vantage.config import _clean_launch_item  # noqa: E402
+from vantage.platform import art  # noqa: E402
+from vantage.ui.bigpicture import BigPicture  # noqa: E402
 
 _app = QApplication.instance() or QApplication([])
 

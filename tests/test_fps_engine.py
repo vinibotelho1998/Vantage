@@ -1,8 +1,8 @@
 """Testa o parsing do CSV do PresentMon e a agregacao, sem subir processo nenhum."""
 import math
 
-from dbxstats.sensors import fps as fpsmod
-from dbxstats.sensors.fps import FpsEngine, _Layout
+from vantage.sensors import fps as fpsmod
+from vantage.sensors.fps import FpsEngine, _Layout
 
 HEADER_V2 = ("Application,ProcessID,SwapChainAddress,PresentRuntime,SyncInterval,"
              "PresentFlags,AllowsTearing,PresentMode,CPUStartTime,FrameTime,CPUBusy,"

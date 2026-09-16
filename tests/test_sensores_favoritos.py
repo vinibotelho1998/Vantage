@@ -16,10 +16,10 @@ from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from dbxstats import theme  # noqa: E402
-from dbxstats.config import Settings  # noqa: E402
-from dbxstats.sensors.lhm import UNITS, LhmReader, SensorNode  # noqa: E402
-from dbxstats.ui.views import sensors  # noqa: E402
+from vantage import theme  # noqa: E402
+from vantage.config import Settings  # noqa: E402
+from vantage.sensors.lhm import UNITS, LhmReader, SensorNode  # noqa: E402
+from vantage.ui.views import sensors  # noqa: E402
 
 _app = QApplication.instance() or QApplication([])
 
@@ -32,7 +32,7 @@ def _sandbox(monkeypatch, tmp_path):
     por cima do settings.json compartilhado do conftest e mudariam o resultado
     de qualquer outro teste que o leia.
     """
-    monkeypatch.setenv("DBXSTATS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("VANTAGE_DATA_DIR", str(tmp_path))
 
 CPU = "AMD Ryzen 7 9800X3D"
 GPU = "AMD Radeon RX 9070 XT"

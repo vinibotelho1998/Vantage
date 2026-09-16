@@ -2,9 +2,9 @@
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ.setdefault("DBXSTATS_NO_FILE_LOG", "1")
+os.environ.setdefault("VANTAGE_NO_FILE_LOG", "1")
 
-from dbxstats.platform import pads  # noqa: E402
+from vantage.platform import pads  # noqa: E402
 
 
 def _pad(**kw) -> pads.Pad:

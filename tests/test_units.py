@@ -1,4 +1,4 @@
-from dbxstats.core import units
+from vantage.core import units
 
 
 def test_rate_scales():

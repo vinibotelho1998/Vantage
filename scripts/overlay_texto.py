@@ -23,19 +23,19 @@ import tempfile
 os.environ["QT_QPA_PLATFORM"] = "windows"
 # Dados isolados: script de desenvolvimento nunca pode gravar por cima do
 # settings.json de verdade.
-os.environ.setdefault("DBXSTATS_DATA_DIR",
-                      os.path.join(tempfile.gettempdir(), "dbxstats-dev"))
-os.environ.setdefault("DBXSTATS_NO_FILE_LOG", "1")
+os.environ.setdefault("VANTAGE_DATA_DIR",
+                      os.path.join(tempfile.gettempdir(), "vantage-dev"))
+os.environ.setdefault("VANTAGE_NO_FILE_LOG", "1")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
 from PySide6.QtGui import QFontMetricsF, QPixmap  # noqa: E402
 from PySide6.QtWidgets import QApplication, QLabel  # noqa: E402
 
-from dbxstats.config import OVERLAY_METRICS, Settings  # noqa: E402
-from dbxstats.core import frames as fr  # noqa: E402
-from dbxstats.ui import overlay as ov_mod  # noqa: E402
-from dbxstats.ui.charts import Sparkline  # noqa: E402
-from dbxstats.ui.overlay import GameOverlay  # noqa: E402
+from vantage.config import OVERLAY_METRICS, Settings  # noqa: E402
+from vantage.core import frames as fr  # noqa: E402
+from vantage.ui import overlay as ov_mod  # noqa: E402
+from vantage.ui.charts import Sparkline  # noqa: E402
+from vantage.ui.overlay import GameOverlay  # noqa: E402
 
 _TAG = re.compile(r"<[^>]+>")
 

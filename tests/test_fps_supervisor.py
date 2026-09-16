@@ -8,8 +8,8 @@ quando ha' um jogo entregando quadros.
 """
 import time
 
-from dbxstats.sensors import fps as fpsmod
-from dbxstats.sensors.fps import FpsEngine
+from vantage.sensors import fps as fpsmod
+from vantage.sensors.fps import FpsEngine
 
 
 def _motor_rodando() -> tuple[FpsEngine, list[int]]:

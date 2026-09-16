@@ -6,12 +6,12 @@ resultado, e' o que tornava essas opcoes praticamente inuteis.
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ.setdefault("DBXSTATS_NO_FILE_LOG", "1")
+os.environ.setdefault("VANTAGE_NO_FILE_LOG", "1")
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from dbxstats.config import Settings  # noqa: E402
-from dbxstats.ui.settings import _CfgPrevia, _CtlPrevia  # noqa: E402
+from vantage.config import Settings  # noqa: E402
+from vantage.ui.settings import _CfgPrevia, _CtlPrevia  # noqa: E402
 
 _app = QApplication.instance() or QApplication([])
 
@@ -54,8 +54,8 @@ def test_a_previa_usa_a_classe_de_verdade():
     """
     import inspect
 
-    from dbxstats.ui.overlay import GameOverlay
-    from dbxstats.ui.settings import SettingsDialog
+    from vantage.ui.overlay import GameOverlay
+    from vantage.ui.settings import SettingsDialog
 
     fonte = inspect.getsource(SettingsDialog._atualizar_previa)
     assert "GameOverlay" in fonte
@@ -90,8 +90,8 @@ def test_previa_ja_nasce_desenhada_ao_abrir_a_janela():
     ainda nao rodou, o widget fica com tamanho zero e nada aparece ate' uma
     mexida forcar a remontagem.
     """
-    from dbxstats.app import App
-    from dbxstats.ui.settings import SettingsDialog
+    from vantage.app import App
+    from vantage.ui.settings import SettingsDialog
 
     qt = QApplication.instance() or QApplication([])
     app = App(qt)
@@ -103,8 +103,8 @@ def test_previa_ja_nasce_desenhada_ao_abrir_a_janela():
 
 
 def test_trocar_de_aba_redesenha_a_previa():
-    from dbxstats.app import App
-    from dbxstats.ui.settings import SettingsDialog
+    from vantage.app import App
+    from vantage.ui.settings import SettingsDialog
 
     qt = QApplication.instance() or QApplication([])
     app = App(qt)

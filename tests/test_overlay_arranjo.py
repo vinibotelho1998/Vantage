@@ -14,9 +14,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication, QLabel  # noqa: E402
 
-from dbxstats.config import OVERLAY_METRICS, Settings  # noqa: E402
-from dbxstats.core import frames as fr  # noqa: E402
-from dbxstats.ui import overlay as ov  # noqa: E402
+from vantage.config import OVERLAY_METRICS, Settings  # noqa: E402
+from vantage.core import frames as fr  # noqa: E402
+from vantage.ui import overlay as ov  # noqa: E402
 
 _app = QApplication.instance() or QApplication([])
 
@@ -474,7 +474,7 @@ def test_media_de_temperatura_sobrevive_a_um_ciclo_sem_leitura():
     Sem carencia, a celula piscava entre "61/78" e "78" varias vezes por minuto;
     o que se le' como o app perdendo dado, nao como a temperatura mudando.
     """
-    import dbxstats.ui.overlay as ov
+    import vantage.ui.overlay as ov
 
     painel = _montar(_snapshot(), _Stream())
     painel._temps("cpu", 61.0, 78.0, lambda _v: "#fff")
@@ -488,7 +488,7 @@ def test_media_some_quando_o_sensor_nao_volta():
     """Segurar para sempre seria mostrar um numero velho como se fosse de agora."""
     import time
 
-    import dbxstats.ui.overlay as ov
+    import vantage.ui.overlay as ov
 
     painel = _montar(_snapshot(), _Stream())
     painel._temps("cpu", 61.0, 78.0, lambda _v: "#fff")
@@ -503,7 +503,7 @@ def test_fatia_do_jogo_fica_colada_na_barra():
     A memoria do jogo e' um PEDACO do numero que a barra desenha, e leitura que
     se compara precisa ficar ao lado do que se compara com ela.
     """
-    import dbxstats.ui.overlay as ov
+    import vantage.ui.overlay as ov
 
     d = _snapshot()
     painel = _montar(d, _Stream())
@@ -516,7 +516,7 @@ def test_linha_de_memoria_nao_estica_as_colunas_das_pecas():
     """Celula propria para cada numero da memoria abria um vao entre o clock e a
     tensao da CPU e da GPU: o alinhamento certo de uma linha estragava o das
     outras."""
-    import dbxstats.ui.overlay as ov
+    import vantage.ui.overlay as ov
 
     painel = _montar(_snapshot(), _Stream())
     assert ("ram", ov.CLOCK) not in painel._cels

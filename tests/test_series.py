@@ -1,6 +1,6 @@
 import math
 
-from dbxstats.core.series import Accumulator, Ema, History, Series, mean, percentile, stdev
+from vantage.core.series import Accumulator, Ema, History, Series, mean, percentile, stdev
 
 
 def test_percentile_bounds():

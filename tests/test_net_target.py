@@ -1,5 +1,5 @@
 """Escolha do servidor do jogo e troca de alvo do ping."""
-from dbxstats.sensors.net import PingMonitor, _publico
+from vantage.sensors.net import PingMonitor, _publico
 
 
 def test_endereco_publico_ipv4():

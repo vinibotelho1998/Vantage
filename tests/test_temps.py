@@ -3,7 +3,7 @@
 Uma so' sempre mente para algum lado: a media esconde throttle e o pico
 assusta a toa. O overlay mostra as duas, entao o leitor precisa separa-las.
 """
-from dbxstats.sensors.lhm import LhmReader
+from vantage.sensors.lhm import LhmReader
 
 
 class _Sensor:

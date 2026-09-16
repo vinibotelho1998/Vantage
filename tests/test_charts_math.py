@@ -3,7 +3,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from dbxstats.ui.charts import envelope, monotone_tangents, nice_step  # noqa: E402
+from vantage.ui.charts import envelope, monotone_tangents, nice_step  # noqa: E402
 
 
 def test_tangents_flat_series_is_flat():

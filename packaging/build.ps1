@@ -1,13 +1,13 @@
-# Gera o instalador do Dbx Stats a partir de um clone limpo.
+# Gera o instalador do Vantage a partir de um clone limpo.
 #
 # Funciona em qualquer maquina: usa o Python que encontrar, monta um ambiente
 # proprio, baixa o que falta (PyInstaller, pre-requisitos, Inno Setup) e entrega
-# um unico arquivo em dist\DbxStats-Setup.exe, que e' o que se manda para outra
+# um unico arquivo em dist\Vantage-Setup.exe, que e' o que se manda para outra
 # pessoa. Nao instala nada no sistema nem depende de nada estar configurado.
 #
 #   powershell -ExecutionPolicy Bypass -File packaging\build.ps1
 #
-# -SemInstalador para so' gerar a pasta dist\DbxStats (util para testar rapido).
+# -SemInstalador para so' gerar a pasta dist\Vantage (util para testar rapido).
 #
 # Sem acentos de proposito: o PowerShell 5.1 le .ps1 como ANSI e um caractere
 # fora do ASCII quebra o parser inteiro na maquina de quem for compilar.
@@ -54,7 +54,7 @@ if (-not (Test-Path $py)) {
 & $py -m pip install pyinstaller --quiet
 Ok "dependencias prontas"
 
-$initPy = Join-Path $root "src\dbxstats\__init__.py"
+$initPy = Join-Path $root "src\vantage\__init__.py"
 $versao = (Select-String -Path $initPy -Pattern '__version__\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
 Ok "versao do app: $versao"
 
@@ -62,15 +62,15 @@ Ok "versao do app: $versao"
 Passo "Empacotando com PyInstaller (demora alguns minutos)"
 Push-Location $root
 try {
-    & $py -m PyInstaller (Join-Path $PSScriptRoot "DbxStats.spec") `
+    & $py -m PyInstaller (Join-Path $PSScriptRoot "Vantage.spec") `
         --noconfirm --distpath (Join-Path $root "dist") --workpath (Join-Path $root "build")
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller falhou (codigo $LASTEXITCODE)" }
 } finally {
     Pop-Location
 }
-$appDir = Join-Path $root "dist\DbxStats"
-if (-not (Test-Path (Join-Path $appDir "DbxStats.exe"))) { throw "DbxStats.exe nao foi gerado" }
-Ok "app em dist\DbxStats"
+$appDir = Join-Path $root "dist\Vantage"
+if (-not (Test-Path (Join-Path $appDir "Vantage.exe"))) { throw "Vantage.exe nao foi gerado" }
+Ok "app em dist\Vantage"
 
 if ($SemInstalador) {
     Write-Host ""
@@ -107,16 +107,16 @@ if (-not $iscc) {
 if (-not $iscc) {
     throw ("Inno Setup 6 nao encontrado. Instale de https://jrsoftware.org/isdl.php " +
            "e rode de novo, ou use 'packaging\build.ps1 -SemInstalador' para gerar " +
-           "so' a pasta dist\DbxStats.")
+           "so' a pasta dist\Vantage.")
 }
 Ok (Split-Path $iscc -Parent)
 
 # -------------------------------------------------------------- Instalador
 Passo "Compilando o instalador"
-& $iscc "/DMyAppVersion=$versao" (Join-Path $PSScriptRoot "DbxStats_Setup.iss")
+& $iscc "/DMyAppVersion=$versao" (Join-Path $PSScriptRoot "Vantage_Setup.iss")
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup falhou (codigo $LASTEXITCODE)" }
 
-$saida = Join-Path $root "dist\DbxStats-Setup.exe"
+$saida = Join-Path $root "dist\Vantage-Setup.exe"
 $tamanho = [math]::Round((Get-Item $saida).Length / 1MB, 1)
 Write-Host ""
 Write-Host "=====================================================" -ForegroundColor DarkCyan

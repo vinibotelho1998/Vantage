@@ -14,8 +14,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
-from dbxstats.config import Settings  # noqa: E402
-from dbxstats.platform import displays as D  # noqa: E402
+from vantage.config import Settings  # noqa: E402
+from vantage.platform import displays as D  # noqa: E402
 
 
 def main(nome: str = "Normal") -> int:

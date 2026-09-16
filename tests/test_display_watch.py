@@ -4,8 +4,8 @@ O Windows guarda a ultima topologia usada com cada conjunto de monitores. Como
 a ultima vez que a TV esteve junto foi num perfil que apaga os monitores de
 mesa, plugar a TV apagava os dois sozinho.
 """
-import dbxstats.app as appmod
-from dbxstats.app import App
+import vantage.app as appmod
+from vantage.app import App
 
 
 class _Tela:

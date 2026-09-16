@@ -4,8 +4,8 @@ O arranjo da casa e' a TV desligada. O atalho tem de liga-la, coloca-la na
 frente, abrir o jogo, e desfazer os dois quando o jogo fechar, sem reaplicar
 perfil nenhum (era o que apagava as tres telas por varios segundos).
 """
-import dbxstats.app as appmod
-from dbxstats.app import App
+import vantage.app as appmod
+from vantage.app import App
 
 
 class _Tela:

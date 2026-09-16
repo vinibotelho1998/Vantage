@@ -7,9 +7,9 @@ por versoes diferentes do app.
 import csv
 import os
 
-os.environ.setdefault("DBXSTATS_NO_FILE_LOG", "1")
+os.environ.setdefault("VANTAGE_NO_FILE_LOG", "1")
 
-from dbxstats.core import export  # noqa: E402
+from vantage.core import export  # noqa: E402
 
 _ANTIGA = {"quando": "01/01 10:00", "game": "jogo_velho.exe", "duracao_s": 600,
            "frames": 90000, "fps_avg": 120.0, "low_1": 80.0}

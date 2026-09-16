@@ -1,4 +1,4 @@
-"""Gera assets/icon.ico e assets/icon.png com o tema Dbx (barras de performance)."""
+"""Gera assets/icon.ico e assets/icon.png com o tema do Vantage (barras de performance)."""
 from __future__ import annotations
 
 import os

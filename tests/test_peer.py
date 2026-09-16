@@ -2,7 +2,7 @@
 import socket
 import struct
 
-from dbxstats.sensors import peer
+from vantage.sensors import peer
 
 
 def _pacote_udp(origem: str, destino: str, sport: int, dport: int, carga: int = 40) -> bytes:

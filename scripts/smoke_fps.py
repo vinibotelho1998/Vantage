@@ -12,7 +12,7 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
-from dbxstats.sensors.fps import FpsEngine  # noqa: E402
+from vantage.sensors.fps import FpsEngine  # noqa: E402
 
 
 def _n(value, decimals: int = 0) -> str:

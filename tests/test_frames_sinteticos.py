@@ -8,7 +8,7 @@ que a resposta certa seja conhecida de antemao.
 """
 import random
 
-from dbxstats.core import frames as fr
+from vantage.core import frames as fr
 
 NAN = float("nan")
 

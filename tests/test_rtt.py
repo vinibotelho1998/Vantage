@@ -1,7 +1,7 @@
 """Estimativa passiva de latencia a partir do vaivem dos pacotes."""
 import random
 
-from dbxstats.sensors.peer import estimate_rtt
+from vantage.sensors.peer import estimate_rtt
 
 
 def _conversa(rtt_ms: float, tick_ms: float, n: int, jitter_ms: float = 0.0,

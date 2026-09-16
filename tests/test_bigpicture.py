@@ -2,12 +2,12 @@
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ.setdefault("DBXSTATS_NO_FILE_LOG", "1")
+os.environ.setdefault("VANTAGE_NO_FILE_LOG", "1")
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from dbxstats.config import Settings  # noqa: E402
-from dbxstats.platform.gamepad import (  # noqa: E402
+from vantage.config import Settings  # noqa: E402
+from vantage.platform.gamepad import (  # noqa: E402
     BTN_A,
     BTN_B,
     BTN_BACK,
@@ -16,7 +16,7 @@ from dbxstats.platform.gamepad import (  # noqa: E402
     XINPUT_GAMEPAD,
     nav_direction,
 )
-from dbxstats.ui.bigpicture import (  # noqa: E402
+from vantage.ui.bigpicture import (  # noqa: E402
     BigPicture,
     tempo_medido,
     ultima_sessao,
@@ -188,7 +188,7 @@ def test_cabem_no_maximo_quatro_colunas():
 
 # ── gesto de abrir ───────────────────────────────────────────────────────────
 def _app_para_gesto(botoes=0):
-    import dbxstats.app as appmod
+    import vantage.app as appmod
 
     a = appmod.App.__new__(appmod.App)
     a._bigpicture = None

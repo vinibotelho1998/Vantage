@@ -1,4 +1,4 @@
-from dbxstats.config import VIEWS, Settings
+from vantage.config import VIEWS, Settings
 
 
 def test_defaults_roundtrip():
@@ -151,7 +151,7 @@ def test_lixo_no_arquivo_nao_derruba():
 # escreve na unidade do usuario.
 def test_tamanho_absurdo_do_teste_de_disco_nao_passa():
     """999999 MiB no settings.json nao pode virar um arquivo temporario de 1 TB."""
-    from dbxstats.sensors.diskbench import TAMANHOS_MIB
+    from vantage.sensors.diskbench import TAMANHOS_MIB
 
     assert Settings.from_dict({"diskbench_size_mib": 999999}).diskbench_size_mib \
         == max(TAMANHOS_MIB)
@@ -168,7 +168,7 @@ def test_fases_do_teste_de_disco_voltam_para_a_ordem_de_execucao():
 
 def test_teste_de_disco_sem_nenhuma_fase_volta_ao_completo():
     """Teste sem fase nao mede nada e ainda assim cria o arquivo na unidade."""
-    from dbxstats.config import DISKBENCH_PHASES
+    from vantage.config import DISKBENCH_PHASES
 
     assert Settings.from_dict({"diskbench_phases": []}).diskbench_phases == \
         [k for k, _ in DISKBENCH_PHASES]
@@ -181,8 +181,8 @@ def test_fila_do_teste_de_disco_e_sempre_um():
 
 def test_chaves_das_fases_batem_com_o_motor():
     """Config e motor precisam falar a mesma lingua, ou a fase marcada some."""
-    from dbxstats.config import DISKBENCH_PHASES
-    from dbxstats.sensors.diskbench import CHAVES_FASES
+    from vantage.config import DISKBENCH_PHASES
+    from vantage.sensors.diskbench import CHAVES_FASES
 
     assert tuple(k for k, _ in DISKBENCH_PHASES) == CHAVES_FASES
 
@@ -216,7 +216,7 @@ def test_janela_fora_de_qualquer_tela_nao_e_restaurada():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
 
-    from dbxstats.ui.main_window import _cabe_em_alguma_tela
+    from vantage.ui.main_window import _cabe_em_alguma_tela
 
     app = QApplication.instance() or QApplication([])
     tela = app.primaryScreen().availableGeometry()
@@ -233,7 +233,7 @@ def test_canto_espiando_nao_conta_como_visivel():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
 
-    from dbxstats.ui.main_window import _cabe_em_alguma_tela
+    from vantage.ui.main_window import _cabe_em_alguma_tela
 
     app = QApplication.instance() or QApplication([])
     tela = app.primaryScreen().availableGeometry()

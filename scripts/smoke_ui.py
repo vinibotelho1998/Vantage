@@ -14,17 +14,17 @@ import tempfile
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 # Dados isolados: script de desenvolvimento nunca pode gravar por cima do
 # settings.json de verdade (ja' apagou atalhos de jogo uma vez).
-os.environ.setdefault("DBXSTATS_DATA_DIR",
-                      os.path.join(tempfile.gettempdir(), "dbxstats-dev"))
-os.environ.setdefault("DBXSTATS_NO_FILE_LOG", "1")
+os.environ.setdefault("VANTAGE_DATA_DIR",
+                      os.path.join(tempfile.gettempdir(), "vantage-dev"))
+os.environ.setdefault("VANTAGE_NO_FILE_LOG", "1")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
 from PySide6.QtGui import QPixmap  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from dbxstats.core import frames as fr  # noqa: E402
-from dbxstats.core.frames import FrameStream  # noqa: E402
-from dbxstats.core.series import Accumulator, History  # noqa: E402
+from vantage.core import frames as fr  # noqa: E402
+from vantage.core.frames import FrameStream  # noqa: E402
+from vantage.core.series import Accumulator, History  # noqa: E402
 
 
 def fake_snapshot(i: int) -> dict:
@@ -99,8 +99,8 @@ class StubApp:
     """Controlador falso: mesma superficie usada pelas views, sem threads."""
 
     def __init__(self, qt) -> None:
-        from dbxstats.config import Settings
-        from dbxstats.sensors.lhm import SensorNode
+        from vantage.config import Settings
+        from vantage.sensors.lhm import SensorNode
         self.qt = qt
         self.settings = Settings()
         self.stats = Accumulator()
@@ -220,7 +220,7 @@ class _StubPing:
 
 class _StubProcs:
     def snapshot(self):
-        from dbxstats.sensors.procs import ProcInfo
+        from vantage.sensors.procs import ProcInfo
         return [ProcInfo(i, f"proc{i}.exe", 12.0 - i, 300.0, 24, i == 0) for i in range(12)]
 
     def totals(self):
@@ -228,9 +228,9 @@ class _StubProcs:
 
 
 def main() -> int:
-    from dbxstats import theme
-    from dbxstats.ui import style
-    from dbxstats.ui.main_window import VIEW_CLASSES
+    from vantage import theme
+    from vantage.ui import style
+    from vantage.ui.main_window import VIEW_CLASSES
 
     qt = QApplication(sys.argv)
     qt.setStyleSheet(style.build_qss("cyan"))
@@ -287,7 +287,7 @@ def main() -> int:
     print("  cenario sem jogo ok")
 
     # popup de confirmar telas: conta pra tras e reverte sozinho no fim
-    from dbxstats.ui.confirm import ConfirmRevertDialog
+    from vantage.ui.confirm import ConfirmRevertDialog
     try:
         dlg = ConfirmRevertDialog("1920x1080 @ 180 Hz", 3)
         pix = QPixmap(dlg.sizeHint())

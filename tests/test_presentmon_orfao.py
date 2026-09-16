@@ -9,9 +9,9 @@ import os
 import signal
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ.setdefault("DBXSTATS_NO_FILE_LOG", "1")
+os.environ.setdefault("VANTAGE_NO_FILE_LOG", "1")
 
-from dbxstats.sensors import fps  # noqa: E402
+from vantage.sensors import fps  # noqa: E402
 
 
 class _Proc:

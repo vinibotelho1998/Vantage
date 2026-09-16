@@ -11,7 +11,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QPoint, QPointF, QRect  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from dbxstats.ui.views.displays import ArrangeCanvas  # noqa: E402
+from vantage.ui.views.displays import ArrangeCanvas  # noqa: E402
 
 _app = QApplication.instance() or QApplication([])
 
@@ -100,7 +100,7 @@ def test_indice_por_valor_e_nao_por_identidade():
     """
     from PySide6.QtWidgets import QComboBox
 
-    from dbxstats.ui.views.displays import _index_of
+    from vantage.ui.views.displays import _index_of
 
     box = QComboBox()
     for wh in ((2560, 1440), (1920, 1200), (1920, 1080), (1280, 720)):
@@ -113,7 +113,7 @@ def test_indice_por_valor_e_nao_por_identidade():
 
 def test_seletor_nasce_no_modo_atual_e_nao_no_maior():
 
-    from dbxstats.ui.views.displays import _combo, _index_of
+    from vantage.ui.views.displays import _combo, _index_of
 
     itens = [("4096 x 2160   escalonada", (4096, 2160)),
              ("3840 x 2160   nativa", (3840, 2160))]
@@ -125,7 +125,7 @@ def test_seletor_nasce_no_modo_atual_e_nao_no_maior():
 # ── telas desligadas no mapa ─────────────────────────────────────────────────
 class _Disp:
     def __init__(self, mid, nome, ativa, primaria=False, pos=(0, 0), modo=(1920, 1080)):
-        from dbxstats.platform.displays import Mode
+        from vantage.platform.displays import Mode
         self.monitor_id = mid
         self.name = nome
         self.active = ativa

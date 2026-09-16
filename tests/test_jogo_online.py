@@ -5,7 +5,7 @@ um numero que nao diz nada sobre o que esta' na tela.
 """
 import time
 
-from dbxstats.app import ONLINE_GRACE_S, App
+from vantage.app import ONLINE_GRACE_S, App
 
 
 def _app(pid=0, seguindo=False, medindo=False, visto_ha=0.0):
@@ -49,10 +49,10 @@ def test_rodape_nao_repete_o_nome_do_jogo():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
 
-    from dbxstats.config import Settings
-    from dbxstats.core import frames as fr
-    from dbxstats.core.series import History
-    from dbxstats.ui.overlay import GameOverlay
+    from vantage.config import Settings
+    from vantage.core import frames as fr
+    from vantage.core.series import History
+    from vantage.ui.overlay import GameOverlay
 
     QApplication.instance() or QApplication([])
     m = fr.FrameMetrics()

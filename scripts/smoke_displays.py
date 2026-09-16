@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from dbxstats.platform import displays as D  # noqa: E402
+from vantage.platform import displays as D  # noqa: E402
 
 
 def main() -> int:

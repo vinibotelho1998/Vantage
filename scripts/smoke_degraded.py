@@ -16,9 +16,9 @@ import sys
 import tempfile
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ.setdefault("DBXSTATS_DATA_DIR",
-                      os.path.join(tempfile.gettempdir(), "dbxstats-dev"))
-os.environ.setdefault("DBXSTATS_NO_FILE_LOG", "1")
+os.environ.setdefault("VANTAGE_DATA_DIR",
+                      os.path.join(tempfile.gettempdir(), "vantage-dev"))
+os.environ.setdefault("VANTAGE_NO_FILE_LOG", "1")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -26,8 +26,8 @@ from PySide6.QtGui import QPixmap  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 from smoke_ui import StubApp  # noqa: E402
 
-from dbxstats import theme  # noqa: E402
-from dbxstats.ui.main_window import VIEW_CLASSES  # noqa: E402
+from vantage import theme  # noqa: E402
+from vantage.ui.main_window import VIEW_CLASSES  # noqa: E402
 
 
 class LhmMudo:
@@ -120,7 +120,7 @@ def main() -> int:
 
     # o overlay tambem precisa aguentar o vazio
     try:
-        from dbxstats.ui.overlay import GameOverlay
+        from vantage.ui.overlay import GameOverlay
         ov = GameOverlay(app)
         ov.refresh()
         pix = QPixmap(ov.sizeHint())

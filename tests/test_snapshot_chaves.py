@@ -8,7 +8,7 @@ foi exatamente assim que a temperatura dos pentes ficou invisivel.
 import psutil
 import pytest
 
-from dbxstats.sensors.collector import Collector
+from vantage.sensors.collector import Collector
 
 _LHM = {
     "cpu_volts": 1.128, "cpu_volts_src": "rail", "cpu_volts_rail": "Voltage #1",

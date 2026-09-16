@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dbx-stats"
+name = "vantage"
 version = "3.4.1"
-description = "Dbx Stats: monitor de hardware e desempenho em jogos para Windows"
+description = "Vantage: monitor de hardware e desempenho em jogos para Windows"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
@@ -23,7 +23,7 @@ dependencies = [
 dev = ["pytest>=8.0", "pyinstaller>=6.18"]
 
 [project.gui-scripts]
-dbx-stats = "dbxstats.__main__:main"
+vantage = "vantage.__main__:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }

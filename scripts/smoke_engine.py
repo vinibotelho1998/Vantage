@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import time
 
-from dbxstats.sensors.collector import Collector
-from dbxstats.sensors.gpu import GpuReader
-from dbxstats.sensors.lhm import LhmReader
-from dbxstats.sensors.net import PingMonitor
+from vantage.sensors.collector import Collector
+from vantage.sensors.gpu import GpuReader
+from vantage.sensors.lhm import LhmReader
+from vantage.sensors.net import PingMonitor
 
 
 def main() -> int:

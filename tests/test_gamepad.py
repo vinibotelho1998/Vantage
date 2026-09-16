@@ -1,6 +1,6 @@
 """Combo Back+Start: precisa ligar E desligar o modo mouse."""
-from dbxstats.platform.gamepad import BTN_BACK, BTN_START, XINPUT_GAMEPAD, GamepadMouse
-from dbxstats.platform import gamepad as G
+from vantage.platform.gamepad import BTN_BACK, BTN_START, XINPUT_GAMEPAD, GamepadMouse
+from vantage.platform import gamepad as G
 
 
 class FakeCfg:
@@ -161,7 +161,7 @@ def test_diagrama_usa_layout_sony_quando_pedido():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
 
-    from dbxstats.ui.views.gamepad import ControllerDiagram
+    from vantage.ui.views.gamepad import ControllerDiagram
 
     QApplication.instance() or QApplication([])
     d = ControllerDiagram()
@@ -183,7 +183,7 @@ def test_todo_botao_desenhado_tem_geometria():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
 
-    from dbxstats.ui.views.gamepad import ControllerDiagram
+    from vantage.ui.views.gamepad import ControllerDiagram
 
     QApplication.instance() or QApplication([])
     d = ControllerDiagram()
@@ -198,7 +198,7 @@ def test_todo_botao_desenhado_tem_geometria():
 # ── botao preso: a causa do foco andando sozinho ─────────────────────────────
 def _mouse_mode():
     """GamepadMouse sem Qt: so' o que `stuck` precisa."""
-    from dbxstats.platform.gamepad import GamepadMouse
+    from vantage.platform.gamepad import GamepadMouse
 
     m = GamepadMouse.__new__(GamepadMouse)
     m._preso_desde = {}
@@ -207,7 +207,7 @@ def _mouse_mode():
 
 def test_botao_recem_apertado_nao_e_preso(monkeypatch):
     """Apertar um botao nao pode virar acusacao imediata."""
-    from dbxstats.platform import gamepad as G
+    from vantage.platform import gamepad as G
 
     m = _mouse_mode()
     monkeypatch.setattr(G.time, "monotonic", lambda: 1000.0)
@@ -218,7 +218,7 @@ def test_botao_recem_apertado_nao_e_preso(monkeypatch):
 def test_botao_apertado_alem_do_limiar_e_denunciado(monkeypatch):
     """O caso real: o direcional vai para as setas do teclado, e as setas mexem
     o foco de QUALQUER aplicativo do Windows."""
-    from dbxstats.platform import gamepad as G
+    from vantage.platform import gamepad as G
 
     m = _mouse_mode()
     monkeypatch.setattr(G.time, "monotonic", lambda: 1000.0)
@@ -231,7 +231,7 @@ def test_botao_apertado_alem_do_limiar_e_denunciado(monkeypatch):
 
 
 def test_soltar_o_botao_limpa_a_acusacao(monkeypatch):
-    from dbxstats.platform import gamepad as G
+    from vantage.platform import gamepad as G
 
     m = _mouse_mode()
     monkeypatch.setattr(G.time, "monotonic", lambda: 1000.0)
@@ -244,7 +244,7 @@ def test_soltar_o_botao_limpa_a_acusacao(monkeypatch):
 
 
 def test_varios_presos_saem_do_mais_antigo(monkeypatch):
-    from dbxstats.platform import gamepad as G
+    from vantage.platform import gamepad as G
 
     m = _mouse_mode()
     monkeypatch.setattr(G.time, "monotonic", lambda: 1000.0)
@@ -259,7 +259,7 @@ def test_varios_presos_saem_do_mais_antigo(monkeypatch):
 
 def test_apertar_de_novo_reinicia_a_contagem(monkeypatch):
     """Soltar e apertar e' uso normal; a contagem nao pode acumular entre os dois."""
-    from dbxstats.platform import gamepad as G
+    from vantage.platform import gamepad as G
 
     m = _mouse_mode()
     monkeypatch.setattr(G.time, "monotonic", lambda: 1000.0)

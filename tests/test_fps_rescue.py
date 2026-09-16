@@ -1,8 +1,8 @@
 """Destravamento da captura: parar de dar sinal de vida precisa virar reinicio."""
 import time
 
-from dbxstats.sensors import fps as fpsmod
-from dbxstats.sensors.fps import FpsEngine
+from vantage.sensors import fps as fpsmod
+from vantage.sensors.fps import FpsEngine
 
 
 class _PipeFalso:

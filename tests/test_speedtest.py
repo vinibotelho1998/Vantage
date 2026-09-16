@@ -18,8 +18,8 @@ import urllib.error
 
 import pytest
 
-from dbxstats.core import units
-from dbxstats.sensors import speedtest as sp
+from vantage.core import units
+from vantage.sensors import speedtest as sp
 
 
 def _marcas(pares):
@@ -1347,7 +1347,7 @@ class _RedeDeLista(sp.Rede):
 
 def _sandbox(tmp_path, monkeypatch):
     """Estado em disco num diretório só deste teste."""
-    monkeypatch.setenv("DBXSTATS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("VANTAGE_DATA_DIR", str(tmp_path))
 
 
 def test_lista_e_guardada_em_disco_e_nao_e_pedida_de_novo(tmp_path, monkeypatch):
@@ -1677,12 +1677,12 @@ def _tela(tmp_path, monkeypatch):
     import os
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    monkeypatch.setenv("DBXSTATS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("VANTAGE_DATA_DIR", str(tmp_path))
     from PySide6.QtWidgets import QApplication
 
-    from dbxstats.config import Settings
-    from dbxstats.core.series import Accumulator, History
-    from dbxstats.ui.views import network
+    from vantage.config import Settings
+    from vantage.core.series import Accumulator, History
+    from vantage.ui.views import network
 
     QApplication.instance() or QApplication([])
 

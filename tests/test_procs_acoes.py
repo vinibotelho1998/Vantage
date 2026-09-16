@@ -9,7 +9,7 @@ dubles: nenhum processo de verdade e' tocado.
 import psutil
 import pytest
 
-from dbxstats.sensors import procs as P
+from vantage.sensors import procs as P
 
 
 class _Processo:

@@ -3,9 +3,9 @@
 Alguem que so' quer abrir o jogo na TV nao precisa de relatorio no fim, e o
 gravador nao deve nem comecar nesse caso.
 """
-import dbxstats.app as appmod
-from dbxstats.app import App
-from dbxstats.config import Settings, _clean_launch_item
+import vantage.app as appmod
+from vantage.app import App
+from vantage.config import Settings, _clean_launch_item
 
 
 class _Fps:
@@ -86,7 +86,7 @@ def test_prioridade_usa_o_nome_do_executavel(monkeypatch):
     ("CrimsonDesert.exe"), e a promocao falhava calada dizendo que o jogo ja'
     nao estava em execucao, no instante exato em que ele acabara de abrir.
     """
-    import dbxstats.app as appmod
+    import vantage.app as appmod
 
     a = App.__new__(App)
     a._session_priority = "high"
@@ -103,7 +103,7 @@ def test_prioridade_usa_o_nome_do_executavel(monkeypatch):
 
 def test_sem_nome_de_processo_cai_no_apelido(monkeypatch):
     """Processo que morreu entre a descoberta e a promocao nao pode estourar."""
-    import dbxstats.app as appmod
+    import vantage.app as appmod
 
     a = App.__new__(App)
     a._session_priority = "high"

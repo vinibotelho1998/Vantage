@@ -3,7 +3,7 @@
 Sem um AppUserModelID proprio, o Windows agrupa a janela sob o executavel que
 hospeda o Python e mostra o icone DELE; e fixar na barra fixa a coisa errada.
 """
-from dbxstats.__main__ import _identidade_na_barra
+from vantage.__main__ import _identidade_na_barra
 
 
 def test_define_a_identidade_do_processo():
@@ -12,7 +12,7 @@ def test_define_a_identidade_do_processo():
     _identidade_na_barra()
     buf = ctypes.c_wchar_p()
     ctypes.windll.shell32.GetCurrentProcessExplicitAppUserModelID(ctypes.byref(buf))
-    assert buf.value == "Dbx.DbxStats"
+    assert buf.value == "Vantage"
 
 
 def test_nao_derruba_o_app_quando_a_api_falta():
@@ -40,6 +40,6 @@ def test_o_icone_e_empacotado_junto():
     """
     import pathlib
 
-    spec = pathlib.Path("packaging/DbxStats.spec").read_text(encoding="utf-8")
+    spec = pathlib.Path("packaging/Vantage.spec").read_text(encoding="utf-8")
     assert '"icon.ico"), "assets"' in spec, "o .ico precisa entrar em datas"
     assert pathlib.Path("assets/icon.ico").exists()

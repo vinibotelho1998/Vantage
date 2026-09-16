@@ -9,9 +9,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from dbxstats.config import Settings  # noqa: E402
-from dbxstats.sensors.procs import ProcessMonitor, ProcInfo  # noqa: E402
-from dbxstats.ui.views.processes import _ORDENS, _chave_ordem  # noqa: E402
+from vantage.config import Settings  # noqa: E402
+from vantage.sensors.procs import ProcessMonitor, ProcInfo  # noqa: E402
+from vantage.ui.views.processes import _ORDENS, _chave_ordem  # noqa: E402
 
 _app = QApplication.instance() or QApplication([])
 
@@ -49,7 +49,7 @@ def _view():
             self.settings = Settings.load()
             self.procs = ProcessMonitor()
 
-    from dbxstats.ui.views.processes import ProcessesView
+    from vantage.ui.views.processes import ProcessesView
     return ProcessesView(Fake())
 
 

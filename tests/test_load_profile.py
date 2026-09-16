@@ -4,7 +4,7 @@ Ler todos os sensores custa ~17 ms. A 1 Hz isso e' quase 2% de um nucleo o
 tempo todo, e com um jogo na frente esse nucleo faz falta, justamente quando
 ninguem esta' vendo o painel.
 """
-from dbxstats.app import BACKGROUND_INTERVAL_S, App
+from vantage.app import BACKGROUND_INTERVAL_S, App
 
 
 def _app(janela_visivel, jogo_na_frente, overlay_visivel, base=1.0, hz=3.0):

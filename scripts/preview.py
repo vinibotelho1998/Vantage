@@ -9,9 +9,9 @@ import tempfile
 os.environ["QT_QPA_PLATFORM"] = "windows"  # precisa da fonte real do sistema
 # Dados isolados: script de desenvolvimento nunca pode gravar por cima do
 # settings.json de verdade (ja' apagou atalhos de jogo uma vez).
-os.environ.setdefault("DBXSTATS_DATA_DIR",
-                      os.path.join(tempfile.gettempdir(), "dbxstats-dev"))
-os.environ.setdefault("DBXSTATS_NO_FILE_LOG", "1")
+os.environ.setdefault("VANTAGE_DATA_DIR",
+                      os.path.join(tempfile.gettempdir(), "vantage-dev"))
+os.environ.setdefault("VANTAGE_NO_FILE_LOG", "1")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -19,9 +19,9 @@ from PySide6.QtGui import QColor, QPixmap  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 from smoke_ui import StubApp, fake_snapshot  # noqa: E402
 
-from dbxstats import theme  # noqa: E402
-from dbxstats.ui import style  # noqa: E402
-from dbxstats.ui.main_window import MainWindow  # noqa: E402
+from vantage import theme  # noqa: E402
+from vantage.ui import style  # noqa: E402
+from vantage.ui.main_window import MainWindow  # noqa: E402
 
 
 def main() -> int:
@@ -78,8 +78,8 @@ def main() -> int:
     window.tick_fps()
     _shot(window, os.path.join(images, "panel.png"))
 
-    from dbxstats.ui.overlay import GameOverlay
-    from dbxstats.ui.settings import SettingsDialog
+    from vantage.ui.overlay import GameOverlay
+    from vantage.ui.settings import SettingsDialog
 
     overlay = GameOverlay(app)
     overlay.refresh()

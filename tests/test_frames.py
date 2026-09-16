@@ -1,6 +1,6 @@
 import math
 
-from dbxstats.core import frames as fr
+from vantage.core import frames as fr
 
 NAN = float("nan")
 

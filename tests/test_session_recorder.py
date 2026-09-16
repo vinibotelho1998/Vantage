@@ -7,7 +7,7 @@ tamanho fixo; e os percentis tem de continuar batendo.
 """
 import random
 
-from dbxstats.core.frames import SessionRecorder
+from vantage.core.frames import SessionRecorder
 
 
 def _grava(fts) -> SessionRecorder:

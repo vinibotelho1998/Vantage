@@ -15,11 +15,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from dbxstats.config import Settings  # noqa: E402
-from dbxstats.core.series import Accumulator, History  # noqa: E402
-from dbxstats.sensors import diskbench  # noqa: E402
-from dbxstats.sensors.lhm import SensorNode  # noqa: E402
-from dbxstats.ui.views import memory  # noqa: E402
+from vantage.config import Settings  # noqa: E402
+from vantage.core.series import Accumulator, History  # noqa: E402
+from vantage.sensors import diskbench  # noqa: E402
+from vantage.sensors.lhm import SensorNode  # noqa: E402
+from vantage.ui.views import memory  # noqa: E402
 
 _app = QApplication.instance() or QApplication([])
 

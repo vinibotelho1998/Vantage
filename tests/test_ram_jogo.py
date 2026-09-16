@@ -10,7 +10,7 @@ como "o jogo nao usa RAM".
 import psutil
 import pytest
 
-from dbxstats.sensors.collector import _GameMemory
+from vantage.sensors.collector import _GameMemory
 
 
 class _Mem:

@@ -7,7 +7,7 @@ Um travessao seria honesto; 0,46 V com cara de medida nao e'. Os testes fixam qu
 VID nunca vira Vcore, que o rail anonimo da placa so' e' adotado depois de provar
 que acompanha a carga, e que a procedencia viaja junto do numero.
 """
-from dbxstats.sensors.lhm import LhmReader
+from vantage.sensors.lhm import LhmReader
 
 
 class _Sensor:

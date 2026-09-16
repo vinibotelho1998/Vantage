@@ -5,8 +5,8 @@ vida restante que na verdade era "o disco nao respondeu" faz trocar um SSD
 saudavel; um "100%" chutado esconde um que esta' morrendo. Cada teste abaixo
 trava um caminho pelo qual um numero poderia aparecer sem existir.
 """
-from dbxstats.sensors import diskhealth
-from dbxstats.sensors.lhm import SensorNode
+from vantage.sensors import diskhealth
+from vantage.sensors.lhm import SensorNode
 
 
 def _no(hardware: str, kind: str, nome: str, valor: float,

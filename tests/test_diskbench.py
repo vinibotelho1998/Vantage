@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
-from dbxstats.sensors import diskbench
+from vantage.sensors import diskbench
 
 
 class _MotorFalso(diskbench.DiskBench):
@@ -189,7 +189,7 @@ def test_progresso_e_do_teste_inteiro_e_nunca_recua():
     cada troca de fase (64%, 24%, 14%, 5%). E dentro da fase repetia: cada
     passada de medicao recomecava do zero.
     """
-    from dbxstats.sensors.diskbench import FASES, DiskBench
+    from vantage.sensors.diskbench import FASES, DiskBench
 
     b = DiskBench()
     visto = []
@@ -206,7 +206,7 @@ def test_progresso_e_do_teste_inteiro_e_nunca_recua():
 
 
 def test_fase_desconhecida_nao_quebra_a_barra():
-    from dbxstats.sensors.diskbench import DiskBench
+    from vantage.sensors.diskbench import DiskBench
 
     b = DiskBench()
     b._publicar("fase que nao existe", 0.5)

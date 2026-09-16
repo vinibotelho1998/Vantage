@@ -6,12 +6,12 @@ exatamente a pergunta que apareceu quando os sensores nao subiram numa maquina.
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ.setdefault("DBXSTATS_NO_FILE_LOG", "1")
+os.environ.setdefault("VANTAGE_NO_FILE_LOG", "1")
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from dbxstats import __version__  # noqa: E402
-from dbxstats.ui.main_window import Sidebar  # noqa: E402
+from vantage import __version__  # noqa: E402
+from vantage.ui.main_window import Sidebar  # noqa: E402
 
 QApplication.instance() or QApplication([])
 
@@ -29,7 +29,7 @@ class _Fps:
 
 def _sidebar(lhm=None, fps=None):
     """Sidebar sem construir a janela inteira: so' o rodape interessa."""
-    from dbxstats.ui.components import label
+    from vantage.ui.components import label
 
     s = Sidebar.__new__(Sidebar)
     app = type("A", (), {})()

@@ -13,7 +13,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
-from dbxstats.config import OVERLAY_METRICS, Settings  # noqa: E402
+from vantage.config import OVERLAY_METRICS, Settings  # noqa: E402
 
 
 def main() -> int:

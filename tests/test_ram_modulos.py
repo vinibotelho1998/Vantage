@@ -7,7 +7,7 @@ dict, o rotulo nao carregar o lixo binario que o SPD as vezes devolve, e a
 conversa por SMBus (2,2 ms, mais cara que a CPU inteira) nao entrar no ciclo de
 1 Hz sendo um sensor que nao mexeu 0,01 °C em 15 s.
 """
-from dbxstats.sensors.lhm import LhmReader, _e_modulo_spd
+from vantage.sensors.lhm import LhmReader, _e_modulo_spd
 
 
 class _Sensor:

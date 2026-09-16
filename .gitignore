@@ -25,7 +25,7 @@ venv/
 preview_*.png
 /docs/preview/
 
-# Config pessoal (gerada em %APPDATA%/Dbx Stats)
+# Config pessoal (gerada em %APPDATA%/Vantage)
 /settings.json
 
 # Dependencias de runtime baixaveis (binarios grandes)

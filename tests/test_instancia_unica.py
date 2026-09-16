@@ -8,9 +8,9 @@ import os
 import time
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ.setdefault("DBXSTATS_NO_FILE_LOG", "1")
+os.environ.setdefault("VANTAGE_NO_FILE_LOG", "1")
 
-from dbxstats.platform.instancia import InstanciaUnica  # noqa: E402
+from vantage.platform.instancia import InstanciaUnica  # noqa: E402
 
 
 def test_a_primeira_assume_a_vaga():
@@ -99,7 +99,7 @@ def test_erro_no_callback_nao_derruba_a_escuta():
 def test_escopo_e_da_sessao_de_logon():
     r"""Local\ deixa cada usuario com a sua copia numa troca rapida de usuario;
     o que nao pode e' a MESMA pessoa abrir duas."""
-    from dbxstats.platform import instancia
+    from vantage.platform import instancia
 
     assert instancia.NOME_MUTEX.startswith("Local\\")
     assert instancia.NOME_EVENTO.startswith("Local\\")
