@@ -202,3 +202,5 @@ modificação, cada um com sua licença original na própria pasta.
 O instalador pede aceite dos [TERMOS_DE_USO.txt](TERMOS_DE_USO.txt), que
 cobrem o privilégio de administrador exigido e a instalação do driver
 PawnIO, além da licença MIT.
+
+O apanhado de tudo que vem de terceiros está no [NOTICE.md](NOTICE.md).
