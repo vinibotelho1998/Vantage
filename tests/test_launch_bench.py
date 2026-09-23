@@ -6,6 +6,7 @@ gravador nao deve nem comecar nesse caso.
 import vantage.app as appmod
 from vantage.app import App
 from vantage.config import Settings, _clean_launch_item
+from vantage.core.series import Accumulator, History
 
 
 class _Fps:
@@ -34,6 +35,7 @@ def _app(monkeypatch):
     a._session_priority = ""
     a.session_history = []
     a.stats = type("S", (), {"get": lambda self, k: None})()
+    a._session_env = Accumulator()
     a.notify = lambda *args: None
     a.show_view = lambda *args: None
     monkeypatch.setattr(appmod, "_save_session_history", lambda h: None)
@@ -115,3 +117,60 @@ def test_sem_nome_de_processo_cai_no_apelido(monkeypatch):
                         lambda pid, nome, chave: (vistos.append(nome), (True, "ok"))[1])
     a._apply_launch_priority(1)
     assert vistos == ["Jogo"]
+
+
+# ── sistema durante a partida ────────────────────────────────────────────────
+class _Sessao:
+    def __init__(self, path, args=""):
+        self.path = path
+
+    def start(self):
+        return True, "ok"
+
+
+def _jogar(monkeypatch, a) -> None:
+    """Abre o atalho pelo caminho de verdade, com telas e processo de mentira."""
+    telas = type("D", (), {"snapshot": lambda self: [],
+                           "list_displays": lambda self, with_modes=False: []})()
+    monkeypatch.setattr(appmod, "dsp", telas)
+    monkeypatch.setattr(appmod, "GameSession", _Sessao)
+    a._session_off = ""
+    a._bp_voltar = False
+    ok, _msg = a.play_item({"path": r"C:\Jogos\jogo.exe", "name": "jogo", "bench": True})
+    assert ok
+
+
+def _tique(a, cpu: float, gpu: float) -> None:
+    dados = {"cpu_pct": cpu, "gpu": {"usage": gpu}}
+    a.collector = type("C", (), {"snapshot": lambda self: dict(dados)})()
+    a._tick_system()
+
+
+def test_media_do_sistema_no_resumo_e_so_da_partida(monkeypatch):
+    """O relatorio diz "media do sistema durante a partida", e o numero vinha do
+    acumulador do app inteiro: horas de area de trabalho parada entravam na media
+    do jogo, e duas partidas diferentes saiam com a mesma media."""
+    a = _app(monkeypatch)
+    a.stats = Accumulator()
+    a.history = History(100)
+    a._stream = None
+    a._bench_active = False
+    a.lhm = type("L", (), {"tree": lambda self: []})()
+    a.window = type("W", (), {"isVisible": lambda self: False})()
+    a._check_alerts = lambda d, g: None
+    a._update_tray_tooltip = lambda d, g: None
+
+    for _ in range(300):                    # a tarde inteira com o PC parado
+        _tique(a, cpu=3.0, gpu=1.0)
+    a._session_bench = True                  # uma partida anterior, ja' gravada
+    _tique(a, cpu=50.0, gpu=50.0)
+    a._close_session_bench()
+
+    _jogar(monkeypatch, a)
+    for _ in range(10):
+        _tique(a, cpu=80.0, gpu=97.0)
+    a._close_session_bench()
+
+    registro = a.session_history[-1]
+    assert registro["cpu"] == 80.0
+    assert registro["gpu"] == 97.0

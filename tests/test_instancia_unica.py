@@ -7,10 +7,28 @@ legitima. Nenhuma das duas captura quadros, e o log nao denuncia a causa.
 import os
 import time
 
+import pytest
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("VANTAGE_NO_FILE_LOG", "1")
 
+from vantage.platform import instancia  # noqa: E402
 from vantage.platform.instancia import InstanciaUnica  # noqa: E402
+
+_MUTEX_DO_APP = instancia.NOME_MUTEX
+_EVENTO_DO_APP = instancia.NOME_EVENTO
+
+
+@pytest.fixture(autouse=True)
+def _nomes_so_do_teste(monkeypatch):
+    """Nomes proprios do teste, nunca os do app.
+
+    Com o app aberto na mesma sessao, os nomes de verdade fariam os testes
+    falharem e, pior, o pedido de foco traria a janela dele para a frente.
+    """
+    sufixo = f"teste.{os.getpid()}"
+    monkeypatch.setattr(instancia, "NOME_MUTEX", rf"Local\Vantage.{sufixo}.instancia")
+    monkeypatch.setattr(instancia, "NOME_EVENTO", rf"Local\Vantage.{sufixo}.janela")
 
 
 def test_a_primeira_assume_a_vaga():
@@ -99,7 +117,5 @@ def test_erro_no_callback_nao_derruba_a_escuta():
 def test_escopo_e_da_sessao_de_logon():
     r"""Local\ deixa cada usuario com a sua copia numa troca rapida de usuario;
     o que nao pode e' a MESMA pessoa abrir duas."""
-    from vantage.platform import instancia
-
-    assert instancia.NOME_MUTEX.startswith("Local\\")
-    assert instancia.NOME_EVENTO.startswith("Local\\")
+    assert _MUTEX_DO_APP.startswith("Local\\")
+    assert _EVENTO_DO_APP.startswith("Local\\")

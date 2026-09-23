@@ -75,6 +75,57 @@ def test_sem_edid_nao_chuta():
     assert sem.is_upscaled(Mode(9999, 9999, 60, 32)) is False
 
 
+# ── tela girada ──────────────────────────────────────────────────────────────
+def test_tela_em_retrato_nao_marca_a_propria_nativa_como_escalonada():
+    """O EDID descreve o painel deitado; a lista do driver vem na orientacao
+    atual. Em retrato, 1440 x 2560 E' a nativa de um painel 2560 x 1440, e a
+    tela oferecia justamente ela como "escalonada"."""
+    from vantage.platform.displays import DMDO_90, DMDO_270, Mode
+
+    for giro in (DMDO_90, DMDO_270):
+        tela = _tela_falsa((2560, 1440))
+        tela.rotation = giro
+        assert tela.native_oriented == (1440, 2560)
+        assert tela.is_upscaled(Mode(1440, 2560, 144, 32)) is False
+        assert tela.is_upscaled(Mode(2160, 3840, 60, 32)) is True
+
+
+def test_tela_de_ponta_cabeca_continua_deitada():
+    from vantage.platform.displays import DMDO_180
+
+    tela = _tela_falsa((2560, 1440))
+    tela.rotation = DMDO_180
+    assert tela.native_oriented == (2560, 1440)
+
+
+def test_melhor_modo_em_retrato_e_a_nativa_girada(monkeypatch):
+    """Sem girar a nativa, nada casava e o fallback pegava o maior modo da lista:
+    com VSR ligado, um escalonado que o app reimpunha a cada abertura."""
+    import vantage.platform.displays as D
+
+    modos = [D.Mode(2160, 3840, 60), D.Mode(1440, 2560, 144), D.Mode(1440, 2560, 60),
+             D.Mode(1080, 1920, 144)]
+    monkeypatch.setattr(D, "_supported_modes", lambda _dev: list(modos))
+    monkeypatch.setattr(D, "_monitor_info", lambda _dev: ("GSM5BBF", "", ""))
+    monkeypatch.setattr(D, "edid_native", lambda _hw: (2560, 1440))
+    monkeypatch.setattr(D, "_current_mode", lambda _dev: (modos[1], (0, 0), D.DMDO_90))
+
+    assert D.best_mode(r"\\.\DISPLAY9") == D.Mode(1440, 2560, 144)
+
+
+def test_melhor_modo_deitado_continua_igual(monkeypatch):
+    import vantage.platform.displays as D
+
+    modos = [D.Mode(4096, 2160, 60), D.Mode(3840, 2160, 144), D.Mode(3840, 2160, 60)]
+    monkeypatch.setattr(D, "_supported_modes", lambda _dev: list(modos))
+    monkeypatch.setattr(D, "_monitor_info", lambda _dev: ("TCL9653", "", ""))
+    monkeypatch.setattr(D, "edid_native", lambda _hw: (3840, 2160))
+    monkeypatch.setattr(D, "_current_mode",
+                        lambda _dev: (modos[2], (0, 0), D.DMDO_DEFAULT))
+
+    assert D.best_mode(r"\\.\DISPLAY9") == D.Mode(3840, 2160, 144)
+
+
 # ── espelho ──────────────────────────────────────────────────────────────────
 def test_espelho_liga_todas_e_ancora_numa():
     """O caso do sofa: a imagem vai para a TV sem apagar os monitores da mesa."""

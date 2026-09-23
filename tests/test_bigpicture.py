@@ -241,3 +241,39 @@ def test_combo_do_mouse_nao_abre_a_grade():
     a._bp_back_desde = time.monotonic() - 2
     a._vigiar_atalho_do_sofa()
     assert a.abriu == []
+
+
+# ── rolagem ──────────────────────────────────────────────────────────────────
+def _na_tela(bp, indice) -> bool:
+    r = bp._retangulo(indice)
+    return r.top() >= 0 and r.bottom() <= bp.height()
+
+
+def test_foco_nas_linhas_de_baixo_continua_visivel():
+    """A grade nao rolava: com mais de tres linhas de jogos, descer o foco
+    levava o card escolhido para baixo da borda da TV, e quem estava no sofa
+    apertava A sem ver o que ia abrir."""
+    bp = _bp(jogos=24)
+    for _ in range(5):
+        bp._mover("down")
+    assert bp._foco == 20
+    assert _na_tela(bp, bp._foco)
+    bp.repaint()
+
+
+def test_voltar_para_cima_traz_a_primeira_linha_de_volta():
+    bp = _bp(jogos=24)
+    for _ in range(5):
+        bp._mover("down")
+    for _ in range(5):
+        bp._mover("up")
+    assert bp._foco == 0
+    assert _na_tela(bp, 0)
+
+
+def test_poucos_jogos_nao_rolam():
+    """Com tudo cabendo, a grade fica parada onde sempre esteve."""
+    bp = _bp(jogos=8)
+    antes = bp._retangulo(0)
+    bp._mover("down")
+    assert bp._retangulo(0) == antes

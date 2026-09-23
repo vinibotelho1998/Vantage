@@ -86,3 +86,36 @@ def test_janela_grande_na_frente_nao_e_jogo():
     a.game_in_focus = lambda: False  # ...mas nao e' jogo
     a._apply_load_profile()
     assert a._load_now == "painel"
+
+
+def test_salvar_configuracoes_com_a_janela_escondida_nao_volta_ao_ritmo_cheio(monkeypatch):
+    """A janela de Configuracoes abre tambem pela bandeja, com o painel fechado.
+
+    Salvar mandava o coletor para o intervalo base e deixava o perfil em
+    cache como "fundo": nada o corrigia ate' a janela abrir, e o app ficava
+    lendo todos os sensores seis vezes mais do que o perfil manda, sem
+    ninguem olhando.
+    """
+    import vantage.app as appmod
+
+    a = _app(False, False, None, base=0.5)
+    a._apply_load_profile()
+    assert a.aplicados == [BACKGROUND_INTERVAL_S]
+
+    nada = type("N", (), {"__getattr__": lambda self, n: (lambda *x, **k: None)})()
+    for nome in ("qt", "lhm", "ping", "fps", "history", "tray"):
+        setattr(a, nome, nada)
+    a.window.apply_settings = lambda: None
+    a._apply_overlay = lambda: None
+    a._history_depth = lambda: 100
+    a.settings.accent = "cyan"
+    a.settings.mem_volt_rail = ""
+    a.settings.ping_host, a.settings.ping_port = "8.8.8.8", 53
+    a.settings.fps_window, a.settings.fps_now_window = 60.0, 1.0
+    a.settings.autostart = False
+    a.settings.save = lambda: None
+    monkeypatch.setattr(appmod.autostart, "set_enabled", lambda on: None)
+
+    a.on_settings_changed()
+
+    assert a.aplicados[-1] == BACKGROUND_INTERVAL_S

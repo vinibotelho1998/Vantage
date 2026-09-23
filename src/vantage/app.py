@@ -6,6 +6,7 @@ telas burras (e baratas) e concentra as regras num lugar so.
 from __future__ import annotations
 
 import json
+import os
 import time
 from datetime import datetime
 from functools import partial
@@ -127,6 +128,8 @@ class App:
         self._session_bench = False
         """O atalho aberto pediu para gravar a partida."""
         self._session_priority = ""
+        self._session_env = Accumulator()
+        """Sistema durante a partida gravada; ver _close_session_bench."""
         self.session_history: list[dict] = _load_session_history()
         self._game_pid = 0
         self._game_name = ""
@@ -263,7 +266,13 @@ class App:
             self._hotkeys.unregister_all()
         self.gamepad.stop()
         self.peers.stop()
-        self._restore_displays()
+        try:
+            self._restore_displays()
+        except Exception:
+            # Falhar aqui nao pode travar o resto: e' logo abaixo que o
+            # PresentMon recebe o pedido de sair. Sem isso o app ficava
+            # pendurado, e mata-lo a forca deixava a sessao ETW orfa.
+            _log.exception("falha devolvendo as telas ao fechar")
         self.collector.stop()
         self.procs.stop()
         self.ping.stop()
@@ -309,6 +318,7 @@ class App:
         self._session_bench = bool(item.get("bench", True))
         self._bp_voltar = bool(item.get("voltar_bp", False))
         if self._session_bench:
+            self._session_env = Accumulator()
             self.fps.session_start(0)
         self._session_bench_pid = 0
         self._session_priority = str(item.get("priority", ""))
@@ -593,8 +603,11 @@ class App:
             "game": self._session_name or resumo.get("game", "jogo"),
             **resumo,
         }
-        for chave, fonte in _SYSTEM_KEYS:
-            agg = self.stats.get(fonte)
+        # A media sai do acumulador da propria partida. O relatorio diz "media do
+        # sistema durante a partida", e o numero vinha do acumulador do app
+        # inteiro: horas de area de trabalho parada entravam na media do jogo.
+        for chave, _fonte in _SYSTEM_KEYS:
+            agg = self._session_env.get(chave)
             if agg:
                 registro[chave] = round(agg[1], 1)
         self.session_history.append(registro)
@@ -996,6 +1009,9 @@ class App:
         if self._bench_active:
             for key, source in _SYSTEM_KEYS:
                 self._bench_env.update(key, self.stats.last(source))
+        if self._session_bench:
+            for key, source in _SYSTEM_KEYS:
+                self._session_env.update(key, self.stats.last(source))
 
         if self.window.isVisible():
             self.window.tick_system(data)
@@ -1202,8 +1218,13 @@ class App:
         widget fora do laco do Qt trava a interface de formas dificeis de
         reproduzir. O singleShot de zero devolve a chamada para a thread certa
         antes de qualquer coisa acontecer.
+
+        O `self.qt` no meio e' o que faz isso funcionar. Sem objeto de contexto o
+        timer nasce na thread que chamou, que nao tem laco de eventos, e nunca
+        dispara: a segunda copia saia avisando que tinha trazido a primeira, e a
+        primeira continuava escondida na bandeja.
         """
-        QTimer.singleShot(0, self._trazer_agora)
+        QTimer.singleShot(0, self.qt, self._trazer_agora)
 
     def _trazer_agora(self) -> None:
         # Minimizada ou escondida na bandeja sao estados diferentes, e os dois
@@ -1247,15 +1268,17 @@ class App:
     def on_settings_changed(self) -> None:
         cfg = self.settings
         self.qt.setStyleSheet(style.build_qss(cfg.accent))
-        self.collector.set_interval(cfg.update_interval)
         self.lhm.mem_rail = cfg.mem_volt_rail
         self.ping.configure(cfg.ping_host, cfg.ping_port)
         self.fps.set_windows(cfg.fps_window, cfg.fps_now_window)
         self.history.resize(self._history_depth())
-        if self._t_sys is not None:
-            self._t_sys.setInterval(int(cfg.update_interval * 1000))
         self.window.apply_settings()
         self._apply_overlay()
+        # O ritmo sai do perfil de quem esta' olhando, e nao direto do intervalo
+        # base: salvar pela bandeja, com a janela fechada, deixava o coletor no
+        # ritmo cheio e o perfil em cache dizendo "fundo", sem nada que corrigisse.
+        self._load_now = ""
+        self._apply_load_profile()
         self.tray.sync()
         autostart.set_enabled(cfg.autostart)
         cfg.save()
@@ -1441,14 +1464,20 @@ class App:
     def benchmark_export(self):
         if not self._bench_result:
             return None
-        return export.export_frames(self._bench_result["samples"],
-                                    self._bench_result["game"])
+        # O resultado que voltou do disco nao traz as amostras cruas, so' os
+        # frametimes: exportar dele gravava um CSV so' com o cabecalho, e a tela
+        # ainda anunciava "exportado".
+        amostras = (self._bench_result.get("samples")
+                    or _amostras_dos_frametimes(self._bench_result.get("frametimes") or []))
+        if not amostras:
+            return None
+        return export.export_frames(amostras, self._bench_result["game"])
 
 
 _NOT_A_GAME = {
     "explorer.exe", "dwm.exe", "applicationframehost.exe", "shellexperiencehost.exe",
     "searchhost.exe", "startmenuexperiencehost.exe", "textinputhost.exe",
-    "pythonw.exe", "vantage.exe", "vantage.exe",
+    "pythonw.exe", "vantage.exe",
 }
 """Janelas que podem ficar em tela cheia sem serem o jogo que acabamos de abrir."""
 
@@ -1515,21 +1544,72 @@ def _summary_row(m: fr.FrameMetrics) -> dict:
     return {k: v for k, v in m.as_dict().items() if isinstance(v, (int, float))}
 
 
+def _amostras_dos_frametimes(frametimes) -> list[tuple]:
+    """Amostras so' com tempo e frametime, montadas do que ficou gravado.
+
+    O tempo e' o frametime acumulado, em segundos a partir do primeiro quadro; as
+    colunas que so' a captura ao vivo tinha saem vazias no CSV, e nao zeradas.
+    """
+    saida: list[tuple] = []
+    tempo = 0.0
+    for bruto in frametimes:
+        try:
+            ft = float(bruto)
+        except (TypeError, ValueError):
+            continue
+        if not 0.0 < ft < 1e6:          # zero, negativo, NaN e infinito ficam de fora
+            continue
+        tempo += ft / 1000.0
+        saida.append((tempo, ft) + (fr.NAN,) * 6)
+    return saida
+
+
+def _gravar_json(caminho: Path, dados) -> None:
+    """Grava inteiro ou nao grava: escreve ao lado e troca de uma vez.
+
+    Escrever direto no arquivo trunca antes de gravar. Disco cheio, ou o app
+    derrubado no meio, deixava o historico vazio; a abertura seguinte lia lista
+    nenhuma e a proxima gravacao confirmava a perda por cima. E' o mesmo
+    cuidado que o settings.json ja' tinha.
+    """
+    temporario = caminho.with_name(caminho.name + ".tmp")
+    try:
+        temporario.write_text(json.dumps(dados, ensure_ascii=False), encoding="utf-8")
+        os.replace(temporario, caminho)
+    except Exception:
+        try:
+            temporario.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
+
+def _so_registros(dados) -> list[dict]:
+    """Lista de registros, ou lista vazia: outro formato nao vira historico.
+
+    Um texto no lugar da lista passava pelo fatiamento (texto tambem fatia) e
+    o `append` da partida seguinte derrubava o app.
+    """
+    if not isinstance(dados, list):
+        return []
+    return [r for r in dados if isinstance(r, dict)]
+
+
 def _session_file():
     return paths.data_dir() / "sessoes.json"
 
 
 def _load_session_history() -> list[dict]:
     try:
-        return json.loads(_session_file().read_text(encoding="utf-8"))[-SESSION_HISTORY_MAX:]
+        dados = json.loads(_session_file().read_text(encoding="utf-8"))
     except Exception:
         return []
+    return _so_registros(dados)[-SESSION_HISTORY_MAX:]
 
 
 def _save_session_history(history: list[dict]) -> None:
     try:
-        _session_file().write_text(json.dumps(history, ensure_ascii=False),
-                                   encoding="utf-8")
+        _gravar_json(_session_file(), history)
     except OSError:
         _log.warning("nao consegui guardar o historico de sessoes")
 
@@ -1551,48 +1631,53 @@ def _save_last_bench(resultado: dict) -> None:
     """
     try:
         m = resultado["metrics"]
-        _last_bench_file().write_text(json.dumps({
+        _gravar_json(_last_bench_file(), {
             "quando": datetime.now().strftime("%d/%m/%Y %H:%M"),
             "game": resultado.get("game", ""),
             "metrics": {k: v for k, v in m.as_dict().items()
                         if isinstance(v, (int, float, str)) or v is None},
             "frametimes": [round(f, 3) for f in resultado.get("frametimes", [])],
             "system": {k: list(v) for k, v in (resultado.get("system") or {}).items()},
-        }, ensure_ascii=False), encoding="utf-8")
+        })
     except Exception:
         _log.exception("nao consegui guardar o ultimo benchmark")
 
 
 def _load_last_bench() -> dict | None:
+    """O ultimo resultado salvo, ou None se o arquivo nao servir.
+
+    Roda dentro do construtor do App: qualquer excecao aqui era o app que nao
+    abria mais, ate' alguem achar o arquivo e apaga-lo na mao.
+    """
     try:
         bruto = json.loads(_last_bench_file().read_text(encoding="utf-8"))
+        metrics = fr.FrameMetrics()
+        for chave, valor in (bruto.get("metrics") or {}).items():
+            if hasattr(metrics, chave):
+                setattr(metrics, chave, valor)
+        return {
+            "_rev": 0,
+            "quando": bruto.get("quando", ""),
+            "game": bruto.get("game", ""),
+            "metrics": metrics,
+            "frametimes": list(bruto.get("frametimes") or []),
+            "samples": [],
+            "system": {k: tuple(v) for k, v in (bruto.get("system") or {}).items()},
+        }
     except Exception:
         return None
-    metrics = fr.FrameMetrics()
-    for chave, valor in (bruto.get("metrics") or {}).items():
-        if hasattr(metrics, chave):
-            setattr(metrics, chave, valor)
-    return {
-        "_rev": 0,
-        "quando": bruto.get("quando", ""),
-        "game": bruto.get("game", ""),
-        "metrics": metrics,
-        "frametimes": bruto.get("frametimes") or [],
-        "samples": [],
-        "system": {k: tuple(v) for k, v in (bruto.get("system") or {}).items()},
-    }
 
 
 def _load_bench_history() -> list[dict]:
     try:
-        return json.loads(_bench_file().read_text(encoding="utf-8"))[-BENCH_HISTORY_MAX:]
+        dados = json.loads(_bench_file().read_text(encoding="utf-8"))
     except Exception:
         return []
+    return _so_registros(dados)[-BENCH_HISTORY_MAX:]
 
 
 def _save_bench_history(history: list[dict]) -> None:
     try:
-        _bench_file().write_text(json.dumps(history, ensure_ascii=False),
-                                 encoding="utf-8")
+        _gravar_json(_bench_file(), history)
     except OSError:
         pass
