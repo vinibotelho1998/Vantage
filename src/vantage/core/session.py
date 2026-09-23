@@ -65,8 +65,8 @@ class GameSession:
         self._seen_alive = False
         try:
             if alvo.suffix.lower() == ".exe":
-                argv = [str(alvo), *_split_args(self.args)]
-                self._proc = subprocess.Popen(argv, cwd=str(alvo.parent))
+                self._proc = subprocess.Popen(_linha_de_comando(alvo, self.args),
+                                              cwd=str(alvo.parent))
             else:
                 os.startfile(str(alvo))  # noqa: S606, atalho/URL fica com o shell
         except OSError as e:
@@ -133,14 +133,20 @@ class GameSession:
         return self._seen_alive
 
 
-def _split_args(raw: str) -> list[str]:
-    if not raw.strip():
-        return []
-    try:
-        import shlex
-        return shlex.split(raw, posix=False)
-    except ValueError:
-        return raw.split()
+def _linha_de_comando(exe, args: str) -> str:
+    """Linha de comando do jogo, com os argumentos exatamente como digitados.
+
+    Os argumentos seguem crus, como no campo "Destino" de um atalho do Windows.
+    Quebrar em lista e deixar o subprocess remontar escapava as aspas do
+    usuario: `-map "de dust"` chegava ao jogo como `"de dust"`, com as aspas
+    dentro do valor, e um caminho entre aspas virava caminho que nao existe.
+    """
+    linha = subprocess.list2cmdline([str(exe)])
+    extra = (args or "").strip()
+    return f"{linha} {extra}" if extra else linha
+
+
+_VAR_ATALHO = "VANTAGE_ATALHO"
 
 
 def resolve_shortcut(path: str) -> str:
@@ -148,14 +154,23 @@ def resolve_shortcut(path: str) -> str:
 
     Windows guarda atalho em formato binario proprio; o caminho barato de ler
     isso sem dependencia nova e' pedir para o WScript.Shell.
+
+    O caminho entra por variavel de ambiente, e nao colado no script: colado
+    entre aspas simples, o apostrofo de "Assassin's Creed.lnk" fechava a string
+    no meio e o resto do nome virava codigo do PowerShell. A saida vem em UTF-8
+    porque, na pagina OEM do console, "Ação" chegava aqui como "A‡ao" e o alvo
+    resolvido nunca existia.
     """
     if not path.lower().endswith(".lnk"):
         return path
-    script = (f"$s=(New-Object -COM WScript.Shell).CreateShortcut('{path}');"
+    script = ("[Console]::OutputEncoding=New-Object System.Text.UTF8Encoding $false;"
+              f"$s=(New-Object -COM WScript.Shell).CreateShortcut($env:{_VAR_ATALHO});"
               "Write-Output $s.TargetPath")
     try:
-        out = subprocess.run(["powershell", "-NoProfile", "-Command", script],
-                             capture_output=True, text=True, timeout=8,
+        out = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+                             capture_output=True, text=True, encoding="utf-8-sig",
+                             errors="replace", timeout=8,
+                             env={**os.environ, _VAR_ATALHO: path},
                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         alvo = out.stdout.strip()
         return alvo if alvo and Path(alvo).exists() else path
