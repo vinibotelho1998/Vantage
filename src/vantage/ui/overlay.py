@@ -720,7 +720,9 @@ class GameOverlay(QWidget):
             jogo_v = (d.get("game_vram")
                       if "jogo_vram" in metrics and d.get("game_pid") == pid_v and pid_v
                       else None)
-            par = f"{usado:.1f}/{total:.1f}GB" if total else ""
+            # Sem NVML o par vem do LHM, e o uso pode faltar num ciclo em que o
+            # total veio; formatar o None derrubava a repintura inteira.
+            par = f"{usado:.1f}/{total:.1f}GB" if total and usado is not None else ""
             barra = _barra(usado, total, theme.DISK,
                            destaque=(jogo_v or 0) / 1024.0 if jogo_v else None)
             if volts_mem and g.get("vram_volts"):

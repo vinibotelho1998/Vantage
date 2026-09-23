@@ -173,3 +173,20 @@ def test_paineis_sobrevivem_quando_ainda_ha_sessao_escolhida():
 
     assert [s["game"] for s in app.session_history] == ["B"]
     assert v.result_rows.valores == {}
+
+
+# ── exportacao ───────────────────────────────────────────────────────────────
+def test_exportacao_que_falhou_nao_diz_que_salvou(monkeypatch):
+    """`export_sessions` devolve None quando o disco recusa; a tela dizia
+    "Salvo em None", e a pessoa ia procurar um arquivo que nunca existiu."""
+    from vantage.core import export
+
+    v, _app = _view([{"game": "A"}])
+    avisos = []
+    v.aviso_sessao = type("L", (), {"setText": lambda self, t: avisos.append(t)})()
+    monkeypatch.setattr(export, "export_sessions", lambda linhas, nome: None)
+
+    v._salvar([{"game": "A"}], "A")
+
+    assert avisos and "None" not in avisos[-1]
+    assert not avisos[-1].startswith("Salvo")

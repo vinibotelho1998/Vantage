@@ -509,6 +509,11 @@ class BenchmarkView(View):
         except Exception as e:                                   # noqa: BLE001
             self.aviso_sessao.setText(f"Não consegui salvar: {e}")
             return
+        if caminho is None:
+            # O exportador engole o OSError e devolve None; sem esta conferencia
+            # a tela dizia "Salvo em None" sobre um arquivo que nao existe.
+            self.aviso_sessao.setText("Não consegui salvar o CSV: o disco recusou a gravação.")
+            return
         self.aviso_sessao.setText(f"Salvo em {caminho}")
 
     def on_activate(self) -> None:

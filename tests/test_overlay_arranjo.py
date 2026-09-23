@@ -521,3 +521,19 @@ def test_linha_de_memoria_nao_estica_as_colunas_das_pecas():
     painel = _montar(_snapshot(), _Stream())
     assert ("ram", ov.CLOCK) not in painel._cels
     assert ("vram", ov.VOLT) not in painel._cels
+
+
+def test_placa_com_total_de_vram_e_sem_o_uso_nao_derruba_o_overlay():
+    """Sem NVML a VRAM vem do LHM, e o uso pode faltar num ciclo em que o total
+    veio: sensor que publica NaN ate' o driver ter leitura, ou iGPU que chama o
+    uso de outra coisa. O par "usado/total" formatava o None e o overlay
+    levantava a cada repintura: a linha da RAM e o rodape paravam no ultimo
+    numero, e o log ganhava tres tracebacks por segundo a partida inteira."""
+    import vantage.ui.overlay as ov
+
+    d = _snapshot()
+    d["gpu"]["vram_used"] = None
+    painel = _montar(d, _Stream())
+
+    assert "GB" not in _texto(painel, "vram", ov.CARGA)
+    assert "GB" in _texto(painel, "ram", ov.CARGA)
