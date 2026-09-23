@@ -1,4 +1,4 @@
-"""Monitor de processos: top consumidores de CPU/RAM, atualizado numa cadencia propria.
+"""Monitor de processos: todos os processos com CPU e RAM, numa cadencia propria.
 
 Alem de olhar, a tela tambem age: encerrar, mudar prioridade e mudar afinidade
 moram aqui embaixo, longe do Qt, para poderem ser testados sem abrir janela.
@@ -32,9 +32,8 @@ class ProcInfo:
 
 
 class ProcessMonitor:
-    def __init__(self, interval: float = 2.5, limit: int = 40) -> None:
+    def __init__(self, interval: float = 2.5) -> None:
         self._interval = interval
-        self._limit = limit
         self._procs: list[ProcInfo] = []
         self._count = 0
         self._threads_total = 0
@@ -98,9 +97,12 @@ class ProcessMonitor:
                     threads=info["num_threads"] or 0, is_game=info["pid"] in games))
             except (psutil.Error, AttributeError, TypeError):
                 continue
+        # A lista vai inteira: o corte em "top N" fica com quem mostra um ranking.
+        # Cortar aqui escondia da aba Processos o navegador parado a 0% de CPU
+        # comendo 3 GB, e o filtro por nome nao achava o app travado.
         rows.sort(key=lambda r: (-r.cpu, -r.ram_mb))
         with self._lock:
-            self._procs = rows[:self._limit]
+            self._procs = rows
             self._count = count
             self._threads_total = threads_total
 
