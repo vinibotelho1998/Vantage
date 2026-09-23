@@ -76,19 +76,28 @@ class Collector:
         return dict(self._static)
 
     def _loop(self) -> None:
-        psutil.cpu_percent(interval=None)
-        psutil.cpu_percent(interval=None, percpu=True)
-        time.sleep(0.6)
-        while not self._stop.is_set():
-            started = time.monotonic()
-            try:
-                data = self._collect()
-                with self._lock:
-                    self._data = data
-            except Exception:
-                _log.exception("erro no ciclo de coleta")
-            elapsed = time.monotonic() - started
-            self._stop.wait(max(0.05, self._interval - elapsed))
+        # O WMI que esta thread consulta (frequencia da RAM, driver da GPU) e'
+        # COM, e COM recusa thread que nao se apresentou a ele: sem isto as duas
+        # consultas falhavam com "CoInitialize nao foi chamado", o erro ia para
+        # o log de depuracao e o cache guardava a falha para sempre.
+        com = _entrar_no_com()
+        try:
+            psutil.cpu_percent(interval=None)
+            psutil.cpu_percent(interval=None, percpu=True)
+            time.sleep(0.6)
+            while not self._stop.is_set():
+                started = time.monotonic()
+                try:
+                    data = self._collect()
+                    with self._lock:
+                        self._data = data
+                except Exception:
+                    _log.exception("erro no ciclo de coleta")
+                elapsed = time.monotonic() - started
+                self._stop.wait(max(0.05, self._interval - elapsed))
+        finally:
+            if com:
+                _sair_do_com()
 
     def _collect(self) -> dict:
         now = time.monotonic()
@@ -102,8 +111,10 @@ class Collector:
         swap = psutil.swap_memory()
 
         net = psutil.net_io_counters()
-        dl = (net.bytes_recv - self._prev_net.bytes_recv) / dt
-        ul = (net.bytes_sent - self._prev_net.bytes_sent) / dt
+        # O contador soma todas as interfaces: uma VPN que desliga tira os bytes
+        # dela de uma vez e a diferenca sairia negativa, como no disco.
+        dl = max(0.0, (net.bytes_recv - self._prev_net.bytes_recv) / dt)
+        ul = max(0.0, (net.bytes_sent - self._prev_net.bytes_sent) / dt)
         self._prev_net = net
 
         dio = psutil.disk_io_counters()
@@ -374,6 +385,30 @@ class _GameMemory:
         if private:
             dados["game_ram_private"] = round(private / 1024 ** 2, 1)
         return dados
+
+
+def _entrar_no_com() -> bool:
+    """Apresenta a thread atual ao COM, no modelo livre.
+
+    Livre, e nao apartamento: esta thread nao roda laco de mensagens, e e' o
+    mesmo modelo que o .NET assume quando o LibreHardwareMonitor e' chamado
+    daqui. Falhar nao derruba nada: so' as consultas WMI ficam sem resposta.
+    """
+    try:
+        import pythoncom
+        pythoncom.CoInitializeEx(pythoncom.COINIT_MULTITHREADED)
+        return True
+    except Exception as e:                                   # noqa: BLE001
+        _log.debug("COM indisponivel na thread do coletor: %s", e)
+        return False
+
+
+def _sair_do_com() -> None:
+    try:
+        import pythoncom
+        pythoncom.CoUninitialize()
+    except Exception:                                        # noqa: BLE001
+        pass
 
 
 def _safe_usage(mount: str) -> tuple[float, float, float]:

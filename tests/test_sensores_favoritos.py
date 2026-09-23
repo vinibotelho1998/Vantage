@@ -400,3 +400,19 @@ def test_settings_sem_o_campo_nao_derruba_a_aba():
     view.on_system({})
 
     assert [t for t, _ in _estrutura(view)] == [CPU, GPU]
+
+
+# ── exportacao ───────────────────────────────────────────────────────────────
+def test_exportacao_recusada_avisa_em_vez_de_ficar_calada(monkeypatch):
+    """`export_sensors` devolve None quando o disco recusa; o botao ficava mudo
+    e parecia simplesmente nao funcionar."""
+    from vantage.core import export
+
+    view = _tela()
+    avisos = []
+    view.app.notify = lambda titulo, texto: avisos.append(texto)
+    monkeypatch.setattr(export, "export_sensors", lambda nodes, stats: None)
+
+    view._export()
+
+    assert avisos and "Não consegui" in avisos[-1]

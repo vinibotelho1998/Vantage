@@ -222,6 +222,14 @@ class GpuReader:
             _log.info("nvidia-smi nao encontrado; fallback de watts desativado")
             return
         while not self._stop.is_set():
+            # Reserva e' so' reserva: com a NVML entregando o consumo, subir um
+            # processo a cada dois segundos a partida inteira e' custo no pior
+            # momento. O valor antigo sai junto, para nao ficar parado na tela.
+            if self.watts_nvml() is not None:
+                with self._smi_lock:
+                    self._smi_watts = None
+                self._stop.wait(2.0)
+                continue
             try:
                 out = subprocess.check_output(
                     [nsmi, "--query-gpu=power.draw", "--format=csv,noheader,nounits"],

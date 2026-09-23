@@ -169,3 +169,39 @@ def test_dado_do_windows_nao_e_sobrescrito_pelo_lhm():
         [{"name": "NVMe X", "temp": 99.0, "life": 95.0}])
     assert juntos[0]["temp"] == 41.0
     assert juntos[0]["life"] == 95.0
+
+
+def test_consulta_que_quebra_nao_trava_a_sonda_para_sempre(monkeypatch):
+    """A saida do PowerShell era lida numa pagina de codigo e escrita em outra.
+
+    Um byte que nao existe na pagina de leitura levantava UnicodeDecodeError,
+    que passava por fora do `except`: a thread morria com `_ocupado` ligado, e
+    a sonda nunca mais consultava nada ate' o app ser reaberto.
+    """
+    def _quebra(*_a, **_k):
+        raise UnicodeDecodeError("cp1252", b"\x81", 0, 1, "caractere indefinido")
+
+    monkeypatch.setattr(diskhealth.subprocess, "run", _quebra)
+    sonda = diskhealth.ReliabilityProbe(intervalo=0.0)
+    sonda._ocupado = True
+
+    sonda._consultar()
+
+    assert sonda._ocupado is False
+    assert sonda.erro
+
+
+def test_saida_do_powershell_e_lida_em_utf8(monkeypatch):
+    """O script pede UTF-8 ao console e a leitura usa o mesmo: nome de disco e
+    queixa do Windows em portugues chegam inteiros."""
+    visto = {}
+
+    def _run(cmd, **kw):
+        visto["script"], visto["kw"] = cmd[-1], kw
+        return diskhealth.subprocess.CompletedProcess(cmd, 0, "[]", "")
+
+    monkeypatch.setattr(diskhealth.subprocess, "run", _run)
+    diskhealth.ReliabilityProbe()._consultar()
+
+    assert "UTF8Encoding" in visto["script"]
+    assert visto["kw"]["encoding"].lower().startswith("utf-8")

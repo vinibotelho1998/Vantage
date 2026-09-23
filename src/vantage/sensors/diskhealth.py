@@ -38,7 +38,11 @@ _TIMEOUT_S = 25.0
 # Get-StorageReliabilityCounter abre o disco fisico; sem elevacao o WMI recusa
 # com "acesso a um recurso CIM nao estava disponivel". Como o app inteiro pede
 # elevacao, isso so' aparece se alguem rodar o fonte sem ser admin.
+# A primeira linha poe o console em UTF-8: sem ela o PowerShell escreve na
+# pagina OEM (850 aqui) e o Python le' na ANSI (1252), trocando letras e, com o
+# byte errado, derrubando a leitura inteira.
 _SCRIPT = r"""
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
 $ErrorActionPreference = 'SilentlyContinue'
 $letras = @{}
 foreach ($p in Get-Partition) {
@@ -301,7 +305,8 @@ class ReliabilityProbe:
         try:
             saida = subprocess.run(
                 ["powershell", "-NoProfile", "-NonInteractive", "-Command", _SCRIPT],
-                capture_output=True, text=True, timeout=_TIMEOUT_S,
+                capture_output=True, text=True, encoding="utf-8-sig", errors="replace",
+                timeout=_TIMEOUT_S,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             dados = parse_physical(saida.stdout)
             if not dados:
@@ -310,6 +315,11 @@ class ReliabilityProbe:
             erro = "A consulta de saúde dos discos demorou demais e foi cancelada."
         except (OSError, subprocess.SubprocessError) as e:
             _log.debug("Get-PhysicalDisk falhou: %s", e)
+            erro = "Não foi possível consultar a saúde dos discos nesta máquina."
+        except Exception:                                    # noqa: BLE001
+            # Qualquer outra falha tem de cair aqui: escapar pela thread deixava
+            # `_ocupado` ligado e a sonda nunca mais consultava nada.
+            _log.exception("consulta de saude dos discos falhou")
             erro = "Não foi possível consultar a saúde dos discos nesta máquina."
         with self._lock:
             self._dados = dados

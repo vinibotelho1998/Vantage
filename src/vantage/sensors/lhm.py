@@ -5,6 +5,7 @@ Alem do dicionario curado usado pelos cards, expoe a arvore completa de sensores
 """
 from __future__ import annotations
 
+import math
 import os
 import sys
 import threading
@@ -75,6 +76,24 @@ class SensorNode:
     kind: str
     unit: str
     value: float
+
+
+def _leitura(sensor) -> float | None:
+    """Valor do sensor como float, ou None quando nao e' numero de verdade.
+
+    O LHM publica float anulavel, e ha' sensor que entrega NaN ou infinito
+    enquanto o driver ainda nao tem leitura. Um `int(nan)` no meio da varredura
+    derrubava o ciclo inteiro: todo o hardware depois daquele sensor sumia da
+    tela, e a arvore da aba Sensores parava, a cada leitura.
+    """
+    valor = sensor.Value
+    if valor is None:
+        return None
+    try:
+        f = float(valor)
+    except (TypeError, ValueError):
+        return None
+    return f if math.isfinite(f) else None
 
 
 def _gpu_score(g: dict) -> tuple:
@@ -229,14 +248,14 @@ class LhmReader:
         hw_name = str(hw.Name)
         label = f"{parent} · {hw_name}" if parent else hw_name
         for s in hw.Sensors:
-            value = s.Value
+            value = _leitura(s)
             if value is None:
                 continue
             kind = str(s.SensorType)
             name = str(s.Name)
             out.append(SensorNode(
                 key=f"{label}/{kind}/{name}", hardware=label, hw_type=hw_type,
-                name=name, kind=kind, unit=UNITS.get(kind, ""), value=float(value)))
+                name=name, kind=kind, unit=UNITS.get(kind, ""), value=value))
 
     def _dispatch(self, hw, result: dict, gpus: list) -> None:
         hw_type = str(hw.HardwareType)
@@ -262,10 +281,9 @@ class LhmReader:
         for s in hw.Sensors:
             st = str(s.SensorType)
             name = str(s.Name)
-            val = s.Value
-            if val is None:
+            f = _leitura(s)
+            if f is None:
                 continue
-            f = float(val)
             if st == "Temperature":
                 temps_by_name[name] = f
                 if ("CCD" not in name and "Core" in name and "Max" not in name
@@ -343,10 +361,9 @@ class LhmReader:
         for s in hw.Sensors:
             st = str(s.SensorType)
             name = str(s.Name)
-            val = s.Value
-            if val is None:
+            f = _leitura(s)
+            if f is None:
                 continue
-            f = float(val)
             if st == "Temperature" and name == "GPU Core" and f > 0:
                 g["temp"] = int(f)
             elif st == "Temperature" and "Hot Spot" in name and f > 0:
@@ -407,10 +424,9 @@ class LhmReader:
         for s in hw.Sensors:
             st = str(s.SensorType)
             name = str(s.Name)
-            val = s.Value
-            if val is None:
+            f = _leitura(s)
+            if f is None:
                 continue
-            f = float(val)
             if st == "Data" and "Virtual" in name and "Used" in name:
                 result["swap_used_lhm"] = round(f, 2)
             elif st == "Data" and "Used" in name:
@@ -431,17 +447,18 @@ class LhmReader:
         """
         modulo: dict = {}
         for s in hw.Sensors:
-            if s.Value is None:
+            valor = _leitura(s)
+            if valor is None:
                 continue
-            if str(s.SensorType) == "Voltage" and float(s.Value) > 0:
+            if str(s.SensorType) == "Voltage" and valor > 0:
                 # Trilho do proprio pente, quando o modulo publica. Preenche a
                 # coluna de tensao que ficava vazia na linha da RAM.
-                result.setdefault("ram_volts", round(float(s.Value), 3))
+                result.setdefault("ram_volts", round(valor, 3))
                 continue
             if str(s.SensorType) != "Temperature":
                 continue
             name = str(s.Name)
-            f = round(float(s.Value), 2)
+            f = round(valor, 2)
             # Os limites vem de fabrica no proprio pente: e' a faixa certa para
             # colorir a leitura, em vez de um numero chutado no app.
             if "Critical High" in name:
@@ -468,12 +485,12 @@ class LhmReader:
         for sub in hw.SubHardware:
             sub.Update()
             for s in sub.Sensors:
-                if s.Value is None:
+                f = _leitura(s)
+                if f is None:
                     continue
                 st = str(s.SensorType)
                 nome = str(s.Name)
                 nl = nome.lower()
-                f = float(s.Value)
                 if st == "Fan" and f > 0:
                     fans.append(int(f))
                     if "cpu" in nl:
@@ -536,10 +553,9 @@ class LhmReader:
         for s in hw.Sensors:
             st = str(s.SensorType)
             name = str(s.Name)
-            val = s.Value
-            if val is None:
+            f = _leitura(s)
+            if f is None:
                 continue
-            f = float(val)
             if st == "Temperature" and ("Composite" in name or name == "Temperature") and f > 0:
                 entry["temp"] = round(f, 1)
             elif st == "Data" and "Total Space" in name:

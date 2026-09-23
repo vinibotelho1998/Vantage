@@ -80,3 +80,29 @@ def test_endereco_local_concreto_vira_interface_de_escuta():
     """Jogo atras de VPN declara o IP do adaptador; e' nele que os pacotes passam."""
     portas, enderecos = peer.local_endpoints(0)
     assert (portas, enderecos) == (set(), set())
+
+
+def test_endereco_v6_nao_vira_interface_da_escuta_ipv4(monkeypatch):
+    """A escuta e' IPv4 (socket AF_INET, cabecalho de 20 bytes). Um endereco v6
+    escolhido como interface fazia o `bind` falhar a cada passada, e o jogo nunca
+    tinha servidor nem latencia medidos. Nada aqui abre socket de verdade."""
+    from collections import namedtuple
+
+    endereco = namedtuple("endereco", "ip port")
+    conexao = namedtuple("conexao", "type laddr")
+
+    class _Processo:
+        def __init__(self, _pid):
+            pass
+
+        def net_connections(self, kind="inet"):
+            return [conexao(socket.SOCK_DGRAM, endereco("2804:14c:65:8000::1a2b", 3074)),
+                    conexao(socket.SOCK_DGRAM, endereco("192.168.0.20", 3075)),
+                    conexao(socket.SOCK_DGRAM, endereco("::", 3076))]
+
+    monkeypatch.setattr(peer.psutil, "Process", _Processo)
+
+    portas, enderecos = peer.local_endpoints(4242)
+
+    assert portas == {3074, 3075, 3076}
+    assert enderecos == {"192.168.0.20"}

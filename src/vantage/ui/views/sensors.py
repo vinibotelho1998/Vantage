@@ -370,3 +370,8 @@ class SensorsView(View):
         path = export_sensors(self.app.lhm.tree(), self.app.stats)
         if path:
             self.app.notify("Vantage", f"Sensores exportados para {path.name}")
+        else:
+            # O exportador engole o OSError e devolve None; sem este aviso o
+            # botao parecia simplesmente nao fazer nada.
+            self.app.notify("Vantage", "Não consegui salvar os sensores: "
+                                       "o disco recusou a gravação.")

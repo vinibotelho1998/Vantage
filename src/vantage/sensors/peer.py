@@ -118,7 +118,10 @@ def local_endpoints(pid: int) -> tuple[set[int], set[str]]:
             continue
         portas.add(c.laddr.port)
         ip = getattr(c.laddr, "ip", "")
-        if ip and not ip.startswith(("0.", "127.", "::")):
+        # So' IPv4: a escuta abre socket AF_INET e le' cabecalho IPv4. Um
+        # endereco v6 aqui virava o `bind` da escuta, que falhava sempre, e o
+        # jogo com um socket v6 nunca tinha servidor nem latencia medidos.
+        if ip and ":" not in ip and not ip.startswith(("0.", "127.")):
             enderecos.add(ip)
     return portas, enderecos
 

@@ -81,7 +81,9 @@ class ProcessVram:
     # derruba o fps. `Non Local Usage` (memoria do sistema usada como VRAM) fica
     # de fora: ela cresce justamente DEPOIS que a dedicada acabou, e mistura-la
     # ao total esconderia o momento em que o problema comecou.
-    CONTADOR = r"\GPU Process Memory(pid_{pid}*)\Local Usage"
+    # O "_" antes do curinga fecha o numero: sem ele, pid_1066* casava tambem
+    # pid_10660 e pid_10668, e a VRAM deles entrava na conta do jogo.
+    CONTADOR = r"\GPU Process Memory(pid_{pid}_*)\Local Usage"
 
     def __init__(self) -> None:
         self._wanted = 0

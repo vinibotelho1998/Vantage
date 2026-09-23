@@ -134,3 +134,23 @@ def test_gpu_com_sensor_de_memoria_continua_calculando_a_porcentagem(coletor):
     assert gpu["vram_used"] == 2512
     assert gpu["vram_total"] == 16304
     assert 15.0 < gpu["vram_pct"] < 16.0
+
+
+def test_interface_de_rede_que_some_nao_vira_taxa_negativa(coletor, monkeypatch):
+    """O contador do psutil e' a soma de todas as interfaces.
+
+    Desligar a VPN (ou o Wi-Fi) tira os bytes dela da soma de uma vez, e a
+    diferenca contra o ciclo anterior saia negativa: o painel mostrava download
+    de "-40 MB/s" e o grafico mergulhava abaixo do zero. O disco ja' tinha essa
+    trava; a rede nao.
+    """
+    from collections import namedtuple
+
+    rede = namedtuple("rede", "bytes_sent bytes_recv")
+    coletor._prev_net = rede(9_000_000, 50_000_000)
+    monkeypatch.setattr(psutil, "net_io_counters", lambda: rede(1_000_000, 2_000_000))
+
+    d = coletor._collect()
+
+    assert d["net_dl"] == 0.0
+    assert d["net_ul"] == 0.0

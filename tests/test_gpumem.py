@@ -15,12 +15,31 @@ def test_struct_tem_o_tamanho_que_o_windows_espera():
     assert ctypes.sizeof(gpumem.PDH_FMT_COUNTERVALUE_ITEM_W) == 24
 
 
+def _instancia(caminho: str) -> str:
+    return caminho[caminho.index("(") + 1:caminho.index(")")]
+
+
 def test_caminho_do_contador_usa_curinga():
     """Um processo aparece em varias instancias: uma por adaptador e segmento.
     Ler so' a primeira daria um numero parcial."""
+    import fnmatch
+
     caminho = gpumem.ProcessVram.CONTADOR.format(pid=1234)
-    assert "pid_1234*" in caminho
+    padrao = _instancia(caminho)
+    assert fnmatch.fnmatchcase("pid_1234_luid_0x00000000_0x0000D1A5_phys_0", padrao)
+    assert fnmatch.fnmatchcase("pid_1234_luid_0x00000000_0x0000D1A5_phys_1", padrao)
     assert caminho.endswith(r"\Local Usage")
+
+
+def test_curinga_nao_soma_a_vram_de_outro_processo():
+    """"pid_1234*" tambem casava pid_12340, pid_12344, pid_123400...: a VRAM de
+    processos alheios entrava na conta do jogo, e o numero que existe para dizer
+    "quem encheu a placa" apontava para o lugar errado."""
+    import fnmatch
+
+    padrao = _instancia(gpumem.ProcessVram.CONTADOR.format(pid=1234))
+    for outro in ("pid_12340_luid_0x0_0x1_phys_0", "pid_123400_luid_0x0_0x1_phys_0"):
+        assert not fnmatch.fnmatchcase(outro, padrao), outro
 
 
 def test_mede_a_vram_dedicada_e_nao_a_compartilhada():
