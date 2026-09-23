@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 from pathlib import Path
 
-from PySide6.QtCore import QRectF, Qt
+from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -274,9 +275,17 @@ class LauncherView(View):
         barra.addWidget(label("na tela", 8.5, color=theme.MUTE))
         self.bp_tela = QComboBox()
         self.bp_tela.setMinimumWidth(theme.scaled(210))
+        # Ligado uma vez so': o preenchimento roda com os sinais bloqueados, e
+        # desligar para religar a cada redesenho so' gerava aviso do PySide.
+        self.bp_tela.currentIndexChanged.connect(self._trocar_tela_bp)
         barra.addWidget(self.bp_tela)
         self.btn_scan = PillButton("Procurar jogos instalados", theme.GPU)
         self.btn_scan.clicked.connect(self._procurar)
+        self._varredura: threading.Thread | None = None
+        self._resultado_varredura: tuple[list, str] | None = None
+        self._espera_varredura = QTimer(self)
+        self._espera_varredura.setInterval(150)
+        self._espera_varredura.timeout.connect(self._conferir_varredura)
         self.btn_scan.setToolTip("Varre o Steam e as pastas de jogos dos seus discos.")
         barra.addWidget(self.btn_scan)
         barra.addStretch(1)
@@ -308,13 +317,44 @@ class LauncherView(View):
         self._refresh()
 
     def _procurar(self) -> None:
-        """Varre os discos e oferece o que achou."""
-        self.notify("procurando jogos…", theme.MUTE)
-        try:
-            achados = gamescan.scan([i["path"] for i in self.cfg.launch_items])
-        except Exception as e:                                   # noqa: BLE001
-            self.notify(f"a varredura falhou: {e}", theme.BAD)
+        """Varre os discos e oferece o que achou.
+
+        A varredura roda fora da thread da interface: ela desce pelas pastas de
+        jogo de cada disco e resolve cada atalho da area de trabalho abrindo um
+        PowerShell, segundos de trabalho. Na thread da UI a janela ficava "Nao
+        respondendo" ate' o fim, e o proprio aviso de "procurando" nem aparecia.
+        """
+        if self._varredura is not None and self._varredura.is_alive():
             return
+        self.notify("procurando jogos…", theme.MUTE)
+        self.btn_scan.setEnabled(False)
+        self._resultado_varredura = None
+        self._varredura = threading.Thread(
+            target=self._varrer, args=([i["path"] for i in self.cfg.launch_items],),
+            name="gamescan", daemon=True)
+        self._varredura.start()
+        self._espera_varredura.start()
+
+    def _varrer(self, conhecidos: list[str]) -> None:
+        try:
+            self._resultado_varredura = (gamescan.scan(conhecidos), "")
+        except Exception as e:                                   # noqa: BLE001
+            self._resultado_varredura = ([], f"a varredura falhou: {e}")
+
+    def _conferir_varredura(self) -> None:
+        if self._varredura is not None and self._varredura.is_alive():
+            return
+        self._espera_varredura.stop()
+        self._varredura = None
+        self.btn_scan.setEnabled(True)
+        achados, erro = self._resultado_varredura or ([], "")
+        if erro:
+            self.notify(erro, theme.BAD)
+            return
+        # A lista pode ter mudado enquanto a varredura andava: o jogo arrastado
+        # nesse meio tempo nao pode entrar de novo pela porta da varredura.
+        ja_tenho = {i["path"].lower() for i in self.cfg.launch_items}
+        achados = [a for a in achados if a.path.lower() not in ja_tenho]
         if not achados:
             self.notify("nenhum jogo novo encontrado", theme.WARN)
             return
@@ -436,11 +476,6 @@ class LauncherView(View):
         indice = self.bp_tela.findData(atual)
         self.bp_tela.setCurrentIndex(max(0, indice))
         self.bp_tela.blockSignals(False)
-        try:
-            self.bp_tela.currentIndexChanged.disconnect()
-        except (RuntimeError, TypeError):
-            pass
-        self.bp_tela.currentIndexChanged.connect(self._trocar_tela_bp)
 
     def _trocar_tela_bp(self) -> None:
         self.cfg.bigpicture_target = self.bp_tela.currentData() or ""

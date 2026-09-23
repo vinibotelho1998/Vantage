@@ -52,6 +52,8 @@ class BigPicture(QWidget):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._itens: list[dict] = []
         self._foco = 0
+        self._linha_topo = 0
+        """Primeira linha da grade que aparece na tela; ver _ajustar_rolagem."""
         self._escala = 1.0
         self._segurando = ""
         self._proxima_repeticao = 0.0
@@ -153,6 +155,7 @@ class BigPicture(QWidget):
         # a tres metros, onde nao da' para acompanhar o pulo com o olho.
         self._foco = max(0, min(len(self._itens) - 1, self._foco))
         if self._foco != antes:
+            self._ajustar_rolagem()
             self.update()
 
     def _pagina(self, passo: int) -> None:
@@ -196,7 +199,13 @@ class BigPicture(QWidget):
                        "Nenhum jogo ainda.\nAdicione pela aba Jogos, no computador.")
             return
 
+        # A tela pode ter mudado de tamanho desde o ultimo passo do foco.
+        self._ajustar_rolagem()
+        topo = self._grade()[2]
         for i, item in enumerate(self._itens):
+            r = self._retangulo(i)
+            if r.bottom() < topo or r.top() > self.height():
+                continue
             self._card(p, i, item, i == self._foco)
 
     def _grade(self) -> tuple[int, int, int, int, int]:
@@ -278,14 +287,43 @@ class BigPicture(QWidget):
             p.fillRect(rect, veu)
         p.restore()
 
-    def _card(self, p: QPainter, indice: int, item: dict, focado: bool) -> None:
+    def _linhas_visiveis(self) -> int:
+        _colunas, _margem, topo, _largura, altura = self._grade()
+        vao = int(24 * self._escala)
+        return max(1, (self.height() - topo + vao) // (altura + vao))
+
+    def _ajustar_rolagem(self) -> None:
+        """Mantem a linha do foco inteira dentro da tela.
+
+        A grade nao rolava: com mais de tres linhas de jogos, descer o foco
+        levava o card escolhido para baixo da borda da TV, e quem estava no sofa
+        apertava A sem ver o que ia abrir. A rolagem so' anda quando o foco sai
+        da faixa visivel, para a grade nao ficar pulando a cada passo.
+        """
+        colunas = self._colunas()
+        cabem = self._linhas_visiveis()
+        linha = self._foco // colunas
+        if linha < self._linha_topo:
+            self._linha_topo = linha
+        elif linha >= self._linha_topo + cabem:
+            self._linha_topo = linha - cabem + 1
+        ultima = max(0, (len(self._itens) - 1) // colunas)
+        self._linha_topo = max(0, min(self._linha_topo, ultima - cabem + 1))
+
+    def _retangulo(self, indice: int) -> QRect:
+        """Onde o card daquele indice fica na tela, ja' com a rolagem."""
         colunas, margem, topo, largura, altura = self._grade()
-        e = self._escala
-        vao = int(24 * e)
+        vao = int(24 * self._escala)
         linha, coluna = divmod(indice, colunas)
+        linha -= self._linha_topo
         x = margem + coluna * (largura + vao)
         y = topo + linha * (altura + vao)
-        rect = QRect(x, y, largura, altura)
+        return QRect(x, y, largura, altura)
+
+    def _card(self, p: QPainter, indice: int, item: dict, focado: bool) -> None:
+        _colunas, _margem, _topo, largura, altura = self._grade()
+        e = self._escala
+        rect = self._retangulo(indice)
         if focado:
             # Cresce e brilha. A tres metros o que le' e' tamanho e brilho; uma
             # borda de um pixel, que funciona no monitor, simplesmente some.
