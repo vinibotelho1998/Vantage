@@ -51,6 +51,7 @@ def _identidade_na_barra() -> None:
 
 def main() -> int:
     log.setup()
+    log.capturar_excecoes()
     if not win.is_admin():
         if _elevate():
             return 0
