@@ -5,6 +5,7 @@ moram aqui embaixo, longe do Qt, para poderem ser testados sem abrir janela.
 """
 from __future__ import annotations
 
+import os
 import re
 import threading
 import time
@@ -150,6 +151,15 @@ def bloqueio_encerrar(nome: str, pid: int = -1) -> str:
     if pid in (0, 4):
         return ("PID 0 e 4 são o núcleo do próprio Windows: não há como encerrar "
                 "sem derrubar a máquina.")
+    # Encerrar a forca o proprio app, ou o PresentMon dele, e' o caminho que
+    # deixa a sessao ETW orfa; e essa so' sai reiniciando o Windows. Ver
+    # sensors/fps.py, _terminate.
+    if pid == os.getpid():
+        return ("Este é o próprio Vantage. Feche pela bandeja: encerrado à força, "
+                "ele deixa a captura de FPS presa até o Windows reiniciar.")
+    if (nome or "").strip().lower() == "presentmon.exe":
+        return ("É a captura de FPS. Encerrada à força, ela fica presa até o Windows "
+                "reiniciar; use Reiniciar captura, nas configurações.")
     if (nome or "").strip().lower() in _CRITICOS:
         return (f"{nome} é essencial para a sessão do Windows. Encerrar apaga a "
                 "interface ou reinicia o PC na hora, então o app não oferece isso.")

@@ -99,6 +99,25 @@ def test_jogo_comum_nao_e_bloqueado():
     assert P.bloqueio_encerrar("jogo.exe", 4242) == ""
 
 
+def test_o_proprio_app_nao_se_encerra_pela_lista(falso):
+    """Encerrado a forca, o app deixa o PresentMon filho com a sessao ETW de pe',
+    e sessao orfa dessas so' sai reiniciando o Windows. A lista de processos
+    mostrava o proprio app com o botao de Finalizar habilitado."""
+    import os
+
+    proc = falso(pid=os.getpid(), nome="vantage.exe")
+    assert P.bloqueio_encerrar("vantage.exe", os.getpid())
+    ok, _msg = P.encerrar(os.getpid(), "vantage.exe")
+    assert not ok
+    assert proc.chamadas == []
+
+
+def test_presentmon_nao_se_encerra_pela_lista():
+    """Mesmo motivo, na outra ponta: TerminateProcess no PresentMon e' o jeito
+    documentado de vazar a sessao de rastreamento de vez."""
+    assert P.bloqueio_encerrar("PresentMon.exe", 7777)
+
+
 def test_explorer_pode_ser_encerrado_mas_avisa():
     """Matar o Explorer e' legitimo; sumir a barra de tarefas sem avisar, nao."""
     assert P.bloqueio_encerrar("explorer.exe", 5000) == ""
