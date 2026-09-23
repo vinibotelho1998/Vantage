@@ -137,6 +137,15 @@ class Sidebar(QWidget):
         self._brand = label("Vantage", 15, QFont.Weight.Black, theme.accent_color(
             window.app.settings.accent))
         brand.addWidget(self._brand)
+        # Ao lado do nome, e nao no rodape: no pe' da barra ela ficava abaixo da
+        # lista inteira de telas, e um print de qualquer tela ja' tem que dizer
+        # qual versao esta' rodando. MUTE e nao FAINT: o cinza do rodape fica em
+        # 3.5:1 sobre a barra e, em 8 pt, passa batido.
+        self.versao = label(f"v{__version__}", 8, color=theme.MUTE)
+        # Alinhar pelo pe' deixaria o numero abaixo da linha de base do nome.
+        self.versao.setContentsMargins(0, 0, 0, max(
+            0, self._brand.fontMetrics().descent() - self.versao.fontMetrics().descent()))
+        brand.addWidget(self.versao, 0, Qt.AlignmentFlag.AlignBottom)
         brand.addStretch(1)
         lay.addLayout(brand)
 
@@ -154,10 +163,8 @@ class Sidebar(QWidget):
         # "ruido fixo num canto que ninguem olha", e isso valia enquanto tudo
         # funcionava. Quando os sensores ou a captura caem, o app fica com a
         # cara de sempre e simplesmente sem numero nenhum, e nao ha' onde
-        # perguntar por que. Sao dois estados e uma versao: olha-se uma vez, na
-        # hora em que algo quebrou, que e' exatamente quando faltava.
-        self.versao = label(f"v{__version__}", 7.5, color=theme.FAINT)
-        lay.addWidget(self.versao)
+        # perguntar por que. Sao dois estados: olha-se uma vez, na hora em que
+        # algo quebrou, que e' exatamente quando faltava.
         self.saude = label("", 7.5, color=theme.FAINT)
         self.saude.setWordWrap(True)
         lay.addWidget(self.saude)
@@ -232,7 +239,7 @@ class MainWindow(QWidget):
         self._maximized = False
         self._normal_geometry = None
 
-        self.setWindowTitle("Vantage")
+        self.setWindowTitle(f"Vantage {__version__}")
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setMinimumSize(theme.scaled(980), theme.scaled(620))
