@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
@@ -298,6 +299,11 @@ class Settings:
     def sanitize(self) -> None:
         self.settings_version = int(_clamp(_num(self.settings_version, SETTINGS_VERSION),
                                            1, 999))
+        # A posicao tambem passa por aqui: ela e' comparada com numero ao abrir a
+        # janela, e um `null` ou um texto num arquivo editado a mao derrubava o
+        # app antes da primeira tela, toda vez, sem que o arquivo fosse ilegivel.
+        self.win_x = int(_clamp(_num(self.win_x, -1), -100_000, 100_000))
+        self.win_y = int(_clamp(_num(self.win_y, -1), -100_000, 100_000))
         self.win_w = int(_clamp(_num(self.win_w, 1360), 900, 6000))
         self.win_h = int(_clamp(_num(self.win_h, 860), 560, 4000))
         self.ui_scale = round(_clamp(_num(self.ui_scale, 1.0), 0.8, 1.8), 2)
@@ -327,6 +333,9 @@ class Settings:
         if not isinstance(self.ping_host, str) or not self.ping_host.strip():
             self.ping_host = "8.8.8.8"
         self.ping_host = self.ping_host.strip()
+        # O nome fixado e' comparado com `.lower()` a cada 120 ms: qualquer coisa
+        # que nao seja texto viraria uma excecao por tique enquanto o app vivesse.
+        self.fps_pin = self.fps_pin.strip() if isinstance(self.fps_pin, str) else ""
 
         self.overlay_metrics = [m for m in _as_list(self.overlay_metrics)
                                 if m in _OVERLAY_KEYS] or ["fps", "frametime"]
@@ -396,8 +405,11 @@ class Settings:
         if path.exists():
             try:
                 return cls.from_dict(json.loads(path.read_text(encoding="utf-8")))
+            except OSError as e:
+                _log.warning("nao consegui ler o settings (%s), usando padroes", e)
             except Exception as e:
                 _log.warning("settings invalido (%s), usando padroes", e)
+                _guardar_ilegivel(path)
         legacy = paths.legacy_config_file()
         if legacy.exists():
             try:
@@ -417,6 +429,21 @@ class Settings:
             tmp.replace(path)
         except Exception as e:
             _log.warning("falha salvando settings: %s", e)
+
+
+def _guardar_ilegivel(path: Path) -> None:
+    """Tira do caminho o settings que nao abriu, sem apagar nada.
+
+    O app segue com os padroes, e o primeiro salvamento gravaria por cima: uma
+    virgula a mais editando a mao levava junto a biblioteca de jogos e os perfis
+    de tela. Guardado ao lado, o conteudo ainda tem conserto.
+    """
+    destino = path.with_name(f"{path.name}.ilegivel-{time.strftime('%Y%m%d-%H%M%S')}")
+    try:
+        path.replace(destino)
+        _log.warning("settings ilegivel guardado em %s", destino)
+    except OSError as e:
+        _log.warning("nao consegui guardar o settings ilegivel: %s", e)
 
 
 def _num(v, default: float) -> float:

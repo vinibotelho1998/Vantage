@@ -146,6 +146,32 @@ def test_lixo_no_arquivo_nao_derruba():
     assert isinstance(c.dashboard_plots, list)
 
 
+def test_posicao_da_janela_estragada_nao_impede_o_app_de_abrir():
+    """A posicao e' comparada com numero antes da primeira tela aparecer.
+
+    O arquivo continua sendo JSON valido, entao nao cai na quarentena de
+    ilegivel: um `null` ali derrubava o app na abertura, todas as vezes.
+    """
+    for ruim in (None, "abc", [1], {"x": 1}):
+        c = Settings.from_dict({"win_x": ruim, "win_y": ruim})
+        assert (c.win_x, c.win_y) == (-1, -1), ruim
+    # Infinito passa pelo json do Python e estouraria o int(); fica no teto.
+    c = Settings.from_dict({"win_x": float("inf"), "win_y": float("-inf")})
+    assert (c.win_x, c.win_y) == (100_000, -100_000)
+
+
+def test_posicao_valida_da_janela_continua_igual():
+    c = Settings.from_dict({"win_x": -1920, "win_y": 120})
+    assert (c.win_x, c.win_y) == (-1920, 120)
+
+
+def test_processo_fixado_que_nao_e_texto_volta_ao_automatico():
+    """O nome fixado e' comparado com `.lower()` a cada tique do FPS."""
+    assert Settings.from_dict({"fps_pin": 5}).fps_pin == ""
+    assert Settings.from_dict({"fps_pin": ["cs2.exe"]}).fps_pin == ""
+    assert Settings.from_dict({"fps_pin": "cs2.exe"}).fps_pin == "cs2.exe"
+
+
 # ── teste de disco ───────────────────────────────────────────────────────────
 # Aqui o risco nao e' cosmetico: essas opcoes decidem quantos gigabytes o app
 # escreve na unidade do usuario.
@@ -264,3 +290,30 @@ def test_quem_religar_depois_nao_perde_de_novo():
         "overlay_metrics": ["fps", "mem_ctrl"],
     })
     assert "mem_ctrl" in c.overlay_metrics
+
+
+def test_settings_ilegivel_e_guardado_antes_de_virar_padrao(tmp_path, monkeypatch):
+    """Arquivo que nao abre vira padrao, mas nao pode sumir.
+
+    Uma virgula a mais editando a mao bastava: o app subia com os padroes e o
+    primeiro salvamento gravava por cima, levando junto a biblioteca de jogos e
+    os perfis de tela. Guardado ao lado, o conteudo ainda tem conserto.
+    """
+    monkeypatch.setenv("VANTAGE_DATA_DIR", str(tmp_path))
+    quebrado = '{"launch_items": [{"name": "Forza", "path": "C:/f.exe"}],,}'
+    (tmp_path / "settings.json").write_text(quebrado, encoding="utf-8")
+
+    c = Settings.load()
+    assert c.launch_items == []
+    c.save()
+
+    guardados = list(tmp_path.glob("settings.json.ilegivel-*"))
+    assert len(guardados) == 1
+    assert guardados[0].read_text(encoding="utf-8") == quebrado
+
+
+def test_settings_legivel_nao_gera_copia(tmp_path, monkeypatch):
+    monkeypatch.setenv("VANTAGE_DATA_DIR", str(tmp_path))
+    Settings().save()
+    Settings.load().save()
+    assert not list(tmp_path.glob("settings.json.ilegivel-*"))
