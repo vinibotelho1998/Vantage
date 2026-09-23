@@ -409,7 +409,7 @@ class _DisplayCard(Card):
         if self.disp.mode:
             inicial = (self.disp.mode.width, self.disp.mode.height)
         elif self.disp.native:
-            inicial = tuple(self.disp.native)
+            inicial = self.disp.native_oriented
         self.res_box = _combo(self._resolutions(), inicial)
         self.hz_box = _combo([])
         self.res_box.currentIndexChanged.connect(self._fill_rates)
@@ -494,7 +494,7 @@ class _DisplayCard(Card):
         for (w, h), upscaled in sorted(seen.items(), key=lambda kv: kv[0][0] * kv[0][1],
                                        reverse=True):
             suffix = ""
-            if self.disp.native and (w, h) == tuple(self.disp.native):
+            if self.disp.native and (w, h) == self.disp.native_oriented:
                 suffix = "   nativa"
             elif upscaled:
                 suffix = "   escalonada"

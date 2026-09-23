@@ -54,11 +54,13 @@ _INFO_GET_SOURCE_NAME = 1
 _INFO_GET_TARGET_NAME = 2
 
 ERROR_SUCCESS = 0
+ERROR_INSUFFICIENT_BUFFER = 122
 _ERRORS = {
     0: "ok",
     87: "parametro invalido",
     5: "acesso negado",
     31: "o driver recusou a configuracao",
+    122: "as telas mudaram durante a leitura",
     1004: "flags invalidas",
     1610: "configuracao invalida",
     1611: "topologia invalida",
@@ -215,24 +217,38 @@ class Config:
         return [p for p in self.paths[:self.path_count] if p.active]
 
 
-def query(all_paths: bool = True) -> Config | None:
-    """Le a configuracao atual. Com `all_paths` traz tambem as telas desligadas."""
-    flags = QDC_ALL_PATHS if all_paths else QDC_ONLY_ACTIVE_PATHS
-    n_paths = wintypes.DWORD()
-    n_modes = wintypes.DWORD()
-    rc = user32.GetDisplayConfigBufferSizes(flags, ctypes.byref(n_paths), ctypes.byref(n_modes))
-    if rc != ERROR_SUCCESS:
-        _log.warning("GetDisplayConfigBufferSizes falhou: %s", message(rc))
-        return None
+_TENTATIVAS_LEITURA = 3
 
-    paths = (PATH_INFO * n_paths.value)()
-    modes = (MODE_INFO * n_modes.value)()
-    rc = user32.QueryDisplayConfig(flags, ctypes.byref(n_paths), paths,
-                                   ctypes.byref(n_modes), modes, None)
-    if rc != ERROR_SUCCESS:
-        _log.warning("QueryDisplayConfig falhou: %s", message(rc))
-        return None
-    return Config(paths, modes, n_paths.value, n_modes.value)
+
+def query(all_paths: bool = True) -> Config | None:
+    """Le a configuracao atual. Com `all_paths` traz tambem as telas desligadas.
+
+    Um monitor entrando ou saindo entre medir o buffer e ler faz o Windows
+    responder ERROR_INSUFFICIENT_BUFFER, e a documentacao da CCD manda medir de
+    novo. Desistir na primeira recusa fazia o arranjo falhar justamente no
+    instante em que a TV era plugada.
+    """
+    flags = QDC_ALL_PATHS if all_paths else QDC_ONLY_ACTIVE_PATHS
+    rc = ERROR_INSUFFICIENT_BUFFER
+    for _ in range(_TENTATIVAS_LEITURA):
+        n_paths = wintypes.DWORD()
+        n_modes = wintypes.DWORD()
+        rc = user32.GetDisplayConfigBufferSizes(flags, ctypes.byref(n_paths),
+                                                ctypes.byref(n_modes))
+        if rc != ERROR_SUCCESS:
+            _log.warning("GetDisplayConfigBufferSizes falhou: %s", message(rc))
+            return None
+
+        paths = (PATH_INFO * n_paths.value)()
+        modes = (MODE_INFO * n_modes.value)()
+        rc = user32.QueryDisplayConfig(flags, ctypes.byref(n_paths), paths,
+                                       ctypes.byref(n_modes), modes, None)
+        if rc == ERROR_SUCCESS:
+            return Config(paths, modes, n_paths.value, n_modes.value)
+        if rc != ERROR_INSUFFICIENT_BUFFER:
+            break
+    _log.warning("QueryDisplayConfig falhou: %s", message(rc))
+    return None
 
 
 def source_name(path: PATH_INFO) -> str:

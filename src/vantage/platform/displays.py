@@ -178,6 +178,17 @@ class Display:
             return "desligada"
         return self.mode.label if self.mode else "ligada"
 
+    @property
+    def native_oriented(self) -> tuple[int, int] | None:
+        """A resolucao nativa na orientacao em que a tela esta' agora.
+
+        O EDID descreve o painel deitado, mas os modos do driver vem na
+        orientacao atual: girada em retrato, a nativa 2560 x 1440 aparece na
+        lista como 1440 x 2560. Comparar sem girar marcava a propria nativa como
+        escalonada.
+        """
+        return _orientar(self.native, self.rotation)
+
     def is_upscaled(self, mode: Mode) -> bool:
         """True quando o modo passa da resolucao fisica do painel.
 
@@ -185,9 +196,20 @@ class Display:
         Super Resolution. Serve como antisserrilhado, mas nao e' resolucao real,
         e a interface precisa deixar isso claro.
         """
-        if not self.native:
+        nativa = self.native_oriented
+        if not nativa:
             return False
-        return mode.width > self.native[0] or mode.height > self.native[1]
+        return mode.width > nativa[0] or mode.height > nativa[1]
+
+
+def _orientar(nativa, rotacao: int) -> tuple[int, int] | None:
+    """Troca largura e altura quando a tela esta' em retrato (90 ou 270 graus)."""
+    if not nativa:
+        return None
+    largura, altura = int(nativa[0]), int(nativa[1])
+    if rotacao in (DMDO_90, DMDO_270):
+        return altura, largura
+    return largura, altura
 
 
 def _new_devmode() -> DEVMODEW:
@@ -488,7 +510,10 @@ def _best_mode(device: str) -> Mode | None:
     if not modes:
         return None
     hardware_id, _, _ = _monitor_info(device)
-    native = edid_native(hardware_id)
+    # A lista do driver vem na orientacao atual; o EDID, sempre deitado. Em
+    # retrato a nativa nunca casava, e o fallback abaixo escolhia o maior modo
+    # da lista, que com VSR ligado e' um escalonado.
+    native = _orientar(edid_native(hardware_id), _current_mode(device)[2])
     if native:
         exact = [m for m in modes if (m.width, m.height) == native]
         if exact:
