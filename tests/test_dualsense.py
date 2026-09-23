@@ -125,6 +125,18 @@ def test_relatorio_curto_e_descartado():
     assert Leitor._decodificar(b"\x01\x80\x80") is None
 
 
+def test_abertura_recusada_nao_vira_controle_conectado():
+    """Sem prototipo o CreateFileW devolvia -1 como int de 32 bits, que nunca
+    casa com INVALID_HANDLE_VALUE de 64: a recusa virava "aberto", uma thread
+    subia para ler o handle -1 e o log ganhava um "aberto"/"desconectou" a cada
+    varredura. O caminho aqui nao existe, entao nenhum dispositivo e' tocado."""
+    leitor = Leitor(r"\\?\hid#vantage_teste_caminho_que_nao_existe#0", 64)
+
+    assert leitor.abrir() is False
+    assert leitor.vivo is False
+    assert leitor._thread is None
+
+
 # ── legibilidade separada do XInput ──────────────────────────────────────────
 def _pad(**kw):
     base = dict(name="x", vid=P.SONY, pid=0x0CE6, bus="Bluetooth",

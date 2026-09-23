@@ -225,13 +225,17 @@ def toggle_osk() -> None:
     """
     import subprocess
 
+    # O app e' janela, sem console: sem esta flag cada ferramenta de linha de
+    # comando abriria um console preto por cima da tela a cada toque em L3.
+    sem_janela = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     for name in ("osk.exe", "TabTip.exe"):
         try:
             out = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {name}", "/NH"],
-                                 capture_output=True, text=True, timeout=3)
+                                 capture_output=True, text=True, timeout=3,
+                                 creationflags=sem_janela)
             if name.lower() in out.stdout.lower():
                 subprocess.run(["taskkill", "/F", "/IM", name],
-                               capture_output=True, timeout=3)
+                               capture_output=True, timeout=3, creationflags=sem_janela)
                 return
         except (OSError, subprocess.SubprocessError):
             pass

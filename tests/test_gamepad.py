@@ -268,3 +268,25 @@ def test_apertar_de_novo_reinicia_a_contagem(monkeypatch):
     m._vigiar_presos(0)
     m._vigiar_presos(G.BTN_A)
     assert m.stuck() == []
+
+
+def test_teclado_virtual_nao_pisca_console_na_tela(monkeypatch):
+    """O app e' janela, sem console: tasklist e taskkill chamados sem
+    CREATE_NO_WINDOW abriam uma janela preta a cada toque em L3, bem na TV."""
+    import subprocess
+
+    chamadas = []
+
+    def _run(cmd, **kw):
+        chamadas.append((cmd[0], kw))
+        # tasklist responde que o teclado esta' aberto: o proximo passo fecha.
+        return subprocess.CompletedProcess(cmd, 0, "osk.exe  1234 Console", "")
+
+    monkeypatch.setattr(subprocess, "run", _run)
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: None)
+
+    G.toggle_osk()
+
+    assert [nome for nome, _ in chamadas] == ["tasklist", "taskkill"]
+    for nome, kw in chamadas:
+        assert kw.get("creationflags", 0) & subprocess.CREATE_NO_WINDOW, nome

@@ -48,6 +48,27 @@ _log = log.get("dualsense")
 
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
+
+def _setup_prototypes() -> None:
+    """Cada WinDLL tem os proprios prototipos; os de `pads.py` nao valem aqui.
+
+    Sem eles o ctypes assume retorno int de 32 bits: a recusa do CreateFileW
+    chegava como -1, que nunca e' igual ao INVALID_HANDLE_VALUE de 64 bits, e o
+    controle que nao abriu passava por aberto.
+    """
+    kernel32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                                     ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD,
+                                     wintypes.HANDLE]
+    kernel32.CreateFileW.restype = wintypes.HANDLE
+    kernel32.ReadFile.argtypes = [wintypes.HANDLE, wintypes.LPVOID, wintypes.DWORD,
+                                  ctypes.POINTER(wintypes.DWORD), wintypes.LPVOID]
+    kernel32.ReadFile.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+
+_setup_prototypes()
+
 GENERIC_READ = 0x80000000
 FILE_SHARE_READ = 0x01
 FILE_SHARE_WRITE = 0x02

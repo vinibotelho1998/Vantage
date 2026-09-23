@@ -808,6 +808,15 @@ class GamepadView(View):
         self._timer.start(50)
         self._pads_timer.start(_PADS_MS)
 
+    def showEvent(self, event) -> None:
+        # O par do hideEvent abaixo. Esconder a janela na bandeja, ou minimizar,
+        # esconde esta tela junto e para os dois relogios; sem religar aqui, a
+        # volta deixava o desenho do controle congelado ate' trocar de aba, ja'
+        # que clicar na aba que continua aberta nao chama on_activate.
+        super().showEvent(event)
+        self._timer.start(50)
+        self._pads_timer.start(_PADS_MS)
+
     def hideEvent(self, event) -> None:
         self._timer.stop()
         self._pads_timer.stop()
