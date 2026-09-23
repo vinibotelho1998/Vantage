@@ -42,6 +42,26 @@ _VIEW_LABELS = {
 _CORNERS = [("Superior esquerdo", "top-left"), ("Superior direito", "top-right"),
             ("Inferior esquerdo", "bottom-left"), ("Inferior direito", "bottom-right")]
 
+_CAMPOS_DA_JANELA = (
+    "start_view", "update_interval", "always_on_top", "close_to_tray",
+    "start_minimized", "autostart", "ping_host", "ping_port",
+    "accent", "ui_scale", "dash_cards",
+    "history_window", "smooth_lines", "fill_area", "show_grid", "chart_glow",
+    "fps_window", "fps_now_window", "fps_pin", "fps_only_fullscreen",
+    "overlay_enabled", "overlay_auto_game", "overlay_corner", "overlay_opacity",
+    "overlay_scale", "overlay_refresh_hz", "overlay_graph_seconds", "overlay_columns",
+    "overlay_metrics", "mem_volt_rail",
+    "alerts_enabled", "alert_cpu_temp", "alert_gpu_temp", "alert_ram_pct",
+    "alert_vram_pct",
+)
+"""O que esta janela mostra, e portanto o que o "Restaurar padroes" dela desfaz.
+
+O botao percorria o arquivo inteiro e zerava tambem a biblioteca de jogos, os
+perfis de tela, o mapa do controle e os favoritos dos sensores: um clique, sem
+pergunta nenhuma, e horas de configuracao feitas em outras abas iam embora.
+Ninguem espera isso de um botao numa janela onde nada disso aparece.
+"""
+
 
 def _combo(pairs, current) -> QComboBox:
     c = QComboBox()
@@ -442,6 +462,13 @@ class SettingsDialog(QDialog):
         for nome, valor in rails:
             self.w_rail.addItem(f"{nome}: {valor:.3f} V", nome)
         idx = self.w_rail.findData(self._cfg.mem_volt_rail)
+        if idx < 0 and self._cfg.mem_volt_rail:
+            # O LHM ainda nao leu a placa (app recem-aberto) ou os sensores dela
+            # sumiram nesta sessao. Sem esta entrada o combo cairia em "Nao
+            # mostrar" e salvar qualquer outra opcao apagaria a escolha feita.
+            self.w_rail.addItem(f"{self._cfg.mem_volt_rail}: sem leitura agora",
+                                self._cfg.mem_volt_rail)
+            idx = self.w_rail.findData(self._cfg.mem_volt_rail)
         self.w_rail.setCurrentIndex(max(0, idx))
         self.w_rail.currentIndexChanged.connect(self._atualizar_previa)
         col.addWidget(self.w_rail)
@@ -579,9 +606,7 @@ class SettingsDialog(QDialog):
     def _restore_defaults(self) -> None:
         from ..config import Settings
         defaults = Settings()
-        for f in defaults.as_dict():
-            if f.startswith("win_"):
-                continue
+        for f in _CAMPOS_DA_JANELA:
             setattr(self._cfg, f, getattr(defaults, f))
         self._cfg.sanitize()
         self._ctl.on_settings_changed()
@@ -622,6 +647,7 @@ class SettingsDialog(QDialog):
         c.overlay_graph_seconds = self.w_ograph.value()
         c.overlay_columns = self.w_ocols.currentData()
         c.overlay_metrics = [k for k, chk in self.overlay_checks.items() if chk.isChecked()]
+        c.mem_volt_rail = self.w_rail.currentData() or ""
 
         c.alerts_enabled = self.c_alerts.isChecked()
         c.alert_cpu_temp = self.w_cpu_alert.value()
