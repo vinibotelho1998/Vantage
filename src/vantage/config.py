@@ -58,7 +58,9 @@ _OVERLAY_LEGADO = frozenset({"fps", "graph", "low1", "frametime", "cpu", "gpu",
 
 DASH_CARDS = [
     ("timeline", "Linha do tempo"), ("fps", "Jogo em foco"),
-    ("frametime", "Frametime no card de jogo"), ("cpu", "CPU"), ("gpu", "GPU"),
+    # A chave continua "frametime" para nao invalidar settings salvos, mas o
+    # grafico do card desenha FPS e 1% low; o rotulo diz o que a caixa desliga.
+    ("frametime", "Gráfico de FPS no card de jogo"), ("cpu", "CPU"), ("gpu", "GPU"),
     ("ram", "Memória"), ("disk", "Armazenamento"), ("net", "Rede"),
 ]
 _DASH_KEYS = {k for k, _ in DASH_CARDS}
@@ -279,7 +281,7 @@ class Settings:
         """
         if versao >= SETTINGS_VERSION:
             return
-        if versao < 2 and set(_as_list(self.overlay_metrics)) == set(_OVERLAY_LEGADO):
+        if versao < 2 and set(_textos(self.overlay_metrics)) == set(_OVERLAY_LEGADO):
             self.overlay_metrics = list(OVERLAY_DEFAULT)
         if versao < 3:
             # Estas tres estrearam ligadas e se mostraram ruim de conviver: a
@@ -289,7 +291,7 @@ class Settings:
             # celula. Mudar so' o padrao nao alcanca quem ja' tinha o arquivo
             # salvo, por isso a remocao acontece aqui, uma vez.
             fora = {"mem_ctrl", "teto_watts", "jogo_ram_ws"}
-            self.overlay_metrics = [m for m in _as_list(self.overlay_metrics)
+            self.overlay_metrics = [m for m in _textos(self.overlay_metrics)
                                     if m not in fora]
         self.settings_version = SETTINGS_VERSION
 
@@ -337,9 +339,9 @@ class Settings:
         # que nao seja texto viraria uma excecao por tique enquanto o app vivesse.
         self.fps_pin = self.fps_pin.strip() if isinstance(self.fps_pin, str) else ""
 
-        self.overlay_metrics = [m for m in _as_list(self.overlay_metrics)
+        self.overlay_metrics = [m for m in _textos(self.overlay_metrics)
                                 if m in _OVERLAY_KEYS] or ["fps", "frametime"]
-        self.dash_cards = [c for c in _as_list(self.dash_cards)
+        self.dash_cards = [c for c in _textos(self.dash_cards)
                            if c in _DASH_KEYS] or [k for k, _ in DASH_CARDS]
 
         # Lista vazia e' estado legitimo (ninguem favoritou nada ainda), entao
@@ -465,6 +467,17 @@ def _as_list(v) -> list:
     return list(v) if isinstance(v, (list, tuple)) else []
 
 
+def _textos(v) -> list[str]:
+    """Lista de chaves: item que nao e' texto nao chega a ser comparado com set."""
+    return [x for x in _as_list(v) if isinstance(x, str)]
+
+
+def _texto(raw: dict, chave: str) -> str:
+    """Campo de texto do disco; `null` vira vazio, e nao a palavra 'None'."""
+    valor = raw.get(chave)
+    return "" if valor is None else str(valor)
+
+
 def _prioridade_valida(bruto) -> str:
     """So' aceita chave de prioridade que existe de verdade.
 
@@ -484,17 +497,17 @@ def _clean_launch_item(raw) -> dict | None:
     """
     if not isinstance(raw, dict):
         return None
-    path = str(raw.get("path", "")).strip()
+    path = _texto(raw, "path").strip()
     if not path:
         return None
-    target = str(raw.get("target", "")).strip()
+    target = _texto(raw, "target").strip()
     if target and not target.startswith(("primary:", "profile:")):
         target = ""
-    name = str(raw.get("name", "")).strip() or Path(path).stem
+    name = _texto(raw, "name").strip() or Path(path).stem
     return {
         "name": name[:40],
         "path": path,
-        "args": str(raw.get("args", "")),
+        "args": _texto(raw, "args"),
         "target": target,
         "priority": _prioridade_valida(raw.get("priority", "")),
         # Ligado por padrao: gravar a partida custa uma soma por quadro e 20 KB
@@ -506,7 +519,7 @@ def _clean_launch_item(raw) -> dict | None:
         "restore": bool(raw.get("restore", True)),
         # Vazio e' o normal, nao falta de configuracao: sem imagem escolhida a
         # capa sai do Steam ou do icone do executavel, sem o usuario fazer nada.
-        "image": str(raw.get("image", "")).strip(),
+        "image": _texto(raw, "image").strip(),
     }
 
 
@@ -531,7 +544,7 @@ def _clean_profile(raw) -> dict | None:
     """
     if not isinstance(raw, dict):
         return None
-    name = str(raw.get("name", "")).strip()
+    name = _texto(raw, "name").strip()
     if not name:
         return None
     entries = []
@@ -568,6 +581,6 @@ def _clean_profile(raw) -> dict | None:
     topology = str(raw.get("topology", "")).strip().lower()
     if topology not in ("", "clone"):
         topology = ""
-    return {"name": name[:40], "hotkey": str(raw.get("hotkey", "")),
+    return {"name": name[:40], "hotkey": _texto(raw, "hotkey"),
             "topology": topology, "entries": entries}
 
