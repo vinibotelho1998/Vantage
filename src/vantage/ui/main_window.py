@@ -4,16 +4,17 @@ from __future__ import annotations
 from datetime import datetime
 
 from PySide6.QtCore import QEvent, QPoint, Qt
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
+    QLabel,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from .. import __version__, log, theme
+from .. import __version__, log, paths, theme
 from ..core import units
 from ..platform import win as winapi
 from .components import IconButton, LoadDots, NavButton, PillButton, label
@@ -41,6 +42,20 @@ VIEW_CLASSES = (DashboardView, CpuView, GpuView, MemoryView,
 # inicial nas configuracoes), so' saiu do menu.
 NAV_OCULTAS = ()
 """Telas construidas mas fora da navegacao. Nenhuma hoje."""
+
+NAV_GRUPOS = (
+    ("Monitor", ("dashboard", "cpu", "gpu", "memory", "network", "sensors", "processes")),
+    ("Jogo", ("benchmark", "launcher")),
+    ("Máquina", ("displays", "gamepad")),
+)
+"""Como a barra lateral agrupa as telas.
+
+Onze itens numa lista corrida obrigavam a ler um por um para achar a aba de
+Telas no meio das de sensor. Tres blocos, com um rotulo discreto em cima de
+cada um, dividem a lista pelo que a pessoa esta' querendo fazer: olhar a
+maquina, jogar, ou arrumar a casa. Tela que nao esta' em grupo nenhum entra no
+fim, sem rotulo, para nunca sumir do menu por esquecimento aqui.
+"""
 
 _EDGE = 6
 
@@ -82,13 +97,13 @@ class TitleBar(QWidget):
         self.btn_overlay = PillButton("OVERLAY", theme.MUTE)
         self.btn_overlay.setToolTip("Liga e desliga o overlay no jogo (Ctrl+Alt+O)")
         self.btn_overlay.clicked.connect(window.app.toggle_overlay)
-        self.btn_settings = IconButton("⚙", "Configurações")
+        self.btn_settings = IconButton(tooltip="Configurações", icon="settings")
         self.btn_settings.clicked.connect(lambda: window.app.open_settings())
-        self.btn_min = IconButton("―", "Minimizar")
+        self.btn_min = IconButton(tooltip="Minimizar", icon="minimize")
         self.btn_min.clicked.connect(window.showMinimized)
-        self.btn_max = IconButton("▢", "Maximizar / restaurar")
+        self.btn_max = IconButton(tooltip="Maximizar / restaurar", icon="maximize")
         self.btn_max.clicked.connect(window.toggle_maximized)
-        self.btn_close = IconButton("✕", "Fechar", danger=True)
+        self.btn_close = IconButton(tooltip="Fechar", danger=True, icon="close")
         self.btn_close.clicked.connect(window.close)
         lay.addWidget(self.btn_overlay)
         lay.addSpacing(theme.scaled(6))
@@ -132,8 +147,13 @@ class Sidebar(QWidget):
         lay.setSpacing(theme.scaled(3))
 
         brand = QHBoxLayout()
-        brand.setContentsMargins(theme.scaled(6), 0, 0, theme.scaled(14))
-        brand.setSpacing(theme.scaled(6))
+        brand.setContentsMargins(theme.scaled(4), 0, 0, theme.scaled(14))
+        brand.setSpacing(theme.scaled(5))
+        # O mesmo icone da barra de tarefas, para a janela e o atalho se
+        # reconhecerem como a mesma coisa.
+        marca = _icone_do_app(theme.scaled(22))
+        if marca is not None:
+            brand.addWidget(marca)
         self._brand = label("Vantage", 15, QFont.Weight.Black, theme.accent_color(
             window.app.settings.accent))
         brand.addWidget(self._brand)
@@ -150,13 +170,28 @@ class Sidebar(QWidget):
         lay.addLayout(brand)
 
         self.buttons: dict[str, NavButton] = {}
-        for cls in VIEW_CLASSES:
-            if cls.key in NAV_OCULTAS:
+        por_chave = {cls.key: cls for cls in VIEW_CLASSES if cls.key not in NAV_OCULTAS}
+        grupos = [(titulo, [k for k in chaves if k in por_chave])
+                  for titulo, chaves in NAV_GRUPOS]
+        soltas = [k for k in por_chave if not any(k in chaves for _t, chaves in grupos)]
+        if soltas:
+            grupos.append(("", soltas))
+        for indice, (titulo, chaves) in enumerate(grupos):
+            if not chaves:
                 continue
-            btn = NavButton(cls.key, cls.title, cls.glyph)
-            btn.clicked.connect(window.show_view)
-            self.buttons[cls.key] = btn
-            lay.addWidget(btn)
+            if titulo:
+                rotulo = label(titulo.upper(), 7, QFont.Weight.Bold, theme.FAINT)
+                rotulo.setStyleSheet(
+                    f"color: {theme.FAINT}; letter-spacing: 1.2px; background: transparent;")
+                rotulo.setContentsMargins(theme.scaled(12), theme.scaled(10 if indice else 0),
+                                          0, theme.scaled(3))
+                lay.addWidget(rotulo)
+            for key in chaves:
+                cls = por_chave[key]
+                btn = NavButton(cls.key, cls.title, cls.glyph)
+                btn.clicked.connect(window.show_view)
+                self.buttons[cls.key] = btn
+                lay.addWidget(btn)
         lay.addStretch(1)
 
         # O rodape voltou, menor e por outro motivo. Ele havia saido por ser
@@ -206,6 +241,25 @@ class Sidebar(QWidget):
         self._brand.setStyleSheet(f"color: {accent}; background: transparent;")
         for btn_key, btn in self.buttons.items():
             btn.set_active(btn_key == key, accent)
+
+
+def _icone_do_app(lado: int) -> QLabel | None:
+    """O icone do app num rotulo, ou None se o arquivo nao veio junto."""
+    try:
+        arquivo = paths.asset("icon.png")
+        if not arquivo.exists():
+            return None
+        pix = QPixmap(str(arquivo))
+        if pix.isNull():
+            return None
+    except OSError:
+        return None
+    rotulo = QLabel()
+    rotulo.setPixmap(pix.scaled(lado, lado, Qt.AspectRatioMode.KeepAspectRatio,
+                                Qt.TransformationMode.SmoothTransformation))
+    rotulo.setFixedSize(lado, lado)
+    rotulo.setStyleSheet("background: transparent;")
+    return rotulo
 
 
 def _cabe_em_alguma_tela(x: int, y: int, w: int, h: int) -> bool:
@@ -402,7 +456,7 @@ class MainWindow(QWidget):
         self._root.style().unpolish(self._root)
         self._root.style().polish(self._root)
         self._maximized = target
-        self.titlebar.btn_max.setText("❐" if target else "▢")
+        self.titlebar.btn_max.set_icon("restore" if target else "maximize")
 
     def showEvent(self, event) -> None:
         super().showEvent(event)

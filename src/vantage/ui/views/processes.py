@@ -317,7 +317,7 @@ class ProcessesView(View):
             header.setSectionResizeMode(i, QHeaderView.ResizeMode.Fixed)
             self.table.setColumnWidth(i, theme.scaled(width))
             self.table.horizontalHeaderItem(i).setTextAlignment(
-                int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         card.add(self.table, 1)
         root.addWidget(card, 1)
 
@@ -560,8 +560,8 @@ class ProcessesView(View):
                     if self.table.item(r, c) is None:
                         item = QTableWidgetItem("")
                         if c:
-                            item.setTextAlignment(int(Qt.AlignmentFlag.AlignRight
-                                                      | Qt.AlignmentFlag.AlignVCenter))
+                            item.setTextAlignment(Qt.AlignmentFlag.AlignRight
+                                                      | Qt.AlignmentFlag.AlignVCenter)
                         self.table.setItem(r, c, item)
                 self.table.setRowHeight(r, theme.scaled(22))
         for r, p in enumerate(rows):

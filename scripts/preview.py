@@ -15,6 +15,7 @@ os.environ.setdefault("VANTAGE_NO_FILE_LOG", "1")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 sys.path.insert(0, os.path.dirname(__file__))
 
+from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtGui import QColor, QPixmap  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 from smoke_ui import StubApp, fake_snapshot  # noqa: E402
@@ -61,21 +62,34 @@ def main() -> int:
     os.makedirs(images, exist_ok=True)
 
     window = MainWindow(app)
+    # Mostrada, mas fora da tela: sem passar pelo show() o Qt nao assenta os
+    # layouts, e widgets criados depois da montagem (os cards da aba Telas, a
+    # lista de unidades) saiam na imagem amontoados em cima do cabecalho.
+    window.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
     window.resize(1680, 960)
+    window.show()
     data = fake_snapshot(5)
-    for key in window.views:
+
+    def _mostrar(key: str) -> None:
         window.show_view(key)
         window.tick_system(data)
         window.tick_fps()
         window.tick_clock()
-        qt.processEvents()
+        # Mais de uma volta: o pedido de layout da pagina rolavel e' adiado, e
+        # a area de rolagem so' redimensiona a pagina na volta seguinte.
+        for _ in range(4):
+            qt.processEvents()
+
+    for key in window.views:
+        _mostrar(key)
         _shot(window, os.path.join(out, f"{key}.png"))
         print("gerado", key)
 
+    # A imagem "de jogos" do README e' a de benchmark, que e' onde moram o
+    # frametime, os lows e o gargalo; a ultima tela do laco era o Controle.
+    _mostrar("benchmark")
     _shot(window, os.path.join(images, "gaming.png"))
-    window.show_view("dashboard")
-    window.tick_system(data)
-    window.tick_fps()
+    _mostrar("dashboard")
     _shot(window, os.path.join(images, "panel.png"))
 
     from vantage.ui.overlay import GameOverlay
@@ -88,7 +102,10 @@ def main() -> int:
     print("gerado overlay")
 
     dialog = SettingsDialog(app, 3)
+    dialog.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
     dialog.resize(620, 720)
+    dialog.show()
+    qt.processEvents()
     _shot(dialog, os.path.join(images, "settings.png"))
     print("gerado settings")
     return 0

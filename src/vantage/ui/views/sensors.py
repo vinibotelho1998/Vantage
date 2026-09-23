@@ -94,13 +94,13 @@ class SensorsView(View):
         header.setSectionResizeMode(_COL_STAR, QHeaderView.ResizeMode.Fixed)
         self.table.setColumnWidth(_COL_STAR, theme.scaled(28))
         self.table.horizontalHeaderItem(_COL_STAR).setTextAlignment(
-            int(Qt.AlignmentFlag.AlignCenter))
+            Qt.AlignmentFlag.AlignCenter)
         header.setSectionResizeMode(_COL_NAME, QHeaderView.ResizeMode.Stretch)
         for i in range(_COL_NOW, len(_HEADERS)):
             header.setSectionResizeMode(i, QHeaderView.ResizeMode.Fixed)
             self.table.setColumnWidth(i, theme.scaled(110))
             self.table.horizontalHeaderItem(i).setTextAlignment(
-                int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         card.add(self.table, 1)
         root.addWidget(card, 1)
 
@@ -323,7 +323,7 @@ class SensorsView(View):
     def _linha(self, row: int, node, texto: str, favorito: bool) -> int:
         self.table.insertRow(row)
         estrela = QTableWidgetItem(_ESTRELA_CHEIA if favorito else _ESTRELA_VAZIA)
-        estrela.setTextAlignment(int(Qt.AlignmentFlag.AlignCenter))
+        estrela.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         estrela.setForeground(QBrush(QColor(theme.WARN if favorito else theme.FAINT)))
         estrela.setData(Qt.ItemDataRole.UserRole, node.key)
         estrela.setToolTip("Tirar dos favoritos" if favorito else "Marcar como favorito")
@@ -333,8 +333,8 @@ class SensorsView(View):
         self.table.setItem(row, _COL_NAME, name)
         for c in range(_COL_NOW, len(_HEADERS)):
             cell = QTableWidgetItem("—")
-            cell.setTextAlignment(int(Qt.AlignmentFlag.AlignRight
-                                      | Qt.AlignmentFlag.AlignVCenter))
+            cell.setTextAlignment(Qt.AlignmentFlag.AlignRight
+                                      | Qt.AlignmentFlag.AlignVCenter)
             cell.setForeground(QBrush(QColor(theme.FAINT if c > _COL_NOW else theme.TXT)))
             self.table.setItem(row, c, cell)
         self.table.setRowHeight(row, theme.scaled(22))

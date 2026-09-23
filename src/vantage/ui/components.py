@@ -1,7 +1,7 @@
 """Blocos reutilizaveis da interface: cards, tiles, linhas de metrica e navegacao."""
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter
 from PySide6.QtWidgets import (
     QFrame,
@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from .. import theme
 from ..core import units
+from . import icons
 
 
 def font(pt: float, weight: int = QFont.Weight.Normal, family: str = theme.FONT_UI) -> QFont:
@@ -64,6 +65,52 @@ class ElideLabel(QLabel):
         self.style().drawItemText(p, self.contentsRect(), int(self.alignment()),
                                   self.palette(), self.isEnabled(), self.texto_visivel(),
                                   self.foregroundRole())
+
+
+def elide_label(text: str = "", pt: float = 9, weight: int = QFont.Weight.Normal,
+                color: str | None = None, family: str = theme.FONT_UI,
+                align: Qt.AlignmentFlag | None = None,
+                mode: Qt.TextElideMode = Qt.TextElideMode.ElideRight) -> ElideLabel:
+    lb = ElideLabel(text, mode)
+    lb.setFont(font(pt, weight, family))
+    if color:
+        lb.setStyleSheet(f"color: {color}; background: transparent;")
+    if align is not None:
+        lb.setAlignment(align)
+    return lb
+
+
+class IconWidget(QWidget):
+    """Um icone vetorial de `ui.icons`, na cor pedida."""
+
+    def __init__(self, name: str, color: str = theme.MUTE, size: int = 18,
+                 stroke: float = 1.6, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._name = name
+        self._color = color
+        self._stroke = stroke
+        self.setFixedSize(theme.scaled(size), theme.scaled(size))
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+
+    def set_color(self, color: str) -> None:
+        if color != self._color:
+            self._color = color
+            self.update()
+
+    def set_name(self, name: str) -> None:
+        if name != self._name:
+            self._name = name
+            self.update()
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    def paintEvent(self, _event) -> None:
+        p = QPainter(self)
+        lado = min(self.width(), self.height()) - theme.scaled(2)
+        caixa = QRectF((self.width() - lado) / 2, (self.height() - lado) / 2, lado, lado)
+        icons.paint(p, self._name, caixa, self._color, self._stroke)
 
 
 def dimm_color(snapshot: dict) -> str:
@@ -160,7 +207,7 @@ class Card(QFrame):
         self._title = label(title.upper(), 8, QFont.Weight.Bold, theme.MUTE)
         self._title.setStyleSheet(
             f"color: {theme.MUTE}; letter-spacing: 1.1px; background: transparent;")
-        self._hint = label(hint, 8, QFont.Weight.Normal, theme.FAINT)
+        self._hint = elide_label(hint, 8, QFont.Weight.Normal, theme.FAINT)
         self._hint.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.header.addWidget(self._tick)
         self.header.addWidget(self._title)
@@ -206,7 +253,7 @@ class StatTile(QFrame):
         lay.setContentsMargins(theme.scaled(12), theme.scaled(8), theme.scaled(12),
                                theme.scaled(9))
         lay.setSpacing(0)
-        self._caption = label(caption.upper(), 7.5, QFont.Weight.Bold, theme.FAINT)
+        self._caption = elide_label(caption.upper(), 7.5, QFont.Weight.Bold, theme.FAINT)
         self._caption.setStyleSheet(
             f"color: {theme.FAINT}; letter-spacing: 1px; background: transparent;")
         row = QHBoxLayout()
@@ -218,7 +265,9 @@ class StatTile(QFrame):
         row.addWidget(self._value)
         row.addWidget(self._unit)
         row.addStretch(1)
-        self._sub = label("", 7.5, QFont.Weight.Normal, theme.FAINT)
+        # A legenda encolhe antes do numero: "min 58 . med 65 . max 70" cortado
+        # em "max 7" mentia, e o numero grande e' o que o tile existe para dar.
+        self._sub = elide_label("", 7.5, QFont.Weight.Normal, theme.FAINT)
         lay.addWidget(self._caption)
         lay.addLayout(row)
         lay.addWidget(self._sub)
@@ -267,7 +316,7 @@ class MetricRow(QWidget):
         top.addWidget(self._label, 1)
         top.addWidget(self._value)
         lay.addLayout(top)
-        self._stat = label("", 7, QFont.Weight.Normal, theme.FAINT)
+        self._stat = elide_label("", 7, QFont.Weight.Normal, theme.FAINT)
         self._stat.setAlignment(Qt.AlignmentFlag.AlignRight)
         self._stat.setVisible(False)
         lay.addWidget(self._stat)
@@ -446,9 +495,14 @@ class NavButton(QFrame):
         lay.setContentsMargins(theme.scaled(12), theme.scaled(8), theme.scaled(10),
                                theme.scaled(8))
         lay.setSpacing(theme.scaled(10))
-        self._glyph = label(glyph, 11, QFont.Weight.Bold, theme.MUTE)
-        self._glyph.setFixedWidth(theme.scaled(18))
-        self._glyph.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # O icone vetorial usa a chave da tela; o glifo de texto so' sobra
+        # para uma tela sem desenho proprio.
+        if key in icons.names():
+            self._glyph = IconWidget(key, theme.MUTE, 18)
+        else:
+            self._glyph = label(glyph, 11, QFont.Weight.Bold, theme.MUTE)
+            self._glyph.setFixedWidth(theme.scaled(18))
+            self._glyph.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._text = label(text, 9, QFont.Weight.DemiBold, theme.MUTE)
         lay.addWidget(self._glyph)
         lay.addWidget(self._text)
@@ -459,7 +513,10 @@ class NavButton(QFrame):
     def set_active(self, active: bool, accent: str) -> None:
         self.setProperty("active", active)
         color = accent if active else theme.MUTE
-        self._glyph.setStyleSheet(f"color: {color}; background: transparent;")
+        if isinstance(self._glyph, IconWidget):
+            self._glyph.set_color(color)
+        else:
+            self._glyph.setStyleSheet(f"color: {color}; background: transparent;")
         self._text.setStyleSheet(
             f"color: {theme.TXT if active else theme.MUTE}; background: transparent;")
         self.style().unpolish(self)
@@ -476,14 +533,21 @@ class NavButton(QFrame):
 
 
 class IconButton(QLabel):
-    """Botao de texto/glifo usado na barra de titulo."""
+    """Botao de icone da barra de titulo e das linhas de acao.
+
+    Com `icon` o desenho vem de `ui.icons`, no mesmo traco dos icones da
+    barra lateral; sem ele, `glyph` e' escrito como texto.
+    """
 
     clicked = Signal()
 
-    def __init__(self, glyph: str, tooltip: str = "", danger: bool = False,
-                 pt: float = 11, parent: QWidget | None = None) -> None:
-        super().__init__(glyph, parent)
+    def __init__(self, glyph: str = "", tooltip: str = "", danger: bool = False,
+                 pt: float = 11, parent: QWidget | None = None,
+                 icon: str = "") -> None:
+        super().__init__("" if icon else glyph, parent)
         self._danger = danger
+        self._icon = icon
+        self._hover = False
         self.setFont(font(pt, QFont.Weight.Bold))
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setFixedSize(theme.scaled(30), theme.scaled(24))
@@ -491,7 +555,18 @@ class IconButton(QLabel):
         self.setToolTip(tooltip)
         self._paint(False)
 
+    @property
+    def icon(self) -> str:
+        return self._icon
+
+    def set_icon(self, name: str) -> None:
+        if name != self._icon:
+            self._icon = name
+            self.setText("")
+            self.update()
+
     def _paint(self, hover: bool) -> None:
+        self._hover = hover
         if hover:
             bg = theme.rgba(theme.BAD, 0.85) if self._danger else theme.SURFACE_3
             fg = theme.TXT
@@ -500,6 +575,16 @@ class IconButton(QLabel):
             fg = theme.MUTE
         self.setStyleSheet(
             f"color: {fg}; background: {bg}; border-radius: {theme.scaled(5)}px;")
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if not self._icon:
+            return
+        p = QPainter(self)
+        lado = theme.scaled(14)
+        caixa = QRectF((self.width() - lado) / 2, (self.height() - lado) / 2, lado, lado)
+        icons.paint(p, self._icon, caixa, theme.TXT if self._hover else theme.MUTE, 1.5)
 
     def enterEvent(self, event) -> None:
         self._paint(True)

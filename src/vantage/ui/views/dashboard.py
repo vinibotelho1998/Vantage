@@ -1,6 +1,8 @@
 """Painel principal: visao geral de tudo em uma tela, pensada para segundo monitor."""
 from __future__ import annotations
 
+import math
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout
@@ -59,6 +61,13 @@ class DashboardView(View):
         self._grid = QGridLayout()
         self._grid.setSpacing(theme.scaled(theme.GAP))
         self._grid_keys = ("cpu", "gpu", "ram", "disk", "net")
+        self._ocultos: set[str] = set()
+        """Cards que a configuracao ou a maquina tiraram do painel.
+
+        Guardado aqui, e nao lido de isHidden(): um widget recem-criado e sem
+        pai responde escondido, e o grid nasceria vazio.
+        """
+        self._colunas = len(self._grid_keys)
         for key in self._grid_keys:
             self._cards[key] = getattr(self, f"_build_{key}")()
         self._gauges = (self.cpu_gauge, self.gpu_gauge, self.ram_gauge)
@@ -66,18 +75,32 @@ class DashboardView(View):
         corpo.addLayout(self._grid, 4)
 
     def _relayout_cards(self) -> None:
-        """Reencaixa a linha de cards contando so' os visiveis.
+        """Reencaixa os cards de peca contando so' os visiveis.
 
         Esconder um card sem refazer o grid deixa a coluna vazia no lugar: um
         buraco no meio do painel, que e' pior do que o card inutil que saiu.
+        Quando eles nao cabem todos numa linha, a ultima linha, mais curta,
+        divide a largura inteira entre os seus, em vez de deixar um vao.
         """
         while self._grid.count():
             self._grid.takeAt(0)
         for i in range(self._grid.columnCount()):
             self._grid.setColumnStretch(i, 0)
-        visiveis = [self._cards[k] for k in self._grid_keys if not self._cards[k].isHidden()]
+        visiveis = [self._cards[k] for k in self._grid_keys if k not in self._ocultos]
+        if not visiveis:
+            return
+        colunas = max(1, min(self._colunas, len(visiveis)))
+        linhas = math.ceil(len(visiveis) / colunas)
+        sobra = len(visiveis) - (linhas - 1) * colunas
+        # Unidades de coluna: as linhas cheias usam `sobra` unidades por card,
+        # a ultima usa `colunas` por card, e as duas somam o mesmo total.
+        unidades = colunas * sobra if 0 < sobra < colunas else colunas
         for i, card in enumerate(visiveis):
-            self._grid.addWidget(card, 0, i)
+            linha, coluna = divmod(i, colunas)
+            ultima = linha == linhas - 1 and sobra < colunas
+            largura = colunas if ultima else (unidades // colunas)
+            self._grid.addWidget(card, linha, coluna * largura, 1, largura)
+        for i in range(unidades):
             self._grid.setColumnStretch(i, 1)
         self._encaixar_medidores()
 
@@ -254,6 +277,7 @@ class DashboardView(View):
         wanted = set(self.cfg.dash_cards)
         for key, card in self._cards.items():
             card.setVisible(key in wanted)
+        self._ocultos = {k for k in self._grid_keys if k not in wanted}
         self._relayout_cards()
         self.fps_chart.setVisible("frametime" in wanted)
         self.chart.configure(legend=False, **self.chart_config())
@@ -287,8 +311,12 @@ class DashboardView(View):
             visiveis.append("power")
         self.kpi.show_only(visiveis)
         mostrar_gpu = tem_gpu and "gpu" in self.cfg.dash_cards
-        if self._cards["gpu"].isHidden() == mostrar_gpu:
+        if ("gpu" not in self._ocultos) != mostrar_gpu:
             self._cards["gpu"].setVisible(mostrar_gpu)
+            if mostrar_gpu:
+                self._ocultos.discard("gpu")
+            else:
+                self._ocultos.add("gpu")
             self._relayout_cards()
 
     def on_system(self, d: dict) -> None:
@@ -400,6 +428,9 @@ class DashboardView(View):
             self.fps_value.setText("—")
             self.fps_value.setStyleSheet(f"color: {theme.MUTE};")
             self.game_badge.update_badge("nenhum jogo", theme.FAINT)
+            # O tile de FPS da faixa nunca era preenchido: ficava com travessao
+            # com o jogo rodando a 140 no card logo abaixo.
+            self.kpi.set("fps", units.DASH, theme.MUTE, "sem jogo em foco")
             for key in ("avg", "low1", "ft"):
                 self.lows.set(key, units.DASH, theme.MUTE)
             self.bottleneck.update_badge(self.app.fps_hint(), theme.FAINT)
@@ -414,6 +445,8 @@ class DashboardView(View):
         self.fps_value.setText(units.integer(now))
         self.fps_value.setStyleSheet(f"color: {theme.fps_color(now)};")
         self.game_badge.update_badge(stream.app or "?", theme.FPS)
+        self.kpi.set("fps", units.integer(now), theme.fps_color(now),
+                     f"1% low {units.integer(m.low_1)}")
         self.lows.set("avg", units.integer(m.fps_avg), theme.fps_color(m.fps_avg))
         self.lows.set("low1", units.integer(m.low_1), theme.fps_color(m.low_1))
         self.lows.set("ft", units.ms(m.ft_avg, 2), theme.frametime_color(m.ft_avg))

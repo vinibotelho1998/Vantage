@@ -9,7 +9,8 @@ from __future__ import annotations
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
 from PySide6.QtGui import (QBrush, QColor, QFont, QLinearGradient, QPainter,
                            QPainterPath, QPen, QRadialGradient)
-from PySide6.QtWidgets import QComboBox, QHBoxLayout, QSlider, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (QComboBox, QGridLayout, QHBoxLayout, QSlider,
+                               QVBoxLayout, QWidget)
 
 from ... import theme
 from ...platform import gamepad as G
@@ -655,20 +656,31 @@ class GamepadView(View):
         atuais = G.bindings_from(self.cfg)
         opcoes = sorted(G.ACTIONS.items(), key=lambda kv: (kv[0] != "", kv[1][0]))
         self.combos: dict[str, QComboBox] = {}
-        for nome in G.BUTTON_ORDER:
-            linha = QHBoxLayout()
-            linha.addWidget(label(nome, 8.5))
-            linha.addStretch(1)
+        # Duas colunas de botao e seletor, lado a lado. Um seletor por linha,
+        # encostado na borda direita do card, deixava meio metro de vazio entre
+        # o "A" e a acao dele, e oito linhas onde cabem quatro.
+        grade = QGridLayout()
+        grade.setHorizontalSpacing(theme.scaled(10))
+        grade.setVerticalSpacing(theme.scaled(6))
+        metade = -(-len(G.BUTTON_ORDER) // 2)
+        for i, nome in enumerate(G.BUTTON_ORDER):
+            linha, bloco = i % metade, (i // metade) * 3
             combo = QComboBox()
             for chave, (rotulo, _) in opcoes:
                 combo.addItem(rotulo, chave)
             combo.setCurrentIndex(max(0, combo.findData(atuais.get(nome, ""))))
             combo.currentIndexChanged.connect(
                 lambda _i, b=nome, w=combo: self._bind(b, w.currentData()))
-            combo.setMinimumWidth(theme.scaled(150))
+            combo.setMinimumWidth(theme.scaled(170))
             self.combos[nome] = combo
-            linha.addWidget(combo)
-            col.addLayout(linha)
+            grade.addWidget(label(nome, 8.5), linha, bloco,
+                            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            grade.addWidget(combo, linha, bloco + 1)
+        grade.setColumnMinimumWidth(0, theme.scaled(60))
+        grade.setColumnMinimumWidth(3, theme.scaled(60))
+        grade.setColumnStretch(2, 1)
+        grade.setColumnStretch(5, 2)
+        col.addLayout(grade)
 
         restaurar = PillButton("Voltar ao padrão", theme.MUTE)
         restaurar.clicked.connect(self._reset_bindings)

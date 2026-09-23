@@ -117,6 +117,24 @@ def nice_step(span: float, target_lines: int = 4) -> float:
     return mag * 10
 
 
+def escolher_rotulos(itens: list[tuple[float, bool]], folga: float) -> list[bool]:
+    """Quais rotulos de eixo cabem sem se sobrepor.
+
+    `itens` traz (posicao, prioridade) e a resposta e' um booleano por item, na
+    mesma ordem. Os prioritarios entram primeiro; o resto entra na ordem dada
+    enquanto ficar a pelo menos `folga` de tudo que ja' entrou.
+    """
+    aceitos: list[float] = []
+    resposta = [False] * len(itens)
+    ordem = sorted(range(len(itens)), key=lambda i: (not itens[i][1], i))
+    for i in ordem:
+        y = itens[i][0]
+        if all(abs(y - outro) >= folga for outro in aceitos):
+            aceitos.append(y)
+            resposta[i] = True
+    return resposta
+
+
 class Plot:
     """Uma linha do grafico: dados + estilo + estado de visibilidade."""
 
@@ -526,13 +544,20 @@ class FrameTimeChart(QWidget):
                    if not refresh or abs(1000 / ms - refresh) > 3]
         if refresh:
             targets.append((1000.0 / refresh, f"{refresh:.0f}", True))
-        for ms, label, is_monitor in targets:
-            if ms > scale:
-                continue
+        targets = [t for t in targets if t[0] <= scale]
+        # Num monitor de 160 Hz as linhas de 144 e 165 ficam a menos de um
+        # milissegundo dela, e os tres rotulos saiam escritos um por cima do
+        # outro. A linha de cada alvo continua; o rotulo so' entra onde cabe,
+        # e o do monitor tem preferencia.
+        com_rotulo = escolher_rotulos([(y_of(ms), is_monitor) for ms, _l, is_monitor in targets],
+                                      theme.scaled(11))
+        for (ms, label, is_monitor), mostrar in zip(targets, com_rotulo, strict=True):
             y = y_of(ms)
             line_color = theme.FPS if is_monitor else theme.LINE
             p.setPen(QPen(QColor(line_color), 1.0, Qt.PenStyle.DashLine))
             p.drawLine(QPointF(area.left(), y), QPointF(area.right(), y))
+            if not mostrar:
+                continue
             p.setPen(QColor(theme.FPS if is_monitor else theme.FAINT))
             p.drawText(QRectF(area.right() + 4, y - 8, pad_r, 16),
                        int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
@@ -954,7 +979,11 @@ class CoreGrid(QWidget):
         gap = theme.scaled(5)
         cw = (self.width() - gap * (cols - 1)) / cols
         ch = (self.height() - gap * (rows - 1)) / rows
-        font = QFont(theme.FONT_UI, max(6, theme.scaled(6.5)), QFont.Weight.DemiBold)
+        # O corpo da letra acompanha o tile: numa janela larga os blocos sao
+        # grandes e um "36%" de 6,5 pt virava um pontinho perdido no meio.
+        corpo = max(6.5, min(11.0, ch * 0.22))
+        font = QFont(theme.FONT_UI, round(corpo), QFont.Weight.DemiBold)
+        fonte_clock = QFont(theme.FONT_UI, round(max(6.0, min(8.5, ch * 0.16))))
         p.setFont(font)
         for i, value in enumerate(self._values):
             r, c = divmod(i, cols)
@@ -968,10 +997,12 @@ class CoreGrid(QWidget):
             color.setAlpha(190)
             p.setBrush(color)
             p.drawRoundedRect(QRectF(x + 1, y + ch - 1 - fill_h, cw - 2, fill_h), 4, 4)
+            p.setFont(font)
             p.setPen(QColor(theme.TXT if value < 55 else theme.BG))
             p.drawText(rect, int(Qt.AlignmentFlag.AlignCenter), f"{value:.0f}%")
             if i < len(self._clocks) and self._clocks[i]:
                 covered = fill_h > ch - theme.scaled(15)
+                p.setFont(fonte_clock)
                 p.setPen(QColor(theme.BG if covered else theme.FAINT))
                 p.drawText(QRectF(x, y + 2, cw, 12), int(Qt.AlignmentFlag.AlignCenter),
                            f"{self._clocks[i] / 1000:.1f}G")

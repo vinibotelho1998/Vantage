@@ -532,7 +532,7 @@ class LauncherView(View):
         jogar = PillButton("Jogar", theme.FPS, filled=True)
         jogar.clicked.connect(lambda i=index: self._play(i))
         topo.addWidget(jogar)
-        mais = IconButton("⋯", "ajustes deste jogo")
+        mais = IconButton(tooltip="ajustes deste jogo", icon="more")
         topo.addWidget(mais)
         col.addLayout(topo)
 
@@ -548,7 +548,7 @@ class LauncherView(View):
         ajustes_col.setSpacing(theme.scaled(4))
         mais.clicked.connect(
             lambda w=ajustes, b=mais: (w.setVisible(not w.isVisible()),
-                                       b.setText("×" if w.isVisible() else "⋯")))
+                                       b.set_icon("close" if w.isVisible() else "more")))
 
         meio = QHBoxLayout()
         meio.setSpacing(theme.scaled(8))

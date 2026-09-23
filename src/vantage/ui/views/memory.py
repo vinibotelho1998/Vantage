@@ -112,7 +112,7 @@ class MemoryView(View):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(theme.scaled(theme.GAP))
 
-        self.kpi = KpiStrip(_KPIS, columns=6)
+        self.kpi = KpiStrip(_KPIS, columns=len(_KPIS))
         root.addWidget(self.kpi)
 
         page, lay = scroll_page()
@@ -162,7 +162,10 @@ class MemoryView(View):
         self.drive_grid.setSpacing(theme.scaled(theme.GAP))
         card_drives.add_layout(self.drive_grid)
         self._drive_widgets: list[dict] = []
-        lay.addWidget(card_drives, 2)
+        # Sem esticar: o card e' uma lista curta de barras, e a folga da tela
+        # vai para os graficos e para a saude, que tem o que mostrar com ela.
+        # Esticado, as linhas de cada unidade se afastavam umas das outras.
+        lay.addWidget(card_drives, 0)
 
         baixo = QHBoxLayout()
         baixo.setSpacing(theme.scaled(theme.GAP))

@@ -450,7 +450,7 @@ class _DisplayCard(Card):
         # deixavam sete pilulas coloridas competindo por atencao em cada tela.
         actions.addWidget(self.btn_apply)
         actions.addWidget(self.btn_primary)
-        self.btn_mais = IconButton("⋯", "mais opções desta tela")
+        self.btn_mais = IconButton(tooltip="mais opções desta tela", icon="more")
         self.btn_mais.clicked.connect(self._alternar_mais)
         actions.addWidget(self.btn_mais)
         actions.addStretch(1)
@@ -480,7 +480,7 @@ class _DisplayCard(Card):
         self.mais.setVisible(aberto)
         # O glifo vira a indicacao de estado: sem isso nao ha' nada dizendo que
         # a fileira de baixo pertence a este botao.
-        self.btn_mais.setText("⋯" if not aberto else "×")
+        self.btn_mais.set_icon("more" if not aberto else "close")
         self.btn_mais.setToolTip("mais opções desta tela" if not aberto
                                  else "esconder as opções")
 
