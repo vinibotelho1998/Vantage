@@ -11,7 +11,7 @@ from .base import View, scroll_page
 
 _KPIS = [
     ("usage", "Uso", "%"), ("clock", "Clock", "GHz"), ("temp", "Temperatura", "°C"),
-    ("power", "Potência", "W"), ("fan", "Cooler", "RPM"), ("procs", "Processos", ""),
+    ("power", "Potência", "W"), ("fan", "Ventoinha", "RPM"), ("procs", "Processos", ""),
 ]
 
 _FONTE_VOLTS = {

@@ -7,9 +7,12 @@ from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
 from .. import theme
 
-_VIEWS = [("dashboard", "Painel"), ("cpu", "CPU"),
-          ("gpu", "GPU"), ("sensors", "Sensores"), ("launcher", "Jogos"), ("benchmark", "Benchmark"),
+_VIEWS = [("dashboard", "Painel"), ("cpu", "CPU"), ("gpu", "GPU"),
+          ("memory", "Memória & Disco"), ("network", "Rede"), ("sensors", "Sensores"),
+          ("processes", "Processos"), ("benchmark", "Benchmark"), ("launcher", "Jogos"),
           ("displays", "Telas"), ("gamepad", "Controle")]
+"""Todas as telas, na ordem da barra lateral. Faltavam tres, e a bandeja parecia
+um app menor que o da janela."""
 
 
 def make_icon(accent: str) -> QIcon:
@@ -51,7 +54,7 @@ class Tray:
         self._overlay_action.triggered.connect(lambda _v: self._ctl.toggle_overlay())
         menu.addAction(self._overlay_action)
         menu.addAction("Benchmark rápido (60 s)", lambda: self._ctl.benchmark_start(60))
-        menu.addAction("Zerar estatísticas", self._ctl.clear_stats)
+        menu.addAction("Zerar sessão", self._ctl.clear_stats)
         menu.addAction("Reiniciar captura de FPS", self._ctl.restart_capture)
         menu.addSeparator()
         menu.addAction("Configurações", lambda: self._ctl.open_settings())

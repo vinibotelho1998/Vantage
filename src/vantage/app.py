@@ -164,6 +164,7 @@ class App:
         self._bench_result = _load_last_bench()
 
         qt.setQuitOnLastWindowClosed(False)
+        qt.setPalette(style.build_palette(self.settings.accent))
         qt.setStyleSheet(style.build_qss(self.settings.accent))
         self.window = MainWindow(self)
         self.tray = Tray(self)
@@ -1267,6 +1268,7 @@ class App:
 
     def on_settings_changed(self) -> None:
         cfg = self.settings
+        self.qt.setPalette(style.build_palette(cfg.accent))
         self.qt.setStyleSheet(style.build_qss(cfg.accent))
         self.lhm.mem_rail = cfg.mem_volt_rail
         self.ping.configure(cfg.ping_host, cfg.ping_port)
@@ -1306,7 +1308,7 @@ class App:
 
     def _hotkey_reset(self) -> None:
         self.clear_stats()
-        self.notify("Vantage", "Estatísticas zeradas (Ctrl+Alt+R)")
+        self.notify("Vantage", "Sessão zerada (Ctrl+Alt+R)")
 
     def _hotkey_benchmark(self) -> None:
         if self._bench_active:

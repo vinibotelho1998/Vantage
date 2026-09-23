@@ -98,6 +98,7 @@ def test_restaurar_padroes_nao_apaga_a_biblioteca_nem_os_perfis():
     d = SettingsDialog(ctl, 0)
 
     d._restore_defaults()
+    d._save()
 
     assert cfg.accent == "cyan"
     assert cfg.overlay_opacity == Settings().overlay_opacity
@@ -136,3 +137,54 @@ def test_restaurar_cobre_tudo_o_que_a_janela_grava():
 
     assert gravador.tocados <= set(_CAMPOS_DA_JANELA), gravador.tocados - set(_CAMPOS_DA_JANELA)
     assert "mem_volt_rail" in gravador.tocados
+
+
+def test_restaurar_so_preenche_o_formulario_e_cancelar_desfaz():
+    """Os padroes vao para a tela; o arquivo so' muda quando a pessoa salva."""
+    cfg = Settings()
+    cfg.accent = "red"
+    cfg.autostart = True
+    cfg.alert_cpu_temp = 70
+    cfg.sanitize()
+    ctl = _Ctl(cfg)
+    d = SettingsDialog(ctl, 0)
+
+    d._restore_defaults()
+
+    assert cfg.accent == "red"
+    assert cfg.autostart is True
+    assert cfg.alert_cpu_temp == 70
+    assert ctl.aplicou == 0
+    d.reject()
+    assert cfg.accent == "red"
+    assert ctl.aplicou == 0
+
+
+def test_restaurar_e_salvar_leva_cada_campo_da_janela_ao_padrao():
+    """Campo esquecido no `_preencher` ficaria com o valor antigo depois do Salvar."""
+    cfg = Settings()
+    for nome, valor in {
+            "start_view": "cpu", "update_interval": 1.0, "always_on_top": True,
+            "close_to_tray": False, "start_minimized": True, "autostart": True,
+            "ping_host": "1.1.1.1", "ping_port": 443, "accent": "red", "ui_scale": 1.25,
+            "dash_cards": ["cpu"], "history_window": 300, "smooth_lines": False,
+            "fill_area": False, "show_grid": False, "chart_glow": False,
+            "fps_window": 30.0, "fps_now_window": 2.0, "fps_only_fullscreen": True,
+            "overlay_enabled": False, "overlay_auto_game": False,
+            "overlay_corner": "bottom-right", "overlay_opacity": 0.5, "overlay_scale": 1.5,
+            "overlay_refresh_hz": 6.0, "overlay_graph_seconds": 120, "overlay_columns": 2,
+            "overlay_metrics": ["fps"], "mem_volt_rail": "Voltage #7",
+            "alerts_enabled": False, "alert_cpu_temp": 70, "alert_gpu_temp": 70,
+            "alert_ram_pct": 80, "alert_vram_pct": 80}.items():
+        setattr(cfg, nome, valor)
+    cfg.sanitize()
+    d = SettingsDialog(_Ctl(cfg, [("Voltage #7", 1.352)]), 0)
+
+    d._restore_defaults()
+    d._save()
+
+    padrao = Settings()
+    padrao.sanitize()
+    diferentes = {nome: getattr(cfg, nome) for nome in _CAMPOS_DA_JANELA
+                  if getattr(cfg, nome) != getattr(padrao, nome)}
+    assert not diferentes, diferentes

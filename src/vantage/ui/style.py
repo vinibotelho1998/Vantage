@@ -1,13 +1,92 @@
 """Folha de estilo global (QSS) derivada dos tokens de tema."""
 from __future__ import annotations
 
-from .. import theme
+from PySide6.QtCore import QPointF, Qt
+from PySide6.QtGui import QColor, QImage, QPainter, QPalette, QPolygonF
+
+from .. import log, paths, theme
+
+_log = log.get("style")
+
+
+def _seta(direcao: str, cor: str) -> str:
+    """Caminho de uma divisa pequena em PNG, pronto para o url() do QSS.
+
+    O QSS so' aceita imagem de arquivo, e o triangulo feito de bordas sai como
+    uma barrinha chapada no Qt. Desenhar aqui e gravar ao lado dos dados evita
+    mexer no empacotamento; o nome leva a cor, entao trocar o tema nunca reusa
+    uma seta velha. Sem onde gravar, volta vazio e o seletor fica sem a seta,
+    que e' como ele era antes.
+    """
+    try:
+        pasta = paths.data_dir() / "ui"
+        pasta.mkdir(parents=True, exist_ok=True)
+        arquivo = pasta / f"seta-{direcao}-{cor.lstrip('#').lower()}.png"
+        if not arquivo.exists():
+            img = QImage(20, 20, QImage.Format.Format_ARGB32_Premultiplied)
+            img.fill(Qt.GlobalColor.transparent)
+            p = QPainter(img)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(cor))
+            if direcao == "cima":
+                pontos = (QPointF(3, 14), QPointF(17, 14), QPointF(10, 6))
+            else:
+                pontos = (QPointF(3, 6), QPointF(17, 6), QPointF(10, 14))
+            p.drawPolygon(QPolygonF(list(pontos)))
+            p.end()
+            if not img.save(str(arquivo), "PNG"):
+                return ""
+        return arquivo.as_posix()
+    except OSError as e:
+        _log.info("sem seta nos seletores: %s", e)
+        return ""
+
+
+def _imagem(caminho: str) -> str:
+    return f'image: url("{caminho}");' if caminho else "image: none;"
+
+
+def build_palette(accent_key: str) -> QPalette:
+    """Paleta escura para o que o QSS nao alcanca.
+
+    O QSS pinta todo texto de claro, mas o fundo de alguns widgets sai da paleta
+    do sistema: a pagina de cada aba das Configuracoes (o QScrollArea liga o
+    preenchimento automatico nela) e o relatorio do benchmark. Com o Windows em
+    modo claro, que e' o padrao de fabrica, isso virava texto quase branco em
+    cima de fundo quase branco. Com a paleta do app por baixo, o que escapar do
+    QSS cai no mesmo tema escuro.
+    """
+    a = QColor(theme.accent_color(accent_key))
+    pal = QPalette()
+    for papel, cor in (
+            (QPalette.ColorRole.Window, theme.BG),
+            (QPalette.ColorRole.WindowText, theme.TXT),
+            (QPalette.ColorRole.Base, theme.SURFACE),
+            (QPalette.ColorRole.AlternateBase, theme.SURFACE_2),
+            (QPalette.ColorRole.Text, theme.TXT),
+            (QPalette.ColorRole.Button, theme.SURFACE_3),
+            (QPalette.ColorRole.ButtonText, theme.TXT),
+            (QPalette.ColorRole.BrightText, theme.TXT),
+            (QPalette.ColorRole.PlaceholderText, theme.FAINT),
+            (QPalette.ColorRole.ToolTipBase, theme.SURFACE_3),
+            (QPalette.ColorRole.ToolTipText, theme.TXT),
+            (QPalette.ColorRole.HighlightedText, theme.BG)):
+        pal.setColor(papel, QColor(cor))
+    pal.setColor(QPalette.ColorRole.Highlight, a)
+    for papel in (QPalette.ColorRole.WindowText, QPalette.ColorRole.Text,
+                  QPalette.ColorRole.ButtonText):
+        pal.setColor(QPalette.ColorGroup.Disabled, papel, QColor(theme.FAINT))
+    return pal
 
 
 def build_qss(accent_key: str) -> str:
     a = theme.accent_color(accent_key)
     r = theme.RADIUS
     rs = theme.RADIUS_SM
+    baixo = _seta("baixo", theme.MUTE)
+    baixo_off = _seta("baixo", theme.LINE_HI)
+    cima = _seta("cima", theme.MUTE)
     return f"""
 * {{
     font-family: "{theme.FONT_UI}";
@@ -130,7 +209,27 @@ QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox {{
     min-height: 16px;
 }}
 QComboBox:hover, QLineEdit:hover, QSpinBox:hover {{ border-color: {a}; }}
-QComboBox::drop-down {{ border: none; width: 18px; }}
+/* Desligado tem de parecer desligado: com a mesma cara do ativo, a TV apagada
+   mostrava resolucao e taxa prontas para aplicar, e nada respondia ao clique. */
+QComboBox:disabled, QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled {{
+    color: {theme.FAINT}; background: {theme.BG_SUNKEN}; border-color: {theme.LINE};
+}}
+QComboBox::drop-down {{ border: none; width: 22px; }}
+/* A seta some quando o drop-down ganha estilo sem ela, e o seletor passa por
+   campo de texto: ninguem descobre que da' para trocar a resolucao ou o
+   servidor. */
+QComboBox::down-arrow {{ {_imagem(baixo)} width: 10px; height: 10px; }}
+QComboBox::down-arrow:disabled {{ {_imagem(baixo_off)} }}
+QSpinBox::up-button, QSpinBox::down-button {{
+    background: transparent; border: none; width: 18px;
+}}
+QSpinBox::up-arrow {{ {_imagem(cima)} width: 9px; height: 9px; }}
+QSpinBox::down-arrow {{ {_imagem(baixo)} width: 9px; height: 9px; }}
+QPlainTextEdit {{
+    background: {theme.BG_SUNKEN}; color: {theme.TXT};
+    border: 1px solid {theme.LINE}; border-radius: {theme.RADIUS_XS}px;
+    selection-background-color: {theme.rgba(a, 0.35)};
+}}
 QComboBox QAbstractItemView {{
     background: {theme.SURFACE_2};
     border: 1px solid {theme.LINE_HI};

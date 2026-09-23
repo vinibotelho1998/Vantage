@@ -11,7 +11,7 @@ from ...core import units
 from ..charts import BarMeter, Gauge, Plot, Sparkline, TimeSeriesChart
 from ..components import Badge, Card, KpiStrip, MetricList, dimm_color, label
 from ..components import linha_opcional as _linha
-from .base import View
+from .base import View, scroll_page
 
 _KPIS = [
     ("cpu", "CPU", "%"), ("cpu_temp", "CPU temp", "°C"),
@@ -19,6 +19,11 @@ _KPIS = [
     ("ram", "Memória", "%"), ("vram", "VRAM", "%"),
     ("fps", "FPS", ""), ("power", "Consumo", "W"),
 ]
+
+_CARD_COM_MEDIDOR = 212
+"""Largura de card abaixo da qual o medidor circular sai. Com ele, 212 px e' o
+que ainda cabe "Frequência 6000 MHz" ao lado; e' a largura de cada card numa
+janela de 1360 px."""
 
 
 class DashboardView(View):
@@ -35,6 +40,12 @@ class DashboardView(View):
         self.kpi = KpiStrip(_KPIS, columns=8)
         root.addWidget(self.kpi)
 
+        # O painel era a unica tela sem rolagem. Em janela baixa (notebook,
+        # meia tela de um 1080p) o layout espremia tudo abaixo do minimo e os
+        # chips da legenda caiam por cima do grafico; rolando, nada se sobrepoe.
+        page, corpo = scroll_page()
+        root.addWidget(page, 1)
+
         middle = QHBoxLayout()
         middle.setSpacing(theme.scaled(theme.GAP))
         self._cards: dict[str, Card] = {
@@ -43,15 +54,16 @@ class DashboardView(View):
         }
         middle.addWidget(self._cards["timeline"], 5)
         middle.addWidget(self._cards["fps"], 3)
-        root.addLayout(middle, 5)
+        corpo.addLayout(middle, 5)
 
         self._grid = QGridLayout()
         self._grid.setSpacing(theme.scaled(theme.GAP))
         self._grid_keys = ("cpu", "gpu", "ram", "disk", "net")
         for key in self._grid_keys:
             self._cards[key] = getattr(self, f"_build_{key}")()
+        self._gauges = (self.cpu_gauge, self.gpu_gauge, self.ram_gauge)
         self._relayout_cards()
-        root.addLayout(self._grid, 4)
+        corpo.addLayout(self._grid, 4)
 
     def _relayout_cards(self) -> None:
         """Reencaixa a linha de cards contando so' os visiveis.
@@ -67,6 +79,28 @@ class DashboardView(View):
         for i, card in enumerate(visiveis):
             self._grid.addWidget(card, 0, i)
             self._grid.setColumnStretch(i, 1)
+        self._encaixar_medidores()
+
+    def _encaixar_medidores(self) -> None:
+        """Tira os medidores circulares quando cada card fica estreito demais.
+
+        O medidor tem largura fixa. Numa janela de notebook ele ficava e o que
+        encolhia era a coluna de numeros, ate' o valor ser cortado; o medidor so'
+        repete a porcentagem que a faixa do topo ja' mostra, entao e' ele que sai.
+        """
+        visiveis = sum(1 for k in self._grid_keys if not self._cards[k].isHidden())
+        if not visiveis:
+            return
+        gap = theme.scaled(theme.GAP)
+        por_card = (self.width() - gap * (visiveis - 1)) / visiveis
+        mostrar = por_card >= theme.scaled(_CARD_COM_MEDIDOR)
+        for gauge in self._gauges:
+            if gauge.isHidden() == mostrar:
+                gauge.setVisible(mostrar)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._encaixar_medidores()
 
     def _build_timeline(self) -> Card:
         card = Card("Linha do tempo", theme.accent_color(self.cfg.accent))
@@ -159,7 +193,7 @@ class DashboardView(View):
         row.addWidget(self.cpu_gauge)
         self.cpu_rows = MetricList([("temp", "Temp"), ("freq", "Clock"),
                                     ("watts", "Potência"), ("volts", "Tensão"),
-                                    ("fan", "Cooler")])
+                                    ("fan", "Ventoinha")])
         row.addWidget(self.cpu_rows, 1)
         card.add_layout(row)
         self.cpu_spark = Sparkline(theme.CPU, 30, fixed_max=100)
@@ -187,9 +221,9 @@ class DashboardView(View):
         row.setSpacing(theme.scaled(10))
         self.ram_gauge = Gauge(theme.RAM, 96)
         row.addWidget(self.ram_gauge)
-        self.ram_rows = MetricList([("used", "Em uso"), ("avail", "Livre"),
+        self.ram_rows = MetricList([("used", "Em uso"), ("avail", "Disponível"),
                                     ("jogo", "Jogo em foco"), ("temp", "Temp"),
-                                    ("freq", "Frequência"), ("swap", "Swap")])
+                                    ("freq", "Frequência"), ("swap", "Paginação")])
         row.addWidget(self.ram_rows, 1)
         card.add_layout(row)
         self.ram_spark = Sparkline(theme.RAM, 30, fixed_max=100)
@@ -360,6 +394,9 @@ class DashboardView(View):
     def on_fps(self) -> None:
         stream = self.app.active_stream()
         if stream is None:
+            # O tile da faixa estava na lista e nunca recebia valor: travessao
+            # para sempre, mesmo com o jogo a 140 fps no card logo abaixo.
+            self.kpi.set("fps", units.DASH, theme.MUTE, "nenhum jogo")
             self.fps_value.setText("—")
             self.fps_value.setStyleSheet(f"color: {theme.MUTE};")
             self.game_badge.update_badge("nenhum jogo", theme.FAINT)
@@ -372,6 +409,8 @@ class DashboardView(View):
 
         m = stream.metrics
         now = m.fps_now or m.fps_avg
+        self.kpi.set("fps", units.integer(now), theme.fps_color(now),
+                     f"1% low {units.integer(m.low_1)}")
         self.fps_value.setText(units.integer(now))
         self.fps_value.setStyleSheet(f"color: {theme.fps_color(now)};")
         self.game_badge.update_badge(stream.app or "?", theme.FPS)

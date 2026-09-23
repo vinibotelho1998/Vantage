@@ -26,7 +26,7 @@ from .base import View, scroll_page
 
 _KPIS = [
     ("used", "Em uso", "GB"), ("pct", "Ocupação", "%"), ("avail", "Disponível", "GB"),
-    ("freq", "Frequência", "MHz"), ("temp", "Temperatura", "°C"), ("swap", "Swap", "GB"),
+    ("freq", "Frequência", "MHz"), ("temp", "Temperatura", "°C"), ("swap", "Paginação", "GB"),
     ("disk", "Disco do sistema", "%"),
 ]
 
@@ -123,7 +123,7 @@ class MemoryView(View):
         card_ram = Card("Memória do sistema", theme.RAM)
         self.ram_chart = TimeSeriesChart([
             Plot("ram", "RAM %", theme.RAM),
-            Plot("swap", "Swap %", theme.FAINT, width=1.4, dashed=True),
+            Plot("swap", "Paginação %",theme.FAINT, width=1.4, dashed=True),
         ], y_max=100.0, height=175)
         card_ram.add(self.ram_chart, 1)
         self.ram_rows = MetricList([

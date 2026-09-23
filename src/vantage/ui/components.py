@@ -1,7 +1,7 @@
 """Blocos reutilizaveis da interface: cards, tiles, linhas de metrica e navegacao."""
 from __future__ import annotations
 
-from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter
 from PySide6.QtWidgets import (
     QFrame,
@@ -34,6 +34,36 @@ def label(text: str = "", pt: float = 9, weight: int = QFont.Weight.Normal,
     if align is not None:
         lb.setAlignment(align)
     return lb
+
+
+class ElideLabel(QLabel):
+    """QLabel que cede largura cortando o texto com reticencias.
+
+    QLabel comum nunca fica mais estreito que o proprio texto: num layout ele
+    vira largura minima e empurra o vizinho, ou o layout o espreme e o corte sai
+    seco, sem aviso nenhum de que falta um pedaco. Aqui a largura minima e' zero
+    e o corte ganha reticencias; o texto inteiro continua no `text()` e na dica.
+    """
+
+    def __init__(self, text: str = "", modo: Qt.TextElideMode = Qt.TextElideMode.ElideRight,
+                 parent: QWidget | None = None) -> None:
+        super().__init__(text, parent)
+        self._modo = modo
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(0, super().minimumSizeHint().height())
+
+    def texto_visivel(self) -> str:
+        """O que cabe de fato na largura atual, ja' com as reticencias."""
+        return self.fontMetrics().elidedText(self.text(), self._modo,
+                                             max(0, self.contentsRect().width()))
+
+    def paintEvent(self, _event) -> None:
+        p = QPainter(self)
+        self.style().drawItemText(p, self.contentsRect(), int(self.alignment()),
+                                  self.palette(), self.isEnabled(), self.texto_visivel(),
+                                  self.foregroundRole())
 
 
 def dimm_color(snapshot: dict) -> str:
@@ -210,7 +240,13 @@ class StatTile(QFrame):
 
 
 class MetricRow(QWidget):
-    """Linha rotulo -> valor com estatistica opcional (mín/méd/máx)."""
+    """Linha rotulo -> valor com estatistica opcional (mín/méd/máx).
+
+    Quando falta largura quem cede e' o rotulo, com reticencias; o valor nunca.
+    Com o valor alinhado a' direita, espremer o numero cortava os digitos da
+    esquerda: 2745 MHz virava 745 MHz, um numero plausivel e falso, que se le'
+    como a placa derrubando o clock. Rotulo cortado ainda se reconhece.
+    """
 
     def __init__(self, text: str, label_pt: float = 8.5, value_pt: float = 9.5,
                  parent: QWidget | None = None) -> None:
@@ -221,11 +257,14 @@ class MetricRow(QWidget):
         top = QHBoxLayout()
         top.setContentsMargins(0, 0, 0, 0)
         top.setSpacing(theme.scaled(8))
-        self._label = label(text, label_pt, QFont.Weight.Normal, theme.MUTE)
+        self._label = ElideLabel(text)
+        self._label.setFont(font(label_pt, QFont.Weight.Normal))
+        self._label.setStyleSheet(f"color: {theme.MUTE}; background: transparent;")
+        self._label.setToolTip(text)
         self._value = label(units.DASH, value_pt, QFont.Weight.DemiBold, theme.TXT)
         self._value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        top.addWidget(self._label)
-        top.addStretch(1)
+        self._value.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred)
+        top.addWidget(self._label, 1)
         top.addWidget(self._value)
         lay.addLayout(top)
         self._stat = label("", 7, QFont.Weight.Normal, theme.FAINT)
@@ -246,7 +285,9 @@ class MetricRow(QWidget):
         self._stat.setVisible(bool(text))
 
     def set_label(self, text: str) -> None:
-        self._label.setText(text)
+        if text != self._label.text():
+            self._label.setText(text)
+            self._label.setToolTip(text)
 
 
 class MetricList(QWidget):
@@ -283,6 +324,20 @@ class MetricList(QWidget):
 
 
 _TILE_MIN = 132
+
+
+def colunas_equilibradas(tiles: int, cabem: int) -> int:
+    """Colunas para `tiles` quando cabem no maximo `cabem` numa linha.
+
+    Encher a primeira linha e jogar o resto na de baixo deixava um tile sozinho
+    numa linha inteira: 8 em 7+1, 7 em 6+1. Cada linha orfa custa a altura de
+    uma faixa inteira numa tela que ja' rola. Aqui as linhas saem equilibradas:
+    8 viram 4+4 e 7 viram 4+3.
+    """
+    tiles = max(1, int(tiles))
+    cabem = max(1, min(int(cabem), tiles))
+    linhas = -(-tiles // cabem)
+    return -(-tiles // linhas)
 
 
 class KpiStrip(QWidget):
@@ -323,7 +378,7 @@ class KpiStrip(QWidget):
             tile.setMinimumWidth(theme.scaled(_TILE_MIN))
             self.tiles[key] = tile
             self._order.append((key, tile))
-        self._relayout(self._max_columns)
+        self._relayout(colunas_equilibradas(len(self._order), self._max_columns))
 
     def _relayout(self, columns: int, forcar: bool = False) -> None:
         if columns == self._columns and not forcar:
@@ -352,13 +407,20 @@ class KpiStrip(QWidget):
         self._ocultos = ocultos
         for chave, tile in self.tiles.items():
             tile.setVisible(chave not in ocultos)
-        self._relayout(self._columns, forcar=True)
+        # Ainda sem tamanho dado pelo layout, a largura e' a de fabrica do Qt e
+        # nao diz nada; o resizeEvent que vem depois acerta as colunas.
+        largura = (self.width() if self.testAttribute(Qt.WidgetAttribute.WA_Resized)
+                   else 1 << 16)
+        self._relayout(self._colunas_para(largura), forcar=True)
+
+    def _colunas_para(self, largura: int) -> int:
+        gap = theme.scaled(theme.GAP)
+        cabem = max(1, (max(1, largura) + gap) // (theme.scaled(_TILE_MIN) + gap))
+        visiveis = sum(1 for chave, _t in self._order if chave not in self._ocultos)
+        return colunas_equilibradas(visiveis, min(self._max_columns, int(cabem)))
 
     def resizeEvent(self, event) -> None:
-        gap = theme.scaled(theme.GAP)
-        largura = max(1, self.width())
-        cabem = max(1, (largura + gap) // (theme.scaled(_TILE_MIN) + gap))
-        self._relayout(min(self._max_columns, int(cabem), len(self._order) or 1))
+        self._relayout(self._colunas_para(self.width()))
         super().resizeEvent(event)
 
     def set(self, key: str, value: str, color: str | None = None,
@@ -470,12 +532,15 @@ class PillButton(QLabel):
         self._apply(False)
 
     def _apply(self, hover: bool) -> None:
-        c = self._color
-        if self._filled:
+        # Desligada tem cara de desligada. Um QLabel desligado ja' nao recebe
+        # clique, mas continuava com a cor cheia: durante um teste de disco, a
+        # pilula de opcao parecia pronta para trocar algo que nao ia trocar.
+        c = self._color if self.isEnabled() else theme.FAINT
+        if self._filled and self.isEnabled():
             bg = theme.rgba(c, 0.95 if hover else 0.82)
             fg = theme.BG
         else:
-            bg = theme.rgba(c, 0.22 if hover else 0.12)
+            bg = theme.rgba(c, 0.22 if hover and self.isEnabled() else 0.12)
             fg = c
         self.setStyleSheet(
             f"color: {fg}; background: {bg}; border: 1px solid {theme.rgba(c, 0.32)};"
@@ -485,6 +550,13 @@ class PillButton(QLabel):
     def set_color(self, color: str) -> None:
         self._color = color
         self._apply(False)
+
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.Type.EnabledChange:
+            self.setCursor(Qt.CursorShape.PointingHandCursor if self.isEnabled()
+                           else Qt.CursorShape.ArrowCursor)
+            self._apply(False)
+        super().changeEvent(event)
 
     def enterEvent(self, event) -> None:
         self._apply(True)

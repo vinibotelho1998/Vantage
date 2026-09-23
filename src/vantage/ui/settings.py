@@ -1,7 +1,7 @@
 """Dialogo de configuracoes organizado por abas."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -32,6 +32,7 @@ from ..config import (
     VIEWS,
 )
 from ..core import frames as fr
+from .components import ElideLabel
 
 _VIEW_LABELS = {
     "dashboard": "Painel", "cpu": "CPU", "gpu": "GPU",
@@ -73,17 +74,35 @@ def _combo(pairs, current) -> QComboBox:
     return c
 
 
-def _slider(lo: int, hi: int, value: int, suffix: str) -> tuple[QHBoxLayout, QSlider]:
+def _slider(lo: int, hi: int, value: int, suffix: str,
+            formato=None) -> tuple[QHBoxLayout, QSlider]:
+    """Slider com o valor escrito ao lado.
+
+    `formato` existe para o slider que guarda o numero em outra escala: o das
+    atualizacoes do overlay anda em decimos, e mostrar o valor cru obrigava a
+    pessoa a dividir por dez de cabeca para saber o que tinha escolhido.
+    """
+    texto = formato or (lambda v: f"{v}{suffix}")
     s = QSlider(Qt.Orientation.Horizontal)
     s.setRange(lo, hi)
     s.setValue(value)
-    lbl = QLabel(f"{value}{suffix}")
+    lbl = QLabel(texto(value))
     lbl.setMinimumWidth(52)
-    s.valueChanged.connect(lambda v: lbl.setText(f"{v}{suffix}"))
+    s.valueChanged.connect(lambda v: lbl.setText(texto(v)))
     row = QHBoxLayout()
     row.addWidget(s, 1)
     row.addWidget(lbl)
     return row, s
+
+
+_ZERAR_SESSAO = "Zerar sessão  (Ctrl+Alt+R)"
+_ZERAR_SESSAO_DICA = ("Recomeça do zero o mín/méd/máx de todos os sensores, o "
+                      "histórico dos gráficos de todas as telas e os lows do jogo "
+                      "em foco. Para zerar só o mín/máx, use o botão da aba Sensores.")
+
+
+def _por_segundo(decimos: int) -> str:
+    return f"{decimos / 10:.1f} /s".replace(".", ",")
 
 
 def _page() -> tuple[QScrollArea, QVBoxLayout]:
@@ -91,6 +110,10 @@ def _page() -> tuple[QScrollArea, QVBoxLayout]:
     area.setWidgetResizable(True)
     area.setFrameShape(QScrollArea.Shape.NoFrame)
     page = QWidget()
+    # O mesmo nome das paginas das telas, que o QSS deixa transparente. Sem ele
+    # a pagina pinta a cor da janela do Windows: cinza no modo escuro e quase
+    # branca no claro, por baixo de um texto que o app pinta de quase branco.
+    page.setObjectName("Content")
     lay = QVBoxLayout(page)
     lay.setContentsMargins(4, 10, 12, 10)
     lay.setSpacing(10)
@@ -127,9 +150,8 @@ _EXPLICACOES = {
                  "da placa-mãe expor o sensor.",
     "mem_ctrl": "Quanto da banda de memória da placa está em uso. Perto de 100% "
                 "significa que a VRAM é o caminho estreito, não a capacidade.",
-    "jogo_ram": "Toda a memória que o jogo reservou para si, esteja ela na RAM "
-                "física ou não. Um número só: o par com o working set punha "
-                "dois valores sem rótulo na mesma célula e nao se explicava.",
+    "jogo_ram": "Memória que o jogo reservou para si, esteja ela na RAM física ou "
+                "no arquivo de paginação.",
     "jogo_vram": "Quanto da VRAM é do jogo, e não do resto. O total sozinho não diz se quem encheu a placa foi o jogo ou o navegador aberto atrás; a resposta muda o que se faz a seguir.",
     "mem_clock": "Clock das memórias.",
     "teto_watts": "Limite de potência da placa, ao lado do consumo. Consumo "
@@ -253,8 +275,18 @@ class SettingsDialog(QDialog):
 
         buttons = QHBoxLayout()
         reset = QPushButton("Restaurar padrões")
+        reset.setToolTip("Põe os valores de fábrica no formulário. Nada é gravado "
+                         "até você clicar em Salvar.")
         reset.clicked.connect(self._restore_defaults)
         buttons.addWidget(reset)
+        # Cede largura com reticencias: QLabel comum empurrava o proprio botao
+        # de restaurar e cortava o nome dele em janela estreita.
+        aviso = "Padrões na tela: Salvar grava, Cancelar desfaz."
+        self._aviso_padroes = ElideLabel(aviso)
+        self._aviso_padroes.setToolTip(aviso)
+        self._aviso_padroes.setStyleSheet(f"color: {theme.WARN};")
+        self._aviso_padroes.setVisible(False)
+        buttons.addWidget(self._aviso_padroes)
         buttons.addStretch(1)
         cancel = QPushButton("Cancelar")
         cancel.clicked.connect(self.reject)
@@ -333,7 +365,7 @@ class SettingsDialog(QDialog):
         form.addRow("Janela dos gráficos", self.w_history)
         lay.addLayout(form)
 
-        self.c_smooth = QCheckBox("Linhas suavizadas (interpolação cúbica monotona)")
+        self.c_smooth = QCheckBox("Linhas suavizadas (interpolação cúbica monótona)")
         self.c_smooth.setChecked(self._cfg.smooth_lines)
         self.c_fill = QCheckBox("Preencher a área sob a linha")
         self.c_fill.setChecked(self._cfg.fill_area)
@@ -408,7 +440,8 @@ class SettingsDialog(QDialog):
         self.w_corner = _combo(_CORNERS, self._cfg.overlay_corner)
         op_row, self.w_opacity = _slider(30, 100, int(self._cfg.overlay_opacity * 100), "%")
         sc_row, self.w_oscale = _slider(70, 250, int(self._cfg.overlay_scale * 100), "%")
-        hz_row, self.w_ohz = _slider(10, 100, int(self._cfg.overlay_refresh_hz * 10), "")
+        hz_row, self.w_ohz = _slider(10, 100, int(self._cfg.overlay_refresh_hz * 10), "",
+                                     _por_segundo)
         gr_row, self.w_ograph = _slider(10, 300, int(self._cfg.overlay_graph_seconds), " s")
         # Duas opcoes, e nao tres: "automatico" prometia uma escolha que o arranjo
         # de coluna unica nao faz mais. Settings antigo com 1 cai na primeira
@@ -419,7 +452,7 @@ class SettingsDialog(QDialog):
         form.addRow("Opacidade", op_row)
         form.addRow("Tamanho", sc_row)
         form.addRow("Formato", self.w_ocols)
-        form.addRow("Atualizações por segundo (x10)", hz_row)
+        form.addRow("Atualizações por segundo", hz_row)
         form.addRow("Janela do gráfico", gr_row)
         lay.addLayout(form)
 
@@ -590,11 +623,20 @@ class SettingsDialog(QDialog):
         lay.addWidget(note)
 
         lay.addWidget(_header("Sessão"))
-        clear = QPushButton("Zerar estatísticas mín/méd/máx  (Ctrl+Alt+R)")
-        clear.clicked.connect(self._ctl.clear_stats)
+        # Um nome so' para a mesma acao em todo lugar (aqui, na bandeja e no
+        # Ctrl+Alt+R), e dizendo tudo o que ela apaga: nao e' so' o mín/máx.
+        clear = QPushButton(_ZERAR_SESSAO)
+        clear.setToolTip(_ZERAR_SESSAO_DICA)
+        clear.clicked.connect(lambda: self._zerar_sessao(clear))
         lay.addWidget(clear)
         lay.addStretch(1)
         return area
+
+    def _zerar_sessao(self, botao: QPushButton) -> None:
+        self._ctl.clear_stats()
+        # Sem retorno na tela o clique parecia nao ter pegado.
+        botao.setText("Sessão zerada")
+        QTimer.singleShot(1600, botao, lambda: botao.setText(_ZERAR_SESSAO))
 
     def _spin(self, value: int, lo: int, hi: int, suffix: str) -> QSpinBox:
         s = QSpinBox()
@@ -604,13 +646,64 @@ class SettingsDialog(QDialog):
         return s
 
     def _restore_defaults(self) -> None:
+        """Poe os padroes de fabrica no formulario, sem gravar nada.
+
+        Gravar na hora e fechar a janela trocava umas 35 opcoes num clique, e
+        entre elas o iniciar com o Windows e os limites de alerta; o Cancelar ao
+        lado nao desfazia nada. Assim os padroes ficam na tela para a pessoa
+        conferir: Salvar confirma, Cancelar descarta, como o resto da janela.
+        """
         from ..config import Settings
-        defaults = Settings()
-        for f in _CAMPOS_DA_JANELA:
-            setattr(self._cfg, f, getattr(defaults, f))
-        self._cfg.sanitize()
-        self._ctl.on_settings_changed()
-        self.accept()
+        self._preencher(Settings())
+        self._aviso_padroes.setVisible(True)
+
+    def _preencher(self, c) -> None:
+        """Leva os valores de `c` para os controles; o espelho do `_save`."""
+        def escolher(combo: QComboBox, valor) -> None:
+            combo.setCurrentIndex(max(0, combo.findData(valor)))
+
+        escolher(self.w_view, c.start_view)
+        escolher(self.w_interval, c.update_interval)
+        self.c_top.setChecked(c.always_on_top)
+        self.c_tray.setChecked(c.close_to_tray)
+        self.c_min.setChecked(c.start_minimized)
+        self.c_auto.setChecked(c.autostart)
+        self.w_host.setText(c.ping_host)
+        self.w_port.setValue(c.ping_port)
+
+        escolher(self.w_accent, c.accent)
+        self.w_scale.setValue(int(round(c.ui_scale * 100)))
+        for chave, chk in self.dash_checks.items():
+            chk.setChecked(chave in c.dash_cards)
+
+        escolher(self.w_history, c.history_window)
+        self.c_smooth.setChecked(c.smooth_lines)
+        self.c_fill.setChecked(c.fill_area)
+        self.c_grid.setChecked(c.show_grid)
+        self.c_glow.setChecked(c.chart_glow)
+
+        escolher(self.w_fpswin, c.fps_window)
+        escolher(self.w_fpsnow, c.fps_now_window)
+        escolher(self.w_pin, c.fps_pin)
+        self.c_fs.setChecked(c.fps_only_fullscreen)
+
+        self.c_overlay.setChecked(c.overlay_enabled)
+        self.c_overlay_auto.setChecked(c.overlay_auto_game)
+        escolher(self.w_corner, c.overlay_corner)
+        self.w_opacity.setValue(int(round(c.overlay_opacity * 100)))
+        self.w_oscale.setValue(int(round(c.overlay_scale * 100)))
+        self.w_ohz.setValue(int(round(c.overlay_refresh_hz * 10)))
+        self.w_ograph.setValue(int(c.overlay_graph_seconds))
+        escolher(self.w_ocols, c.overlay_columns)
+        for chave, chk in self.overlay_checks.items():
+            chk.setChecked(chave in c.overlay_metrics)
+        escolher(self.w_rail, c.mem_volt_rail)
+
+        self.c_alerts.setChecked(c.alerts_enabled)
+        self.w_cpu_alert.setValue(c.alert_cpu_temp)
+        self.w_gpu_alert.setValue(c.alert_gpu_temp)
+        self.w_ram_alert.setValue(c.alert_ram_pct)
+        self.w_vram_alert.setValue(c.alert_vram_pct)
 
     def _save(self) -> None:
         c = self._cfg
