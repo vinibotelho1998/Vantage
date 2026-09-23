@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vantage"
-version = "3.4.6"
+version = "3.4.7"
 description = "Vantage: monitor de hardware e desempenho em jogos para Windows"
 readme = "README.md"
 requires-python = ">=3.12"
