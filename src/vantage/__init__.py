@@ -1,4 +1,4 @@
 """Vantage: monitor de hardware e desempenho em jogos para Windows."""
 
-__version__ = "3.4.7"
+__version__ = "3.4.8"
 __app_name__ = "Vantage"
