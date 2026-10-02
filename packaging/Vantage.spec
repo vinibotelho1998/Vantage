@@ -1,5 +1,26 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
+import sys
+
+# Evita resolver ICU/UCRT incompatíveis em ferramentas herdadas do PATH.
+# Hooks e pastas dos módulos fornecem as dependências privadas do aplicativo.
+if os.name == "nt":
+    WINDOWS = os.environ.get("SystemRoot", r"C:\Windows")
+    os.environ["PATH"] = os.pathsep.join(dict.fromkeys([
+        os.path.join(sys.prefix, "Scripts"), sys.base_prefix,
+        os.path.join(WINDOWS, "System32"), WINDOWS,
+    ]))
+
+
+def _verificar_runtime_windows(binarios):
+    if os.name != "nt":
+        return
+    raiz = os.path.normcase(os.path.abspath(WINDOWS)) + os.sep
+    for destino, origem, _tipo in binarios:
+        nome = os.path.basename(destino).lower()
+        if nome in ("icuuc.dll", "icuin.dll", "ucrtbase.dll") or nome.startswith("api-ms-win-"):
+            if not os.path.normcase(os.path.abspath(origem)).startswith(raiz):
+                raise RuntimeError(f"DLL do Windows resolvida fora do sistema: {origem}")
 
 ROOT = os.path.dirname(SPECPATH)
 
@@ -57,6 +78,7 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
+_verificar_runtime_windows(a.binaries)
 a.binaries = [b for b in a.binaries if not _descartar(b)]
 a.datas = [d for d in a.datas if not _descartar(d)]
 
