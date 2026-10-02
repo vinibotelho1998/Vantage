@@ -963,6 +963,11 @@ class DisplaysView(View):
         before = D.snapshot()
         ok, err = D.apply_profile(profile["entries"], profile.get("topology", ""))
         if not ok:
+            # Uma falha depois de trocar a topologia pode ter alterado algumas telas.
+            atual = D.snapshot()
+            if sorted(atual, key=lambda e: e.get("monitor_id", "")) != sorted(before, key=lambda e: e.get("monitor_id", "")):
+                voltou, erro_volta = D.apply_profile(before)
+                err += "; estado anterior restaurado" if voltou else "; falha ao restaurar: " + erro_volta
             self.notify(err, theme.BAD)
             self.reload()
             return
@@ -1048,8 +1053,21 @@ class DisplaysView(View):
         if seconds <= 0:
             self.notify(description, theme.OK)
             return True
-        kept = ask_confirm(description, seconds, undo, self.window())
+        erro_volta = []
+
+        def desfazer():
+            try:
+                resultado = undo()
+                if isinstance(resultado, tuple) and resultado and not resultado[0]:
+                    erro_volta.append(str(resultado[1]))
+            except Exception as erro:
+                erro_volta.append(str(erro))
+
+        kept = ask_confirm(description, seconds, desfazer, self.window())
         self.reload()
+        if erro_volta:
+            self.notify("não consegui restaurar o estado anterior: " + "; ".join(erro_volta), theme.BAD)
+            return False
         self.notify(f"{description}, mantido" if kept
                     else "sem confirmação, voltei ao estado anterior",
                     theme.OK if kept else theme.WARN)

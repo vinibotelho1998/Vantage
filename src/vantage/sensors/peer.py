@@ -62,36 +62,14 @@ def available() -> bool:
 
 
 def estimate_rtt(events: list[tuple[float, bool]]) -> tuple[float | None, float | None]:
-    """Latencia e jitter a partir do vaivem dos pacotes.
+    """Timestamps UDP sem sequencia/ACK nao identificam uma ida e volta.
 
-    `events` e' a linha do tempo do que passou: (instante, saiu_da_maquina). Cada
-    envio e' casado com a primeira resposta que vem depois dele: em jogo de
-    tempo real o cliente manda input e o servidor devolve estado, entao esse
-    intervalo contem a ida e volta.
-
-    Vale mesmo quando o servidor bloqueia ICMP, porque nao ha' sonda nenhuma: o
-    numero sai do trafego que o jogo ja' esta' fazendo.
+    O proximo pacote recebido pode ser estado enviado independentemente pelo
+    servidor. Publicar esse intervalo como RTT produz falsos 1 ms em streams
+    continuos. A captura continua servindo para descobrir o servidor; o ping
+    usa uma sonda com resposta correlacionada.
     """
-    deltas: list[float] = []
-    ultimo_envio: float | None = None
-    for instante, saiu in events:
-        if saiu:
-            if ultimo_envio is None:
-                ultimo_envio = instante
-        elif ultimo_envio is not None:
-            ida_volta = (instante - ultimo_envio) * 1000.0
-            ultimo_envio = None
-            if 0.0 < ida_volta <= RTT_CEILING_MS:
-                deltas.append(ida_volta)
-    if len(deltas) < MIN_RTT_PAIRS:
-        return None, None
-
-    ordenado = sorted(deltas)
-    rtt = ordenado[min(len(ordenado) - 1, int(len(ordenado) * RTT_PERCENTILE))]
-    # Jitter e' variacao percebida: media da diferenca entre medidas seguidas,
-    # na ordem em que aconteceram (nao na ordenada).
-    variacao = sum(abs(deltas[i] - deltas[i - 1]) for i in range(1, len(deltas)))
-    return round(rtt, 1), round(variacao / (len(deltas) - 1), 1)
+    return None, None
 
 
 def local_ports(pid: int) -> set[int]:
@@ -286,8 +264,12 @@ class PeerFinder:
             bind_ip = next(iter(enderecos), None)
             # Uma passada serve para as duas coisas: descobrir o servidor (quem
             # mais falou) e cronometrar o vaivem com ele.
-            alvo = None if (peer is None or vencido) else peer[0]
-            janela = SNIFF_S if alvo is None else MEASURE_S
+            if peer is not None and not vencido:
+                self._wake.wait(MEASURE_GAP_S)
+                self._wake.clear()
+                continue
+            alvo = None
+            janela = SNIFF_S
             contagem, eventos = capture(portas, janela, bind_ip, alvo)
 
             achado = None

@@ -44,6 +44,7 @@ class GpuReader:
         self._ok = False
         self._name: str | None = None
         self._static: dict = {}
+        self._identity: dict = {}
         self._watts_est: float | None = None
         self._smi_watts: float | None = None
         self._smi_lock = threading.Lock()
@@ -63,6 +64,7 @@ class GpuReader:
             self._pynvml = pynvml
             self._ok = True
             self._load_static()
+            self._load_identity()
             _log.info("NVML inicializado: %s", self._name)
         except Exception as e:
             _log.info("NVML indisponivel: %s", e)
@@ -83,6 +85,36 @@ class GpuReader:
     @property
     def static(self) -> dict:
         return dict(self._static)
+
+    @property
+    def identity(self) -> dict:
+        """Identidade da placa consultada e inventario para evitar nomes ambiguos."""
+        return dict(self._identity)
+
+    def _load_identity(self) -> None:
+        p, h = self._pynvml, self._hdl
+        identity = {"index": 0, "name": self._name}
+        for key, fn in (("uuid", lambda: p.nvmlDeviceGetUUID(h)),
+                        ("pci_bus_id", lambda: p.nvmlDeviceGetPciInfo(h).busId)):
+            try:
+                value = fn()
+                identity[key] = value.decode() if isinstance(value, bytes) else str(value)
+            except Exception:
+                pass
+        try:
+            names = []
+            for index in range(p.nvmlDeviceGetCount()):
+                value = p.nvmlDeviceGetName(p.nvmlDeviceGetHandleByIndex(index))
+                names.append(value.decode() if isinstance(value, bytes) else str(value))
+            identity["names"] = tuple(names)
+        except Exception:
+            # Uma placa sem nome pode ser igual a selecionada. Inventario parcial
+            # nao comprova que o modelo seja unico e nao autoriza a fusao.
+            identity["names"] = None
+        self._identity = identity
+
+    def reset_estimate(self) -> None:
+        self._watts_est = None
 
     def _load_static(self) -> None:
         p, h = self._pynvml, self._hdl
@@ -232,14 +264,15 @@ class GpuReader:
                 continue
             try:
                 out = subprocess.check_output(
-                    [nsmi, "--query-gpu=power.draw", "--format=csv,noheader,nounits"],
+                    [nsmi, "--id=0", "--query-gpu=power.draw", "--format=csv,noheader,nounits"],
                     timeout=3, creationflags=subprocess.CREATE_NO_WINDOW,
                     stderr=subprocess.DEVNULL)
                 v = _parse_smi_watts(out.decode(errors="ignore"))
-                if v is not None:
-                    with self._smi_lock:
-                        self._smi_watts = round(v, 1)
+                with self._smi_lock:
+                    self._smi_watts = None if v is None else round(v, 1)
             except Exception as e:
+                with self._smi_lock:
+                    self._smi_watts = None
                 _log.debug("nvidia-smi: %s", e)
             self._stop.wait(2.0)
 

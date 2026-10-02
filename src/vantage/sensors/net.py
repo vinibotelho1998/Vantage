@@ -44,7 +44,9 @@ class PingMonitor:
         """Alvos que nao responderam a nada. Servidor de jogo costuma ignorar ICMP,
         e insistir neles pintaria 100% de perda numa conexao perfeitamente saudavel."""
         self._history: deque[float] = deque(maxlen=60)
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
+        self._generation = 0
+        self._measured_label = ""
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -54,22 +56,22 @@ class PingMonitor:
             self._host = host or self._host
             self._port = int(port) or self._port
             if changed:
-                self._history.clear()
-                self._best = self._worst = None
+                self._clear_measurements()
 
     def set_auto_target(self, host: str | None, port: int = 0, label: str = "") -> None:
         """Alvo do jogo em foco. `None` volta para o host das configuracoes."""
         with self._lock:
             if host is not None and host in self._mudos:
-                return          # ja' provamos que esse alvo nao responde
-            if host == self._auto_host:
+                # O alvo de antes pode ser de outra partida. Mesmo quando o novo
+                # nao responde, nao conservar o numero e o rotulo do jogo anterior.
+                host, port, label = None, 0, ""
+            if host == self._auto_host and int(port or 0) == self._auto_port:
                 self._auto_label = label
                 return
             self._auto_host = host
             self._auto_port = int(port or 0)
             self._auto_label = label
-            self._history.clear()
-            self._best = self._worst = None
+            self._clear_measurements()
 
     def set_measured(self, rtt: float | None, jitter: float | None, label: str) -> None:
         """Latencia medida no proprio trafego do jogo.
@@ -82,7 +84,7 @@ class PingMonitor:
             self._measured_jitter = jitter
             self._measured_at = time.monotonic() if rtt is not None else 0.0
             if rtt is not None:
-                self._auto_label = label or self._auto_label
+                self._measured_label = label
 
     def _measured_fresh(self) -> bool:
         return self._measured is not None and (time.monotonic() - self._measured_at) < 15.0
@@ -102,7 +104,7 @@ class PingMonitor:
         jogo. Sem rotulo, sobra so' o ping: que e' o que ele e'.
         """
         with self._lock:
-            return self._auto_label
+            return self._measured_label if self._measured_fresh() else self._auto_label
 
     @property
     def following_game(self) -> bool:
@@ -120,16 +122,17 @@ class PingMonitor:
             if not self._measured_fresh():
                 return {"ms": self._ms, "jitter": self._jitter, "loss": self._loss,
                         "best": self._best, "worst": self._worst}
-            # Os dois medem "rede + algo a mais que nunca e' negativo": a sonda
-            # carrega o tempo de tratar o ICMP, a medida passiva carrega o tick
-            # do servidor. Entao a latencia de rede honesta e' a menor das duas:
-            # e' o que faz o numero bater com o que o jogo mostra na tela.
-            ms = self._measured
-            if self._ms is not None and ms is not None:
-                ms = min(ms, self._ms)
-            return {"ms": ms, "jitter": self._measured_jitter,
-                    "loss": self._loss if self._auto_host is None else None,
-                    "best": self._best, "worst": self._worst}
+            # Uma medida do jogo nao pode herdar RTT, perda ou extremos do DNS de reserva.
+            return {"ms": self._measured, "jitter": self._measured_jitter,
+                    "loss": None, "best": None, "worst": None}
+
+    def _clear_measurements(self) -> None:
+        self._generation += 1
+        self._ms = self._jitter = self._loss = self._best = self._worst = None
+        self._measured = self._measured_jitter = None
+        self._measured_at = 0.0
+        self._measured_label = ""
+        self._history.clear()
 
     def history(self) -> list[float]:
         with self._lock:
@@ -145,26 +148,34 @@ class PingMonitor:
 
     def _loop(self) -> None:
         while not self._stop.is_set():
-            host, port = self._target()
+            with self._lock:
+                host, port = self._target()
+                generation = self._generation
             results: list[float | None] = []
             for _ in range(self._samples):
                 if self._stop.is_set():
                     return
                 results.append(_probe(host, port))
                 self._stop.wait(0.15)
-            self._publish(host, results)
+            self._publish(host, results, port=port, generation=generation)
             self._stop.wait(self._interval)
 
-    def _publish(self, host: str, results: list[float | None]) -> None:
+    def _publish(self, host: str, results: list[float | None], *,
+                 port: int | None = None, generation: int | None = None) -> None:
         ok = [r for r in results if r is not None]
-        if not ok and self._descartar_alvo(host):
-            return          # alvo mudo: nao publica perda que nao e' do usuario
         avg = sum(ok) / len(ok) if ok else None
         jitter = None
         if len(ok) > 1:
             jitter = sum(abs(ok[i] - ok[i - 1]) for i in range(1, len(ok))) / (len(ok) - 1)
         loss = round(100.0 * (1 - len(ok) / max(1, len(results))), 1)
         with self._lock:
+            target = self._target()
+            if host != target[0] or (port is not None and port != target[1]):
+                return
+            if generation is not None and generation != self._generation:
+                return
+            if not ok and self._descartar_alvo(host):
+                return
             self._ms = None if avg is None else round(avg, 1)
             self._jitter = None if jitter is None else round(jitter, 1)
             self._loss = loss
@@ -188,8 +199,7 @@ class PingMonitor:
             self._auto_host = None
             self._auto_port = 0
             self._auto_label = ""
-            self._history.clear()
-            self._best = self._worst = None
+            self._clear_measurements()
         return True
 
 

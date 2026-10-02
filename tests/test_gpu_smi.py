@@ -75,4 +75,30 @@ def test_sem_consumo_pela_nvml_a_reserva_continua_valendo(monkeypatch):
     g._smi_loop()
 
     assert len(chamadas) == 2
+    assert all("--id=0" in cmd for cmd in chamadas)
     assert g.watts_smi() == 187.3
+
+
+def test_leitura_smi_que_falha_nao_mantem_consumo_antigo(monkeypatch):
+    chamadas = []
+    _smi_falso(monkeypatch, chamadas)
+    respostas = iter([b"187.30\n", None])
+    def check_output(cmd, **kwargs):
+        resultado = next(respostas)
+        if resultado is None:
+            raise RuntimeError("driver nao respondeu")
+        return resultado
+    monkeypatch.setattr(gpumod.subprocess, "check_output", check_output)
+    g = _leitor(None)
+    g._smi_loop()
+    assert g.watts_smi() is None
+
+
+def test_leitura_smi_nao_suportada_nao_mantem_consumo_antigo(monkeypatch):
+    chamadas = []
+    _smi_falso(monkeypatch, chamadas)
+    respostas = iter([b"187.30\n", b"[Not Supported]\n"])
+    monkeypatch.setattr(gpumod.subprocess, "check_output", lambda *a, **kw: next(respostas))
+    g = _leitor(None)
+    g._smi_loop()
+    assert g.watts_smi() is None

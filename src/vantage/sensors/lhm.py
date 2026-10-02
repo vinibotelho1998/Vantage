@@ -550,6 +550,11 @@ class LhmReader:
     def _read_storage(self, hw, result: dict) -> None:
         disks = result.setdefault("disks_lhm", [])
         entry = {"name": str(hw.Name)}
+        # Storage.PhysicalPath e' o dispositivo aberto pelo LHM 0.9.6 para
+        # DeviceIoControl. O Identifier sozinho nao prova a unidade fisica.
+        entry["identifier"] = str(getattr(hw, "Identifier", ""))
+        storage = getattr(hw, "Storage", None)
+        entry["physical_device"] = str(getattr(storage, "PhysicalPath", "") or "")
         for s in hw.Sensors:
             st = str(s.SensorType)
             name = str(s.Name)
@@ -562,7 +567,7 @@ class LhmReader:
                 entry["total"] = round(f, 1)
             elif st == "Load" and "Used Space" in name:
                 entry["used_pct"] = round(f, 1)
-            elif st == "Level" and "Remaining Life" in name:
+            elif st == "Level" and ("Remaining Life" in name or name == "Life"):
                 entry["life"] = round(f, 1)
             elif st == "Data" and "Host Writes" in name:
                 entry["written"] = round(f, 1)

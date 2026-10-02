@@ -151,6 +151,21 @@ def test_capture_collects_only_target_pid():
     assert all(abs(s[1] - 8.0) < 1e-6 for s in captured)
 
 
+def test_benchmark_e_sessao_usam_stream_dominante_sem_overlay():
+    engine = FpsEngine()
+    engine.capture_start(1234)
+    engine.session_start(1234)
+    _feed(engine, [row_v2(i * .008, 8.0, swap="jogo") for i in range(1, 126)]
+          + [row_v2(i * .05, 50.0, swap="overlay") for i in range(1, 21)])
+    engine._recompute()
+    captured = engine.capture_stop()
+    result = engine.session_stop()
+    assert len(captured) == engine.snapshot()[1234].metrics.frames == 125
+    assert result["frames"] == 125
+    assert result["fps_avg"] == 125.0
+    assert all(s[1] == 8.0 for s in captured)
+
+
 def test_na_columns_become_nan():
     engine = FpsEngine()
     _feed(engine, [row_v2(1.0, 8.0, displayed="NA")])

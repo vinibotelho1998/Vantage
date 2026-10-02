@@ -250,7 +250,7 @@ def test_as_duas_temperaturas_da_cpu_chegam_no_snapshot():
     dupla existia no codigo e nao aparecia em maquina nenhuma.
     """
     c = Collector(_LhmTemps(), _GpuMudo(), _PingMudo())
-    c._gpu_wmi = {}
+    c._gpu_wmi_info = lambda _name: {}
     c._ram_freq = 0
     d = c._collect()
     assert d["cpu_temp_cores"] == 69.0

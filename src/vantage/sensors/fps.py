@@ -154,6 +154,7 @@ class FpsEngine:
         self._stop = threading.Event()
         self._proc: subprocess.Popen | None = None
         self._proc_lock = threading.Lock()
+        self._session_lock = threading.RLock()
         self._threads: list[threading.Thread] = []
 
         self._status = "parado"
@@ -203,8 +204,9 @@ class FpsEngine:
         num desmonte e acordar depois, ve' que nao e' mais a da vez e sai, em
         vez de subir um segundo PresentMon disputando a mesma sessao.
         """
-        self._gen += 1
-        geracao = self._gen
+        with self._proc_lock:
+            self._gen += 1
+            geracao = self._gen
         self._loop_at = time.monotonic()
         self._threads = [t for t in self._threads
                          if not isinstance(t, threading.Thread) or t.is_alive()]
@@ -215,8 +217,11 @@ class FpsEngine:
 
     def stop(self) -> None:
         self._stop.set()
+        with self._proc_lock:
+            sessao = self._session_name(self._gen)
+            self._gen += 1
         self._kill_process()
-        self._cleanup_session()
+        self._cleanup_session(sessao)
         self._threads.clear()
 
     @property
@@ -342,6 +347,8 @@ class FpsEngine:
         return self._capture_active
 
     def _supervise(self, geracao: int = 1) -> None:
+        if self._stop.is_set() or geracao != self._gen:
+            return
         exe = self._ensure_presentmon()
         if not exe:
             self._status = "PresentMon indisponivel"
@@ -350,6 +357,8 @@ class FpsEngine:
             return
         # Primeiro os processos, depois as sessoes: um PresentMon vivo segura
         # a sessao dele, e varrer sessao com o dono de pe' nunca funciona.
+        if self._stop.is_set() or geracao != self._gen:
+            return
         encerrar_presentmon_orfaos()
         sweep_stale_sessions()
         attempt = 0
@@ -357,11 +366,11 @@ class FpsEngine:
             self._loop_at = time.monotonic()
             started = time.monotonic()
             try:
-                self._run_session(exe)
+                self._run_session(exe, geracao)
             except Exception as e:
                 _log.exception("sessao do PresentMon falhou: %s", e)
                 self._status = f"erro: {e}"
-            if self._stop.is_set():
+            if self._stop.is_set() or geracao != self._gen:
                 break
             lived = time.monotonic() - started
             attempt = 0 if lived > 30 else min(attempt + 1, len(RESTART_BACKOFF) - 1)
@@ -371,11 +380,20 @@ class FpsEngine:
             _log.info("PresentMon caiu apos %.1fs; reiniciando em %.0fs", lived, delay)
             self._stop.wait(delay)
 
-    def _run_session(self, exe: str) -> None:
-        pipe_name = rf"\\.\pipe\vantage_fps_{os.getpid()}_{self._restarts}"
-        self._force_restart.clear()
-        self.reset()
-        self._cleanup_session()
+    def _run_session(self, exe: str, geracao: int) -> None:
+        with self._proc_lock:
+            if self._stop.is_set() or geracao != self._gen:
+                return
+            self._force_restart.clear()
+            self.reset()
+        sessao = self._session_name(geracao)
+        pipe_name = rf"\\.\pipe\vantage_fps_{os.getpid()}_{geracao}_{self._restarts}"
+        with self._session_lock:
+            if self._stop.is_set() or geracao != self._gen:
+                return
+            self._cleanup_session(sessao)
+        if self._stop.is_set() or geracao != self._gen:
+            return
         handle = _create_pipe(pipe_name)
         if handle is None:
             self._status = "falha criando pipe"
@@ -384,11 +402,13 @@ class FpsEngine:
             return
         proc = None
         try:
+            if self._stop.is_set() or geracao != self._gen:
+                return
             self._status = "iniciando PresentMon"
             _log.info("subindo PresentMon (tentativa %d, %s)",
                       self._restarts + 1, "v1" if self._use_v1 else "v2")
             proc = subprocess.Popen(
-                self._command(exe, pipe_name),
+                self._command(exe, pipe_name, sessao),
                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                 stdin=subprocess.DEVNULL,
                 # CREATE_NEW_PROCESS_GROUP e' o que permite mandar CTRL+BREAK
@@ -398,6 +418,8 @@ class FpsEngine:
                 creationflags=(subprocess.CREATE_NO_WINDOW
                                | subprocess.CREATE_NEW_PROCESS_GROUP))
             with self._proc_lock:
+                if self._stop.is_set() or geracao != self._gen:
+                    return
                 self._proc = proc
 
             if not _wait_connect(handle, proc, self._stop, self._force_restart,
@@ -410,6 +432,8 @@ class FpsEngine:
                 # antes de ler e' o que fecha o stderr; com ele vivo a leitura
                 # so' podia devolver "(ainda rodando)", que nao diz nada.
                 _terminate(proc)
+                if self._stop.is_set() or geracao != self._gen:
+                    return
                 erro = _stderr_tail(proc)
                 _log.warning("PresentMon nao conectou (saida %s): %s", proc.poll(), erro)
                 self._note_failure(erro)
@@ -417,7 +441,9 @@ class FpsEngine:
             self._consecutive_failures = 0
             self._alive_at = time.monotonic()
             self._status = "capturando"
-            self._read_pipe(handle, proc)
+            if geracao != self._gen:
+                return
+            self._read_pipe(handle, proc, geracao)
             handle = None  # consumido pelo FileIO
         finally:
             if handle is not None:
@@ -425,13 +451,21 @@ class FpsEngine:
             if proc is not None:
                 _terminate(proc)
             with self._proc_lock:
-                self._proc = None
-            self._cleanup_session()
+                if self._proc is proc:
+                    self._proc = None
+            # O CreateProcess antigo pode terminar depois do resgate. Cada
+            # geracao usa sua propria ETW, inclusive em --stop_existing_session.
+            # Assim o desmonte atrasado nunca derruba a captura substituta.
+            self._cleanup_session(sessao)
 
-    def _command(self, exe: str, pipe_name: str) -> list[str]:
+    @staticmethod
+    def _session_name(geracao: int) -> str:
+        return f"{SESSION}_{geracao}"
+
+    def _command(self, exe: str, pipe_name: str, sessao: str = SESSION) -> list[str]:
         # input tracking fica ligado de proposito: e o que da a latencia clique -> tela
         cmd = [exe, "--output_file", pipe_name, "--no_console_stats",
-               "--stop_existing_session", "--session_name", SESSION]
+               "--stop_existing_session", "--session_name", sessao]
         cmd.append("--v1_metrics" if self._use_v1 else "--v2_metrics")
         for name in EXCLUDED:
             cmd += ["--exclude", name]
@@ -470,17 +504,20 @@ class FpsEngine:
             self._use_v1 = True
             _log.warning("PresentMon nao aceitou --v2_metrics; usando --v1_metrics")
 
-    def _read_pipe(self, handle: int, proc: subprocess.Popen) -> None:
+    def _read_pipe(self, handle: int, proc: subprocess.Popen, geracao: int) -> None:
         import msvcrt
         fd = msvcrt.open_osfhandle(handle, os.O_RDONLY)
         raw = io.FileIO(fd, closefd=True)
-        self._reader = raw
         pending = b""
         layout: _Layout | None = None
         try:
-            while not self._stop.is_set() and not self._force_restart.is_set():
+            with self._proc_lock:
+                if self._stop.is_set() or geracao != self._gen:
+                    return
+                self._reader = raw
+            while not self._stop.is_set() and not self._force_restart.is_set() and geracao == self._gen:
                 chunk = raw.read(1 << 16)
-                if not chunk:
+                if not chunk or geracao != self._gen:
                     break
                 pending += chunk
                 lines = pending.split(b"\n")
@@ -505,8 +542,10 @@ class FpsEngine:
         except OSError as e:
             _log.info("leitura do pipe encerrada: %s", e)
         finally:
-            self._force_restart.clear()
-            self._reader = None
+            if self._reader is raw:
+                self._reader = None
+                if geracao == self._gen:
+                    self._force_restart.clear()
             try:
                 raw.close()
             except OSError:
@@ -578,13 +617,39 @@ class FpsEngine:
                 mode, _, runtime = modes.partition("|")
                 self._meta[key] = {"app": app, "mode": mode, "runtime": runtime,
                                    "sync": sync, "seen": now}
-                if self._capture_active and key[0] == self._capture_pid:
+            # Atualiza todos os streams antes de escolher. O PID pode apresentar a
+            # janela do jogo e overlays ao mesmo tempo; so o dominante entra na gravacao.
+            alvos = set()
+            if self._capture_active:
+                alvos.add(self._capture_pid)
+            if self._session_rec is not None:
+                alvos.add(self._session_pid)
+            escolhidas = {pid: self._main_key(pid, now) for pid in alvos}
+            for key, sample, _app, _modes, _sync in batch:
+                if self._capture_active and key == escolhidas.get(self._capture_pid):
                     self._capture.append(sample)
                 # Gravador da partida inteira: uma soma e um indice por frame,
                 # sem guardar amostra nenhuma. Ver frames.SessionRecorder.
-                if self._session_rec is not None and key[0] == self._session_pid:
+                if self._session_rec is not None and key == escolhidas.get(self._session_pid):
                     self._session_rec.add(sample[1])
         self._last_frame_at = now
+
+    def _main_key(self, pid: int | None, now: float) -> tuple[int, str] | None:
+        """Mesmo criterio da leitura ao vivo: mais frames recentes de um unico stream.
+
+        Chamado com _raw_lock. Uma swapchain recriada pode assumir o lugar da antiga,
+        sem que a gravacao misture as apresentacoes simultaneas do mesmo processo.
+        """
+        melhor = None
+        quantidade = -1
+        for key, samples in self._raw.items():
+            meta = self._meta.get(key)
+            if key[0] != pid or meta is None or now - meta["seen"] > STALE_STREAM_S:
+                continue
+            tamanho = len(fr.window(list(samples), self._analysis_window))
+            if tamanho > quantidade:
+                melhor, quantidade = key, tamanho
+        return melhor
 
     def _begin_calibration(self, layout: _Layout) -> None:
         """Assume a unidade indicada pelo cabecalho e prepara a conferencia."""
@@ -741,10 +806,10 @@ class FpsEngine:
         if proc is not None:
             _terminate(proc)
 
-    def _cleanup_session(self) -> None:
+    def _cleanup_session(self, sessao: str = SESSION) -> None:
         """Derruba a sessao ETW que tenha sobrado de uma execucao anterior."""
         for verb in ("stop", "delete"):
-            _run_bounded(["logman", verb, SESSION, "-ets"], 8.0, f"logman {verb}")
+            _run_bounded(["logman", verb, sessao, "-ets"], 8.0, f"logman {verb}")
 
     def _ensure_presentmon(self) -> str | None:
         exe = paths.presentmon_path()
@@ -821,14 +886,15 @@ def encerrar_presentmon_orfaos() -> int:
 
     import signal
 
-    meus = set()
     encerrados = 0
-    for proc in psutil.process_iter(["pid", "name", "ppid"]):
+    for proc in psutil.process_iter(["pid", "name", "ppid", "cmdline"]):
         if (proc.info.get("name") or "").lower() != "presentmon.exe":
             continue
-        # Filho desta instancia nao e' orfao: quem cuida dele e' o supervisor.
-        if proc.info.get("ppid") == os.getpid():
-            meus.add(proc.info["pid"])
+        pai = proc.info.get("ppid")
+        sessao = _nome_da_sessao(proc.info.get("cmdline"))
+        # Nome de executavel nao comprova propriedade: outras ferramentas tambem
+        # capturam com PresentMon. Pai vivo ou sessao desconhecida ficam em paz.
+        if pai == os.getpid() or not sessao or not _orfa(sessao) or _pid_vivo(pai):
             continue
         pid = proc.info["pid"]
         _log.info("PresentMon orfao (pid %s) segurando a captura; pedindo para sair", pid)
@@ -979,6 +1045,26 @@ def _outras_copias() -> list[int]:
     return achados
 
 
+def _nome_da_sessao(argumentos) -> str:
+    if not isinstance(argumentos, (list, tuple)):
+        return ""
+    for indice, argumento in enumerate(argumentos):
+        if argumento == "--session_name" and indice + 1 < len(argumentos):
+            return str(argumentos[indice + 1])
+        if isinstance(argumento, str) and argumento.startswith("--session_name="):
+            return argumento.partition("=")[2]
+    return ""
+
+
+def _pid_vivo(pid) -> bool:
+    try:
+        import psutil
+        return psutil.pid_exists(int(pid))
+    except (ImportError, TypeError, ValueError, OSError):
+        # Sem conseguir conferir o dono, nao encerrar um recurso global.
+        return True
+
+
 def _orfa(nome: str) -> bool:
     """Sessao que sobrou de outra execucao e precisa sair da frente.
 
@@ -989,7 +1075,22 @@ def _orfa(nome: str) -> bool:
     """
     if nome == SESSION:
         return False
-    return nome == SESSION_PREFIX or nome.startswith(SESSION_PREFIX + "_")
+    if nome == SESSION_PREFIX:
+        try:
+            import psutil
+            return not any(
+                (p.info.get("name") or "").lower() == "presentmon.exe"
+                and _nome_da_sessao(p.info.get("cmdline")) == nome
+                and _pid_vivo(p.info.get("ppid"))
+                for p in psutil.process_iter(["name", "cmdline", "ppid"])
+            )
+        except (ImportError, OSError):
+            return False
+    prefixo = SESSION_PREFIX + "_"
+    partes = nome[len(prefixo):].split("_") if nome.startswith(prefixo) else []
+    if len(partes) not in (1, 2) or not all(p.isdigit() for p in partes):
+        return False
+    return not _pid_vivo(int(partes[0]))
 
 
 def _create_pipe(name: str) -> int | None:

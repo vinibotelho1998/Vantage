@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import threading
 import time
 
@@ -19,6 +20,25 @@ from ..core.series import Ema
 _log = log.get("collector")
 
 _IGNORED_FS = {"cdrom", ""}
+
+
+def _nome_gpu(name: str) -> str:
+    return " ".join(str(name or "").casefold().split())
+
+
+def _mesma_gpu(lhm: dict, nvml: dict) -> bool:
+    """Um nome so identifica a placa quando e unico nos dois inventarios completos."""
+    if lhm.get("_gpu_type") != "GpuNvidia":
+        return False
+    name = _nome_gpu(lhm.get("gpu_name", ""))
+    if not name or name != _nome_gpu(nvml.get("name", "")):
+        return False
+    nomes_nvml = nvml.get("names")
+    nomes_lhm = lhm.get("gpu_list")
+    if not isinstance(nomes_nvml, (list, tuple)) or not isinstance(nomes_lhm, (list, tuple)):
+        return False
+    return (sum(_nome_gpu(n) == name for n in nomes_nvml) == 1
+            and sum(_nome_gpu(n) == name for n in nomes_lhm) == 1)
 
 
 class Collector:
@@ -40,9 +60,11 @@ class Collector:
         self._prev_disk = psutil.disk_io_counters()
         self._prev_time = time.monotonic()
         self._disk_cache: list[dict] = []
-        self._disk_cache_at = 0.0
+        self._disk_cache_at = float("-inf")
+        self._disk_volume_devices: dict[str, str] = {}
         self._gpu_watts_ema = Ema(0.35)
-        self._gpu_wmi: dict | None = None
+        self._gpu_identity = None
+        self._gpu_wmi: dict[str, dict] = {}
         self._game_ram = _GameMemory()
         self._game_vram = gpumem.ProcessVram()
         """VRAM do mesmo processo; ver platform/gpumem.py."""
@@ -202,7 +224,13 @@ class Collector:
 
     def _collect_gpu(self, lhm: dict) -> dict | None:
         nvml = self._gpu.read_nvml()
+        identity = getattr(self._gpu, "identity", {})
+        usar_nvml = (not lhm.get("gpu_ok") or _mesma_gpu(lhm, identity))
+        if not usar_nvml:
+            nvml = None
         if not lhm.get("gpu_ok") and not nvml:
+            self._gpu_watts_ema.reset()
+            self._gpu_identity = None
             return None
 
         gpu: dict = {}
@@ -232,82 +260,111 @@ class Collector:
             }
         if nvml:
             for key, value in nvml.items():
-                if value is not None and (key not in gpu or gpu.get(key) in (None, 0)):
+                if value is not None and gpu.get(key) is None:
                     gpu[key] = value
             gpu.setdefault("throttle", nvml.get("throttle") or [])
 
-        real_w = lhm.get("gpu_watts")
+        nome = _nome_gpu(gpu.get("name", ""))
+        nomes_lhm = [_nome_gpu(n) for n in (lhm.get("gpu_list") or [])]
+        ambiguo = lhm.get("gpu_ok") and nomes_lhm.count(nome) > 1
+        nvml_id = identity.get("uuid") or identity.get("pci_bus_id") or nome
+        chave = ("lhm", lhm.get("_gpu_type"), nome, nvml_id if usar_nvml else None) if lhm.get("gpu_ok") else (
+            "nvml", nvml_id)
+        if chave != self._gpu_identity or ambiguo:
+            self._gpu_watts_ema.reset()
+            reiniciar = getattr(self._gpu, "reset_estimate", None)
+            if reiniciar is not None:
+                reiniciar()
+            self._gpu_identity = chave
+
+        real_w = lhm.get("gpu_watts") if lhm.get("gpu_ok") else None
         if real_w is None and nvml:
             real_w = nvml.get("watts")
-        if real_w is None:
+        if real_w is None and usar_nvml:
             real_w = self._gpu.watts_smi()
         estimated = False
-        if real_w is None:
+        if real_w is None and usar_nvml:
             real_w = self._gpu.watts_estimate(gpu.get("usage"), gpu.get("freq"))
             estimated = real_w is not None
+        if real_w is None:
+            self._gpu_watts_ema.reset()
         smoothed = self._gpu_watts_ema.push(real_w)
         gpu["watts"] = None if smoothed is None else round(smoothed, 1)
         gpu["watts_estimated"] = estimated
-        gpu["power_limit"] = self._gpu.static.get("power_limit")
+        static = dict(self._gpu.static) if usar_nvml else {}
+        gpu["power_limit"] = static.get("power_limit")
         # motivos de throttle so existem via NVML; em AMD/Intel nao ha o que reportar
-        gpu["throttle_supported"] = self._gpu.nvml_ok
+        gpu["throttle_supported"] = bool(usar_nvml and self._gpu.nvml_ok)
 
-        vram = self._gpu.vram()
+        vram = self._gpu.vram() if usar_nvml else None
         if vram:
-            gpu["vram_used"], gpu["vram_total"] = vram
+            for key, value in zip(("vram_used", "vram_total"), vram):
+                if gpu.get(key) is None:
+                    gpu[key] = value
         usado, total = gpu.get("vram_used"), gpu.get("vram_total")
         gpu["vram_pct"] = (100.0 * usado / total
                            if usado is not None and total else None)
         gpu.setdefault("throttle", [])
         gpu.setdefault("name", "GPU")
-        static = dict(self._gpu.static)
         for key, value in self._gpu_wmi_info(gpu.get("name", "")).items():
             static.setdefault(key, value)
         gpu["static"] = static
-        gpu["others"] = [n for n in lhm.get("gpu_list", []) if n != gpu.get("name")]
+        gpu["others"] = [n for n in (lhm.get("gpu_list") or []) if n != gpu.get("name")]
         return gpu
 
     def _gpu_wmi_info(self, name: str) -> dict:
         """Driver e modo de video via WMI: funciona em AMD e Intel, onde nao ha NVML."""
-        if self._gpu_wmi is not None:
-            return self._gpu_wmi
+        nome = _nome_gpu(name)
+        if not nome:
+            return {}
+        if nome in self._gpu_wmi:
+            return dict(self._gpu_wmi[nome])
         found: dict = {}
         try:
             import wmi
-            token = name.lower().split()[-1] if name else ""
-            for c in wmi.WMI().Win32_VideoController():
-                if not c.Name:
-                    continue
+            candidatos = [c for c in wmi.WMI().Win32_VideoController()
+                          if _nome_gpu(c.Name or "") == nome]
+            if len(candidatos) == 1:
+                c = candidatos[0]
                 entry = {
                     "driver": (c.DriverVersion or "").strip(),
                     "adapter": c.Name.strip(),
                     "video_mode": _video_mode(c.VideoModeDescription),
                     "refresh": c.CurrentRefreshRate,
                 }
-                if token and token in c.Name.lower():
-                    found = entry
-                    break
-                found = found or entry
+                found = entry
         except Exception as e:
             _log.debug("Win32_VideoController falhou: %s", e)
-        self._gpu_wmi = found
-        return found
+        self._gpu_wmi[nome] = found
+        return dict(found)
 
     def _disks(self, lhm: dict) -> list[dict]:
         now = time.monotonic()
-        if now - self._disk_cache_at > 20.0 or not self._disk_cache:
+        if now - self._disk_cache_at >= 20.0:
             self._disk_cache = _partitions()
+            self._disk_volume_devices = _disk_volume_devices()
             self._disk_cache_at = now
-        temps = [d for d in (lhm.get("disks_lhm") or []) if "temp" in d]
+        sensors: dict[str, list[dict]] = {}
+        for disk in lhm.get("disks_lhm") or []:
+            device = _physical_disk_device(disk.get("physical_device"))
+            if device:
+                sensors.setdefault(device, []).append(disk)
         out = []
-        for i, part in enumerate(self._disk_cache):
+        for part in self._disk_cache:
             used, total, pct = _safe_usage(part["mount"])
             entry = dict(part)
-            entry.update({"used": used, "total": total, "pct": pct})
-            if i < len(temps):
-                entry["temp"] = temps[i].get("temp")
-                entry["life"] = temps[i].get("life")
-                entry["model"] = temps[i].get("name")
+            entry.update({"used": used, "total": total, "pct": pct,
+                          "temp": None, "life": None, "model": None})
+            volume = _logical_disk_device(part["mount"])
+            # Uma pasta montada pode pertencer a outro disco, apesar de usar C:.
+            if volume and volume == _logical_disk_device(part["device"]):
+                physical = self._disk_volume_devices.get(volume)
+                matches = sensors.get(physical, [])
+                # Identidade ausente ou duplicada nunca e' resolvida por ordem/nome.
+                if len(matches) == 1:
+                    sensor = matches[0]
+                    entry.update(temp=sensor.get("temp"), life=sensor.get("life"),
+                                 model=sensor.get("name"))
             out.append(entry)
         return out
 
@@ -426,6 +483,39 @@ def _partitions() -> list[dict]:
             continue
         out.append({"mount": p.mountpoint, "device": p.device, "fstype": p.fstype})
     return out
+
+
+def _physical_disk_device(value) -> str | None:
+    device = str(value or "").strip().upper()
+    return device if re.fullmatch(r"\\\\\.\\PHYSICALDRIVE[0-9]+", device) else None
+
+
+def _logical_disk_device(value) -> str | None:
+    device = str(value or "").strip().upper()
+    return device[:2] if re.fullmatch(r"[A-Z]:[\\/]?", device) else None
+
+
+def _disk_volume_devices() -> dict[str, str]:
+    """Relaciona volume -> disco fisico pelas duas associacoes do WMI.
+
+    Um volume distribuido entre discos nao tem um unico sensor de temperatura.
+    Falha parcial da consulta tambem invalida o mapa, para nao esconder extents.
+    """
+    volumes: dict[str, set[str | None]] = {}
+    try:
+        import wmi
+        for disk in wmi.WMI().Win32_DiskDrive():
+            device = _physical_disk_device(disk.DeviceID)
+            for partition in disk.associators(wmi_association_class="Win32_DiskDriveToDiskPartition"):
+                for logical in partition.associators(wmi_association_class="Win32_LogicalDiskToPartition"):
+                    volume = _logical_disk_device(logical.DeviceID)
+                    if volume:
+                        volumes.setdefault(volume, set()).add(device)
+    except Exception as exc:
+        _log.debug("mapeamento de volumes via WMI falhou: %s", exc)
+        return {}
+    return {volume: next(iter(devices)) for volume, devices in volumes.items()
+            if len(devices) == 1 and None not in devices}
 
 
 def _battery() -> dict | None:

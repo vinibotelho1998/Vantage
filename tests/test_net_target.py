@@ -98,18 +98,29 @@ def test_limpar_medida_volta_para_a_sonda():
     assert p.read()["ms"] == 20.0
 
 
-def test_leitura_fica_com_a_menor_das_duas_medidas():
-    """Sonda e medida passiva carregam sobras diferentes; a rede e' o piso comum.
-
-    A sonda leva o tempo de tratar o ICMP; a passiva leva o tick do servidor.
-    Mostrar a maior das duas era o que deixava o numero 1 ms acima do que o
-    proprio jogo exibe.
-    """
+def test_leitura_nao_mistura_medidas_de_fontes_distintas():
     p = PingMonitor("8.8.8.8", 53)
     p._publish("155.133.227.57", [15.0, 15.0, 16.0, 15.0])   # sonda: 15.2
     p.set_measured(16.4, 1.1, "cs2.exe")                     # passiva: tick do servidor
-    assert p.read()["ms"] == 15.2
+    assert p.read()["ms"] == 16.4
     assert p.read()["jitter"] == 1.1     # jitter continua vindo do trafego do jogo
+
+
+def test_troca_de_alvo_apaga_valores_e_rejeita_resultado_atrasado():
+    p = PingMonitor("8.8.8.8", 53)
+    p._publish("8.8.8.8", [1.0])
+    geracao = p._generation
+    p.set_measured(81.0, 3.0, "jogo")
+    p.set_auto_target("155.133.227.57", 27015, "jogo")
+    assert all(v is None for v in p.read().values())
+    p._publish("8.8.8.8", [1.0], port=53, generation=geracao)
+    assert p.read()["ms"] is None
+    p._publish("155.133.227.57", [40.0], port=27015, generation=p._generation)
+    geracao = p._generation
+    p.set_auto_target("155.133.227.57", 27016, "outro")
+    assert p.read()["ms"] is None
+    p._publish("155.133.227.57", [2.0], port=27015, generation=geracao)
+    assert p.read()["ms"] is None
 
 
 def test_medida_passiva_vale_sozinha_quando_a_sonda_nao_responde():

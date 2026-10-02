@@ -542,15 +542,40 @@ def apply_profile(entries: list[dict], topology: str = "") -> tuple[bool, str]:
     if not wanted_on:
         return False, "o perfil precisa de pelo menos uma tela ligada"
 
+    if topology == "clone":
+        # No espelho varias telas fisicas compartilham a mesma fonte GDI.
+        # EnumDisplayDevices nao enumera todos esses destinos; a CCD enumera.
+        cfg = ccd.query(all_paths=True)
+        if cfg is None:
+            return False, "nao consegui conferir as telas conectadas"
+        conectadas = {ccd.target_name(p)[1] for p in cfg.paths[:cfg.path_count]
+                      if p.targetInfo.targetAvailable}
+        faltando = [str(e.get("name") or e.get("monitor_id") or "tela")
+                    for e in wanted_on if e.get("monitor_id") not in conectadas]
+        if faltando:
+            return False, "telas do perfil desconectadas: " + ", ".join(faltando)
+        return _apply_clone(wanted_on)
+
     present = list_displays(with_modes=False)
     by_path = {d.monitor_id: d for d in present if d.monitor_id}
+    conectadas = set(by_path)
+    if any(e.get("monitor_id") not in conectadas for e in wanted_on):
+        # Ao sair de clone, GDI ainda pode expor apenas um dos destinos.
+        # Inclui os outros caminhos fisicos antes de montar a topologia estendida.
+        cfg = ccd.query(all_paths=True)
+        if cfg is not None:
+            conectadas.update(ccd.target_name(p)[1] for p in cfg.paths[:cfg.path_count]
+                              if p.targetInfo.targetAvailable)
     paths = [e.get("monitor_id") for e in wanted_on
-             if e.get("monitor_id") and e["monitor_id"] in by_path]
+             if e.get("monitor_id") and e["monitor_id"] in conectadas]
     if not paths:
         return False, "nenhuma tela do perfil esta conectada"
+    faltando = [str(e.get("name") or e.get("monitor_id") or "tela") for e in wanted_on
+                if not e.get("monitor_id") or e["monitor_id"] not in conectadas]
+    if faltando:
+        return False, "telas do perfil desconectadas: " + ", ".join(faltando)
 
-    if topology == "clone":
-        return _apply_clone(wanted_on)
+    erros = []
 
     ok, err = ccd.set_topology(paths)
     if not ok:
@@ -577,6 +602,7 @@ def apply_profile(entries: list[dict], topology: str = "") -> tuple[bool, str]:
         ok, err = ccd.set_topology(paths)
         if not ok:
             _log.warning("topologia apos redeteccao falhou: %s", err)
+            erros.append("topologia: " + err)
 
     present = list_displays(with_modes=False)
     by_path = {d.monitor_id: d for d in present if d.monitor_id}
@@ -591,6 +617,7 @@ def apply_profile(entries: list[dict], topology: str = "") -> tuple[bool, str]:
         ok, err = set_mode(disp.device, mode)
         if not ok:
             _log.warning("modo de %s nao aplicou: %s", disp.name, err)
+            erros.append(f"modo de {disp.name}: {err}")
 
     # Posicoes antes da primaria, nunca depois. `set_positions` normaliza o
     # conjunto pelo canto superior esquerdo, o que tiraria a primaria do (0,0);
@@ -604,13 +631,35 @@ def apply_profile(entries: list[dict], topology: str = "") -> tuple[bool, str]:
         ok, err = ccd.set_positions(posicoes)
         if not ok:
             _log.warning("arranjo do perfil nao aplicou: %s", err)
+            erros.append("posicoes: " + err)
 
     primary = next((e for e in wanted_on if e.get("primary")), None)
     if primary and primary.get("monitor_id") in by_path:
         ok, err = ccd.make_primary(primary["monitor_id"])
         if not ok:
             _log.warning("primaria do perfil nao aplicou: %s", err)
-    return True, "ok"
+            erros.append("primaria: " + err)
+    final = {d.monitor_id: d for d in list_displays(with_modes=False) if d.monitor_id}
+    if {mid for mid, d in final.items() if d.active} != set(paths):
+        erros.append("as telas ligadas nao correspondem ao perfil")
+    for entry in wanted_on:
+        disp = final.get(entry.get("monitor_id"))
+        if disp is None or not disp.active:
+            continue
+        if entry.get("mode") and (disp.mode is None or disp.mode.as_key() != Mode(*entry["mode"]).as_key()):
+            erros.append(f"modo de {disp.name} nao confirmado")
+        if entry.get("primary") and not disp.primary:
+            erros.append(f"primaria {disp.name} nao confirmada")
+    presentes = [e for e in wanted_on if e.get("monitor_id") in final and len(e.get("position") or ()) == 2]
+    if len(presentes) > 1:
+        ancora = presentes[0]
+        origem = final[ancora["monitor_id"]].position
+        for entry in presentes[1:]:
+            pos = final[entry["monitor_id"]].position
+            if tuple(pos[i] - origem[i] for i in (0, 1)) != tuple(entry["position"][i] - ancora["position"][i] for i in (0, 1)):
+                erros.append("posicoes finais nao correspondem ao perfil")
+                break
+    return (False, "perfil aplicado parcialmente: " + "; ".join(dict.fromkeys(erros))) if erros else (True, "ok")
 
 
 def _active_paths() -> set[str]:
@@ -631,26 +680,54 @@ def _apply_clone(wanted_on: list[dict]) -> tuple[bool, str]:
 
     ancora = next((e for e in wanted_on if e.get("primary")), wanted_on[0])
     raw = ancora.get("mode")
+    ativas, erro = _clone_displays(wanted_on)
+    if erro:
+        return False, erro
     if not raw:
         return True, "espelhado"
-
     alvo = Mode(*raw)
-    present = list_displays(with_modes=False)
-    ativas = [d for d in present if d.active]
-    if not ativas:
-        return True, "espelhado"
 
-    for disp in ativas:
+    fontes = {d.device: d for d in ativas}
+    for disp in fontes.values():
         if not any(m.as_key() == alvo.as_key() for m in _supported_modes(disp.device)):
             atual = ativas[0].mode
             return True, (f"espelhado em {atual.label}" if atual else "espelhado")
 
-    for disp in ativas:
+    for disp in fontes.values():
         ok, err = set_mode(disp.device, alvo)
         if not ok:
             _log.warning("clone: %s nao aceitou %s (%s)", disp.name, alvo.label, err)
-            break
+            return False, f"espelho aplicado parcialmente: modo de {disp.name}: {err}"
+    finais, erro = _clone_displays(wanted_on)
+    if erro:
+        return False, erro
+    if any(d.mode is None or d.mode.as_key() != alvo.as_key() for d in finais):
+        return False, "o modo solicitado para o espelho nao foi confirmado"
     return True, f"espelhado em {alvo.label}"
+
+
+def _clone_displays(wanted_on: list[dict]) -> tuple[list[Display], str]:
+    """Confere os destinos fisicos e o conteudo compartilhado via CCD."""
+    cfg = ccd.query(all_paths=False)
+    if cfg is None:
+        return [], "nao consegui confirmar o espelhamento"
+    telas, conteudos = [], set()
+    for path in cfg.active_paths():
+        nome, mid = ccd.target_name(path)
+        fonte = ccd.source_mode(cfg, path)
+        device = ccd.source_name(path)
+        if not mid or fonte is None or not device:
+            return [], "nao consegui confirmar o espelhamento"
+        pos = (fonte.position.x, fonte.position.y)
+        conteudos.add((pos, fonte.width, fonte.height, fonte.pixelFormat))
+        modo, _, rotacao = _current_mode(device)
+        telas.append(Display(device, nome or device, "", mid, True,
+                             pos == (0, 0), modo, pos, rotacao))
+    if not telas or not {e.get("monitor_id") for e in wanted_on}.issubset({d.monitor_id for d in telas}):
+        return [], "o Windows nao ligou todas as telas do espelho"
+    if len(conteudos) != 1:
+        return [], "o Windows nao confirmou o espelhamento"
+    return telas, ""
 
 
 def _entry(disp: Display, active: bool, primary: bool, mode: Mode | None) -> dict:

@@ -49,9 +49,10 @@ def test_motor_nunca_iniciado_nao_ganha_supervisor():
     assert chamadas == []
 
 
-def test_geracao_aposenta_a_thread_antiga():
+def test_geracao_aposenta_a_thread_antiga(monkeypatch):
     """A travada que acordar depois tem de sair, e nao subir um segundo PresentMon."""
     eng = FpsEngine()
+    monkeypatch.setattr(eng, "_supervise", lambda geracao: None)
     eng._spawn_supervisor()
     primeira = eng._gen
     eng._stop.set()          # a nova thread sai sozinha; so' a geracao importa aqui
@@ -82,9 +83,10 @@ def test_sessao_legada_conta_como_orfa():
     assert not fpsmod._orfa("")
 
 
-def test_sessao_bloqueada_varre_em_vez_de_degradar_metricas():
+def test_sessao_bloqueada_varre_em_vez_de_degradar_metricas(monkeypatch):
     """"access denied" nao diz nada sobre --v2_metrics."""
     eng = FpsEngine()
+    monkeypatch.setattr(fpsmod, "encerrar_presentmon_orfaos", lambda: 0)
     varridas: list[int] = []
     fpsmod_sweep = fpsmod.sweep_stale_sessions
     fpsmod.sweep_stale_sessions = lambda: varridas.append(1)

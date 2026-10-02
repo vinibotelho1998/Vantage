@@ -66,7 +66,7 @@ class _Proc:
 def coletor():
     c = Collector(_Lhm(), _Gpu(), _Ping())
     # WMI e' consulta de segundos e nao tem nada a ver com o que se mede aqui.
-    c._gpu_wmi = {}
+    c._gpu_wmi_info = lambda _name: {}
     c._ram_freq = 0
     return c
 

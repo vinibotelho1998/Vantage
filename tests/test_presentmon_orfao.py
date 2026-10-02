@@ -15,8 +15,9 @@ from vantage.sensors import fps  # noqa: E402
 
 
 class _Proc:
-    def __init__(self, pid, nome, ppid=1):
-        self.info = {"pid": pid, "name": nome, "ppid": ppid}
+    def __init__(self, pid, nome, ppid=1, sessao=None):
+        self.info = {"pid": pid, "name": nome, "ppid": ppid,
+                     "cmdline": [nome, "--session_name", sessao or f"Vantage_{ppid}"]}
         self.terminado = False
 
     def terminate(self):
@@ -26,13 +27,14 @@ class _Proc:
         return 0
 
 
-def _psutil_falso(monkeypatch, processos):
+def _psutil_falso(monkeypatch, processos, vivos=()):
     import types
 
     falso = types.SimpleNamespace()
     falso.process_iter = lambda campos=None: iter(processos)
     falso.Process = lambda pid: next(p for p in processos if p.info["pid"] == pid)
     falso.Error = Exception
+    falso.pid_exists = lambda pid: pid in vivos
     monkeypatch.setitem(__import__("sys").modules, "psutil", falso)
     return falso
 
@@ -66,6 +68,31 @@ def test_outros_processos_sao_ignorados(monkeypatch):
     monkeypatch.setattr(fps.os, "kill", lambda pid, sig: None)
 
     assert fps.encerrar_presentmon_orfaos() == 0
+
+
+def test_presentmon_de_outra_ferramenta_nao_e_encerrado(monkeypatch):
+    proc = _Proc(4242, "presentmon.exe", sessao="CapFrameX")
+    _psutil_falso(monkeypatch, [proc])
+    sinais = []
+    monkeypatch.setattr(fps.os, "kill", lambda *args: sinais.append(args))
+    assert fps.encerrar_presentmon_orfaos() == 0
+    assert sinais == [] and not proc.terminado
+
+
+def test_pai_vivo_e_preservado_mesmo_com_sessao_legada(monkeypatch):
+    proc = _Proc(4242, "presentmon.exe", ppid=123, sessao="Vantage")
+    _psutil_falso(monkeypatch, [proc], vivos=(123,))
+    sinais = []
+    monkeypatch.setattr(fps.os, "kill", lambda *args: sinais.append(args))
+    assert fps.encerrar_presentmon_orfaos() == 0
+    assert sinais == []
+
+
+def test_sessao_de_instancia_viva_nao_e_orfa(monkeypatch):
+    _psutil_falso(monkeypatch, [], vivos=(123,))
+    assert not fps._orfa("Vantage_123")
+    assert fps._orfa("Vantage_456")
+    assert not fps._orfa("Vantage_outro_programa")
 
 
 def test_sinal_que_nao_chega_cai_para_terminate(monkeypatch):
