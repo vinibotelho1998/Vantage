@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
     QLabel,
+    QSizePolicy,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -146,7 +147,11 @@ class Sidebar(QWidget):
         super().__init__(window)
         self._win = window
         self.setObjectName("Sidebar")
-        self.setFixedWidth(theme.scaled(190))
+        # Em DPI alto, nome e versão podem exigir mais que a largura usual.
+        # A coluna acompanha o tamanho natural desses rótulos sem tomar a
+        # folga do conteúdo principal.
+        self.setMinimumWidth(theme.scaled(190))
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(theme.scaled(10), theme.scaled(16), theme.scaled(10),
                                theme.scaled(12))

@@ -979,7 +979,7 @@ def _conferir_remocao(alvos: list[str]) -> None:
     def _consultar() -> None:
         try:
             r = subprocess.run(["logman", "query", "-ets"], capture_output=True,
-                               creationflags=subprocess.CREATE_NO_WINDOW)
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             texto = r.stdout.decode("latin-1", "ignore")
             # A consulta precisa ter DADO CERTO para a ausencia valer como
             # remocao. Sem esta checagem, um logman que falha devolve texto
@@ -1007,26 +1007,20 @@ def _conferir_remocao(alvos: list[str]) -> None:
         _log.info("sessoes ETW orfas removidas: %s", ", ".join(alvos))
         return
 
-    # A causa muda conforme haja ou nao outra copia viva, e o conselho tambem.
-    # Dizer sempre "feche as outras copias" manda procurar o que nao existe:
-    # com nenhuma aberta, a sessao ja' esta' num estado que nem administrador
-    # nem SYSTEM desfazem, e so' o reinicio limpa.
     outras = _outras_copias()
     if outras:
         _log.warning(
             "a sessao ETW %s resistiu a remocao. Ha' outra copia do Vantage "
-            "aberta (pid %s) segurando ela: feche todas e a limpeza passa. Nao "
-            "e' falta de permissao, mesmo que o logman diga 'acesso negado'.",
+            "aberta (pid %s). Ela pode estar usando a sessao: feche todas as "
+            "copias e tente de novo. 'Acesso negado' tambem pode indicar recurso "
+            "em uso, mesmo com permissao de administrador.",
             ", ".join(restantes), ", ".join(str(p) for p in outras))
         return
     _log.warning(
         "a sessao ETW %s resistiu a remocao e nao ha' outra copia do app "
-        "aberta. Ela e' um logger de SISTEMA orfao: uma vez sem dono, nao sai "
-        "por logman, nem por ControlTrace (por nome ou por handle), nem "
-        "alterando o DACL, nem como administrador, nem como SYSTEM. Todos "
-        "respondem 'acesso negado'. A captura so' volta reiniciando o Windows. "
-        "Nasce quando o app e' encerrado a forca com a captura ativa; feche "
-        "pela bandeja e isso nao acontece.",
+        "detectada. Uma sessao de sistema orfa pode resistir mesmo com permissao "
+        "de administrador. Se a captura continuar bloqueada, voce pode liberar "
+        "a sessao reiniciando o Windows.",
         ", ".join(restantes))
 
 
