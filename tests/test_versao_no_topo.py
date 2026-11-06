@@ -58,6 +58,28 @@ def test_versao_cabe_inteira_na_janela_estreita(janela):
     assert versao.geometry().right() < barra.width()
 
 
+def test_mudanca_de_fonte_recalcula_espaco_da_versao(janela):
+    barra = janela.sidebar
+    versao, marca = barra.versao, barra._brand
+    original, fonte_versao, fonte_marca = versao.text(), versao.font(), marca.font()
+    try:
+        versao.setText("v3.4.11")
+        for rotulo, pixels in ((versao, 25), (marca, 33)):
+            fonte = rotulo.font()
+            fonte.setPixelSize(pixels)
+            rotulo.setFont(fonte)
+        _qt.processEvents()
+        for rotulo in (versao, marca):
+            assert rotulo.width() >= rotulo.fontMetrics().horizontalAdvance(rotulo.text())
+        assert marca.geometry().right() < versao.geometry().left()
+        assert versao.geometry().right() < barra.width()
+    finally:
+        versao.setText(original)
+        versao.setFont(fonte_versao)
+        marca.setFont(fonte_marca)
+        _qt.processEvents()
+
+
 def _luminancia(cor: QColor) -> float:
     def canal(v: int) -> float:
         v /= 255.0

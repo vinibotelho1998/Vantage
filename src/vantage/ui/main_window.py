@@ -179,6 +179,8 @@ class Sidebar(QWidget):
         brand.addWidget(self.versao, 0, Qt.AlignmentFlag.AlignBottom)
         brand.addStretch(1)
         lay.addLayout(brand)
+        self._brand_row = brand
+        self._fit_brand()
 
         self.buttons: dict[str, NavButton] = {}
         por_chave = {cls.key: cls for cls in VIEW_CLASSES if cls.key not in NAV_OCULTAS}
@@ -214,6 +216,20 @@ class Sidebar(QWidget):
         self.saude = label("", 7.5, color=theme.FAINT)
         self.saude.setWordWrap(True)
         lay.addWidget(self.saude)
+
+    def _fit_brand(self) -> None:
+        # Leitura após aplicar fontes/QSS: o DPI pode mudar ao mover a janela.
+        for label in (self._brand, self.versao):
+            label.setMinimumWidth(label.fontMetrics().horizontalAdvance(label.text()))
+        self._brand_row.invalidate()
+        margins = self.layout().contentsMargins()
+        required = self._brand_row.minimumSize().width() + margins.left() + margins.right()
+        self.setMinimumWidth(max(theme.scaled(190), required))
+
+    def event(self, event) -> bool:
+        if event.type() in (QEvent.Type.Show, QEvent.Type.LayoutRequest) and hasattr(self, "_brand_row"):
+            self._fit_brand()
+        return super().event(event)
 
     def atualizar_saude(self) -> None:
         """Diz se os sensores e a captura estao de pe', e o porque quando nao.
