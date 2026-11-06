@@ -1,10 +1,12 @@
 """Configuracao tipada, validada e persistida em %APPDATA%/Vantage/settings.json."""
 from __future__ import annotations
 
+import os
+
 import json
 import time
 from dataclasses import asdict, dataclass, field, fields
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from . import log, paths
 
@@ -115,13 +117,13 @@ class Settings:
     chart_glow: bool = True
 
     # overlay
-    overlay_enabled: bool = True
+    overlay_enabled: bool = os.name == "nt"
     overlay_corner: str = "top-left"
     overlay_opacity: float = 0.88
     overlay_scale: float = 1.0
     overlay_metrics: list[str] = field(default_factory=lambda: list(OVERLAY_DEFAULT))
     """Vem quase completo de proposito: overlay pela metade nao diagnostica nada."""
-    overlay_auto_game: bool = True
+    overlay_auto_game: bool = os.name == "nt"
     overlay_refresh_hz: float = 3.0
     """Quantas vezes por segundo os numeros trocam. Alto demais nao da' para ler."""
     overlay_graph_seconds: int = 45
@@ -387,7 +389,7 @@ class Settings:
         pode virar um pedido de 1 TB de arquivo temporario: o teto aqui e' a
         primeira barreira, e a checagem de espaco livre do motor e' a segunda.
         """
-        from .sensors.diskbench import PROFUNDIDADES, SEGUNDOS_POR_FASE, TAMANHOS_MIB
+        from .core.disk_options import PROFUNDIDADES, SEGUNDOS_POR_FASE, TAMANHOS_MIB
         self.diskbench_size_mib = int(_nearest(_num(self.diskbench_size_mib, 1024),
                                                TAMANHOS_MIB))
         self.diskbench_seconds = float(_nearest(_num(self.diskbench_seconds, 1.5),
@@ -503,7 +505,8 @@ def _clean_launch_item(raw) -> dict | None:
     target = _texto(raw, "target").strip()
     if target and not target.startswith(("primary:", "profile:")):
         target = ""
-    name = _texto(raw, "name").strip() or Path(path).stem
+    file = PureWindowsPath(path) if PureWindowsPath(path).drive else Path(path)
+    name = _texto(raw, "name").strip() or file.stem
     return {
         "name": name[:40],
         "path": path,

@@ -14,7 +14,8 @@ import time
 import psutil
 
 from .. import log
-from ..platform import gpumem
+if os.name == "nt":
+    from ..platform import gpumem
 from ..core.series import Ema
 
 _log = log.get("collector")
@@ -55,7 +56,7 @@ class Collector:
 
         self._ram_freq: int | None = None
         self._ram_info: dict | None = None
-        self._sys_drive = (os.environ.get("SystemDrive", "C:") + "\\")
+        self._sys_drive = (os.environ.get("SystemDrive", "C:") + "\\") if os.name == "nt" else "/"
         self._prev_net = psutil.net_io_counters()
         self._prev_disk = psutil.disk_io_counters()
         self._prev_time = time.monotonic()
@@ -66,7 +67,7 @@ class Collector:
         self._gpu_identity = None
         self._gpu_wmi: dict[str, dict] = {}
         self._game_ram = _GameMemory()
-        self._game_vram = gpumem.ProcessVram()
+        self._game_vram = gpumem.ProcessVram() if os.name == "nt" else None
         """VRAM do mesmo processo; ver platform/gpumem.py."""
         self._static = _static_info()
 
@@ -87,7 +88,8 @@ class Collector:
     def set_game_pid(self, pid: int | None) -> None:
         """Diz de qual processo medir a RAM. Zero (ou None) desliga a medida."""
         self._game_ram.follow(pid)
-        self._game_vram.follow(pid)
+        if self._game_vram is not None:
+            self._game_vram.follow(pid)
 
     def snapshot(self) -> dict:
         with self._lock:
@@ -102,7 +104,7 @@ class Collector:
         # COM, e COM recusa thread que nao se apresentou a ele: sem isto as duas
         # consultas falhavam com "CoInitialize nao foi chamado", o erro ia para
         # o log de depuracao e o cache guardava a falha para sempre.
-        com = _entrar_no_com()
+        com = os.name == "nt" and _entrar_no_com()
         try:
             psutil.cpu_percent(interval=None)
             psutil.cpu_percent(interval=None, percpu=True)
@@ -188,8 +190,8 @@ class Collector:
             "ram_total": ram.total / 1024 ** 3,
             "ram_avail": ram.available / 1024 ** 3,
             "ram_pct": ram.percent,
-            "ram_cached": max(0.0, (ram.total - ram.used - ram.available)) / 1024 ** 3,
-            "ram_freq": self._ram_freq_mhz(),
+            "ram_cached": getattr(ram, "cached", max(0.0, ram.total - ram.used - ram.available)) / 1024 ** 3,
+            "ram_freq": self._ram_freq_mhz() if os.name == "nt" else None,
             "ram_info": self._ram_info,
             "ram_temp": lhm.get("ram_temp"),
             "ram_modules": lhm.get("ram_modules"),
@@ -216,7 +218,7 @@ class Collector:
         data.update(self._game_ram.read() or {})
         # So' publica com o jogo identificado: sem pid, o numero seria de
         # ninguem, e a linha do overlay apareceria zerada sem explicacao.
-        if data.get("game_pid"):
+        if data.get("game_pid") and self._game_vram is not None:
             vram_jogo = self._game_vram.read_mb()
             if vram_jogo is not None:
                 data["game_vram"] = vram_jogo
@@ -306,7 +308,8 @@ class Collector:
                            if usado is not None and total else None)
         gpu.setdefault("throttle", [])
         gpu.setdefault("name", "GPU")
-        for key, value in self._gpu_wmi_info(gpu.get("name", "")).items():
+        wmi_info = self._gpu_wmi_info(gpu.get("name", "")) if os.name == "nt" else {}
+        for key, value in wmi_info.items():
             static.setdefault(key, value)
         gpu["static"] = static
         gpu["others"] = [n for n in (lhm.get("gpu_list") or []) if n != gpu.get("name")]
@@ -342,7 +345,7 @@ class Collector:
         now = time.monotonic()
         if now - self._disk_cache_at >= 20.0:
             self._disk_cache = _partitions()
-            self._disk_volume_devices = _disk_volume_devices()
+            self._disk_volume_devices = _disk_volume_devices() if os.name == "nt" else {}
             self._disk_cache_at = now
         sensors: dict[str, list[dict]] = {}
         for disk in lhm.get("disks_lhm") or []:

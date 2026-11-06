@@ -29,8 +29,9 @@ de jogo do usuario. Dado de producao nao pode estar a um import de distancia.
 
 def data_dir() -> Path:
     override = os.environ.get(SANDBOX_ENV)
-    base = override or os.environ.get("APPDATA") or os.path.expanduser("~")
-    d = Path(base) if override else Path(base) / APP_NAME
+    base = ((os.environ.get("APPDATA") or os.path.expanduser("~")) if os.name == "nt" else
+            (os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share"))
+    d = Path(override) if override else Path(base) / APP_NAME
     d.mkdir(parents=True, exist_ok=True)
     return d
 

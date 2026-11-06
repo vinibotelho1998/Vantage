@@ -1,6 +1,8 @@
 """Ponto de entrada do Vantage."""
 from __future__ import annotations
 
+import os
+
 import subprocess
 import sys
 
@@ -11,8 +13,11 @@ from PySide6.QtWidgets import QApplication
 from . import __version__, log, paths
 
 _log = log.get("main")
-from .platform import win
-from .platform.instancia import InstanciaUnica
+if os.name == "nt":
+    from .platform import win
+    from .platform.instancia import InstanciaUnica
+else:
+    from .platform.linux_instance import InstanciaUnica
 
 
 def _elevate() -> bool:
@@ -52,7 +57,7 @@ def _identidade_na_barra() -> None:
 def main() -> int:
     log.setup()
     log.capturar_excecoes()
-    if not win.is_admin():
+    if os.name == "nt" and not win.is_admin():
         if _elevate():
             return 0
         _require_admin_warning()
@@ -69,14 +74,16 @@ def main() -> int:
         _log.info("ja' havia uma copia aberta; trouxe ela para a frente")
         return 0
 
-    _identidade_na_barra()
+    if os.name == "nt":
+        _identidade_na_barra()
     QGuiApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     qt = QApplication(sys.argv)
     qt.setApplicationName("Vantage")
     qt.setApplicationVersion(__version__)
     qt.setOrganizationName("Vantage")
-    icon = paths.asset("icon.ico")
+    qt.setDesktopFileName("vantage")
+    icon = paths.asset("icon.ico" if os.name == "nt" else "icon.png")
     if icon.exists():
         qt.setWindowIcon(QIcon(str(icon)))
 

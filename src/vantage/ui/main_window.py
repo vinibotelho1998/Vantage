@@ -1,6 +1,8 @@
 """Janela principal: chrome proprio, barra lateral de navegacao e pilha de telas."""
 from __future__ import annotations
 
+import os
+
 from datetime import datetime
 
 from PySide6.QtCore import QEvent, QPoint, Qt
@@ -16,14 +18,18 @@ from PySide6.QtWidgets import (
 
 from .. import __version__, log, paths, theme
 from ..core import units
-from ..platform import win as winapi
+if os.name == "nt":
+    from ..platform import win as winapi
 from .components import IconButton, LoadDots, NavButton, PillButton, label
 from .views.base import View
 from .views.benchmark import BenchmarkView
 from .views.cpu import CpuView
 from .views.dashboard import DashboardView
-from .views.displays import DisplaysView
-from .views.gamepad import GamepadView
+if os.name == "nt":
+    from .views.displays import DisplaysView
+    from .views.gamepad import GamepadView
+else:
+    from .views.linux_devices import DisplaysView, GamepadView
 from .views.gpu import GpuView
 from .views.launcher import LauncherView
 from .views.memory import MemoryView
@@ -229,7 +235,7 @@ class Sidebar(QWidget):
         self.saude.setText("\n".join(partes))
         # Vermelho so' quando ha' o que consertar; sensor de pe' e captura
         # esperando jogo sao o estado normal e nao devem chamar atencao.
-        ruim = not sensores_ok or not capturando
+        ruim = not sensores_ok or (os.name == "nt" and not capturando)
         self.saude.setStyleSheet(
             f"color: {theme.BAD if ruim else theme.FAINT}; background: transparent;")
         self.saude.setToolTip(erro if not sensores_ok else
@@ -461,7 +467,8 @@ class MainWindow(QWidget):
     def showEvent(self, event) -> None:
         super().showEvent(event)
         # O app roda elevado; sem isso o Explorer nao consegue soltar arquivo aqui.
-        winapi.allow_drops_from_explorer(int(self.winId()))
+        if os.name == "nt":
+            winapi.allow_drops_from_explorer(int(self.winId()))
 
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.Type.WindowStateChange:
@@ -506,7 +513,8 @@ class MainWindow(QWidget):
 
     def closeEvent(self, event) -> None:
         self.store_geometry()
-        if self.app.settings.close_to_tray:
+        from PySide6.QtWidgets import QSystemTrayIcon
+        if self.app.settings.close_to_tray and QSystemTrayIcon.isSystemTrayAvailable():
             event.ignore()
             self.hide()
             self.app.notify_tray_hint()

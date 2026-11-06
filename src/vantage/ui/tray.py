@@ -1,6 +1,8 @@
 """Icone na bandeja do sistema com menu de acoes rapidas."""
 from __future__ import annotations
 
+import os
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
@@ -49,13 +51,15 @@ class Tray:
         for key, text in _VIEWS:
             views.addAction(text, lambda k=key: self._ctl.show_view(k))
         menu.addSeparator()
-        self._overlay_action = QAction("Overlay no jogo", menu, checkable=True)
+        self._overlay_action = QAction("Overlay no jogo" if os.name == "nt" else "Painel flutuante", menu, checkable=True)
         self._overlay_action.setChecked(self._ctl.settings.overlay_enabled)
         self._overlay_action.triggered.connect(lambda _v: self._ctl.toggle_overlay())
         menu.addAction(self._overlay_action)
-        menu.addAction("Benchmark rápido (60 s)", lambda: self._ctl.benchmark_start(60))
+        if os.name == "nt":
+            menu.addAction("Benchmark rápido (60 s)", lambda: self._ctl.benchmark_start(60))
         menu.addAction("Zerar sessão", self._ctl.clear_stats)
-        menu.addAction("Reiniciar captura de FPS", self._ctl.restart_capture)
+        if os.name == "nt":
+            menu.addAction("Reiniciar captura de FPS", self._ctl.restart_capture)
         menu.addSeparator()
         menu.addAction("Configurações", lambda: self._ctl.open_settings())
         menu.addAction("Fechar", self._ctl.quit)

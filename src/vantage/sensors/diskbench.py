@@ -65,7 +65,7 @@ MIB = 1024 * 1024
 TAMANHO_PADRAO = 1024 * MIB
 """1 GiB. Grande o bastante para nao caber em cache de controlador nem em SLC."""
 
-TAMANHOS_MIB = (256, 512, 1024, 2048, 4096)
+from ..core.disk_options import TAMANHOS_MIB, SEGUNDOS_POR_FASE, PROFUNDIDADES
 """Tamanhos oferecidos na tela, em MiB.
 
 Nao e' so' "rapido x demorado". O que enche o cache SLC do SSD e' o total gravado
@@ -94,14 +94,14 @@ FRACAO_LIVRE_MINIMA = 0.05
 TEMPO_MINIMO_FASE = 1.5
 TEMPO_MAXIMO_FASE = 8.0
 TEMPO_ALEATORIO = 2.0
-SEGUNDOS_POR_FASE = (0.5, 1.5, 3.0, 6.0)
+
 """Tempo minimo de medicao por fase, oferecido na tela.
 
 Menos que isso e a medida vira ruido do agendador; mais estabiliza o numero em
 troca de um teste mais demorado.
 """
 
-PROFUNDIDADES = (1,)
+
 """Profundidades de fila oferecidas, uma so', e de proposito.
 
 Fila maior que 1 significa deixar varias operacoes pendentes no dispositivo ao
@@ -135,7 +135,7 @@ FASE_PREPARO = "preparando"
 FASES = (FASE_PREPARO,) + tuple(ROTULOS_FASES[c] for c in CHAVES_FASES)
 
 
-_kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+_kernel32 = ctypes.WinDLL("kernel32", use_last_error=True) if os.name == "nt" else None
 
 GENERIC_READ = 0x80000000
 GENERIC_WRITE = 0x40000000
@@ -152,27 +152,28 @@ DRIVE_FIXED = 3
 DRIVE_REMOTE = 4
 DRIVE_CDROM = 5
 
-_kernel32.CreateFileW.restype = wintypes.HANDLE
-_kernel32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
-                                  wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD,
-                                  wintypes.HANDLE]
-_kernel32.ReadFile.restype = wintypes.BOOL
-_kernel32.ReadFile.argtypes = [wintypes.HANDLE, wintypes.LPVOID, wintypes.DWORD,
-                               ctypes.POINTER(wintypes.DWORD), wintypes.LPVOID]
-_kernel32.WriteFile.restype = wintypes.BOOL
-_kernel32.WriteFile.argtypes = [wintypes.HANDLE, wintypes.LPVOID, wintypes.DWORD,
-                                ctypes.POINTER(wintypes.DWORD), wintypes.LPVOID]
-_kernel32.SetFilePointerEx.restype = wintypes.BOOL
-_kernel32.SetFilePointerEx.argtypes = [wintypes.HANDLE, ctypes.c_longlong,
-                                       ctypes.POINTER(ctypes.c_longlong), wintypes.DWORD]
-_kernel32.FlushFileBuffers.restype = wintypes.BOOL
-_kernel32.FlushFileBuffers.argtypes = [wintypes.HANDLE]
-_kernel32.CloseHandle.restype = wintypes.BOOL
-_kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-_kernel32.GetDriveTypeW.restype = wintypes.UINT
-_kernel32.GetDriveTypeW.argtypes = [wintypes.LPCWSTR]
-_kernel32.GetDiskFreeSpaceW.restype = wintypes.BOOL
-_kernel32.GetDiskFreeSpaceW.argtypes = [wintypes.LPCWSTR] + [ctypes.POINTER(wintypes.DWORD)] * 4
+if _kernel32 is not None:
+    _kernel32.CreateFileW.restype = wintypes.HANDLE
+    _kernel32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                                      wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD,
+                                      wintypes.HANDLE]
+    _kernel32.ReadFile.restype = wintypes.BOOL
+    _kernel32.ReadFile.argtypes = [wintypes.HANDLE, wintypes.LPVOID, wintypes.DWORD,
+                                   ctypes.POINTER(wintypes.DWORD), wintypes.LPVOID]
+    _kernel32.WriteFile.restype = wintypes.BOOL
+    _kernel32.WriteFile.argtypes = [wintypes.HANDLE, wintypes.LPVOID, wintypes.DWORD,
+                                    ctypes.POINTER(wintypes.DWORD), wintypes.LPVOID]
+    _kernel32.SetFilePointerEx.restype = wintypes.BOOL
+    _kernel32.SetFilePointerEx.argtypes = [wintypes.HANDLE, ctypes.c_longlong,
+                                           ctypes.POINTER(ctypes.c_longlong), wintypes.DWORD]
+    _kernel32.FlushFileBuffers.restype = wintypes.BOOL
+    _kernel32.FlushFileBuffers.argtypes = [wintypes.HANDLE]
+    _kernel32.CloseHandle.restype = wintypes.BOOL
+    _kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    _kernel32.GetDriveTypeW.restype = wintypes.UINT
+    _kernel32.GetDriveTypeW.argtypes = [wintypes.LPCWSTR]
+    _kernel32.GetDiskFreeSpaceW.restype = wintypes.BOOL
+    _kernel32.GetDiskFreeSpaceW.argtypes = [wintypes.LPCWSTR] + [ctypes.POINTER(wintypes.DWORD)] * 4
 
 
 class BenchError(RuntimeError):

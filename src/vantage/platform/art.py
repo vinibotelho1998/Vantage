@@ -14,6 +14,8 @@ download trava esperando justamente quando ninguem tem teclado na mao.
 """
 from __future__ import annotations
 
+import os
+
 import ctypes
 import hashlib
 import re
@@ -24,8 +26,9 @@ from .. import log, paths
 
 _log = log.get("art")
 
-user32 = ctypes.WinDLL("user32", use_last_error=True)
-gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
+if os.name == "nt":
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
 
 _EXTS = (".png", ".jpg", ".jpeg", ".webp", ".bmp")
 
@@ -44,6 +47,10 @@ pontas; o hero e' largo demais e viraria uma tira do meio da imagem.
 
 def _steam_root() -> Path | None:
     """Onde o Steam esta' instalado, segundo o proprio Steam."""
+    if os.name != "nt":
+        return next((p for p in (Path.home() / ".steam/steam", Path.home() / ".local/share/Steam",
+                                 Path.home() / ".var/app/com.valvesoftware.Steam/data/Steam")
+                     if (p / "steamapps").is_dir()), None)
     import winreg
 
     for hive, chave in ((winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam"),
@@ -139,13 +146,15 @@ def _appid_do_url(caminho: Path) -> str:
 
 
 def _appid(path: Path, root: Path) -> str:
+    if os.name != "nt" and str(path).startswith("steam:/rungameid/") and path.name.isdecimal():
+        return path.name
     if path.suffix.lower() == ".url":
         return _appid_do_url(path)
     alvo = str(path).lower()
     for pasta, appid in _steam_apps(root).items():
         # Compara pelo prefixo da pasta: o exe costuma estar varios niveis
         # abaixo dela (bin64\\Jogo.exe), entao igualdade nunca casaria.
-        if alvo.startswith(pasta + "\\") or alvo == pasta:
+        if alvo.startswith(pasta + os.sep) or alvo == pasta:
             return appid
     return ""
 
@@ -221,7 +230,8 @@ def _setup_prototypes() -> None:
     gdi32.DeleteObject.restype = wintypes.BOOL
 
 
-_setup_prototypes()
+if os.name == "nt":
+    _setup_prototypes()
 
 BI_RGB = 0
 DIB_RGB_COLORS = 0
@@ -313,6 +323,8 @@ def icon_png(caminho: Path) -> Path | None:
     if destino.is_file():
         return destino
 
+    if os.name != "nt":
+        return None
     for tamanho in _TAMANHOS:
         icone = _hicon(caminho, tamanho)
         if icone is None:
@@ -362,7 +374,7 @@ def artwork_path(item: dict) -> Path | None:
                 return icon_png(ico)
         return None
 
-    if caminho.is_file():
+    if caminho.is_file() and os.name == "nt":
         return icon_png(caminho)
     return None
 

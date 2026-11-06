@@ -1,4 +1,4 @@
-"""Biblioteca de jogos: arraste o .exe, escolha a tela, clique e jogue.
+"""Biblioteca de jogos: arraste o executável, escolha a tela, clique e jogue.
 
 A ideia e' cortar o ritual de sempre: abrir Configuracoes do Windows, trocar a
 primaria para a TV, achar o jogo, jogar, e no fim desfazer tudo na mao. Aqui o
@@ -28,9 +28,11 @@ from PySide6.QtWidgets import (
 from ... import theme
 from ...core.session import resolve_shortcut
 from ...platform import art
-from ...platform import displays as D
+if os.name == "nt":
+    from ...platform import displays as D, win
+else:
+    from ...platform import linux_desktop as D
 from ...platform import gamescan
-from ...platform import win
 from ...sensors import procs as P
 from ..bigpicture import tempo_medido, ultima_sessao
 from ..components import (Badge, Card, IconButton, PillButton, divider,
@@ -58,7 +60,9 @@ class DropZone(QWidget):
         # nao chega. Dizer isso aqui evita a conclusao de que o app "nao acha" o
         # jogo; e aponta os dois caminhos que funcionam.
         texto = (".exe, atalho .lnk ou .url, ou clique para procurar")
-        if win.is_admin():
+        if os.name != "nt":
+            texto = "Executável Linux ou AppImage. Clique para procurar."
+        elif win.is_admin():
             texto = ("clique para procurar, arrastar não funciona com o app "
                      "como administrador")
         hint = label(texto, 8.5, color=theme.FAINT)
@@ -99,6 +103,7 @@ class DropZone(QWidget):
             self, "Escolha o jogo", inicio if os.path.isdir(inicio) else "",
             # "Todos os arquivos" fica junto de proposito: um filtro que esconde
             # o arquivo que o usuario esta' vendo na pasta parece defeito do app.
+            "Todos os arquivos (*)" if os.name != "nt" else
             "Jogos e atalhos (*.exe *.lnk *.url *.bat *.cmd);;Todos os arquivos (*)")
         if escolhido:
             self._on_files([escolhido])
@@ -108,7 +113,8 @@ def _paths_from(mime) -> list[str]:
     if not mime.hasUrls():
         return []
     return [u.toLocalFile() for u in mime.urls()
-            if u.isLocalFile() and u.toLocalFile().lower().endswith(_EXTS)]
+            if u.isLocalFile() and (os.access(u.toLocalFile(), os.X_OK) if os.name != "nt"
+                                    else u.toLocalFile().lower().endswith(_EXTS))]
 
 
 _COMO_FUNCIONA = """Escolha em que tela o jogo abre, inclusive uma que esteja desligada.
@@ -247,7 +253,7 @@ class LauncherView(View):
     key = "launcher"
     title = "Jogos"
     glyph = "▶"
-    subtitle = "sua biblioteca: abre na tela certa, com um clique"
+    subtitle = "Sua biblioteca de jogos"
 
     def __init__(self, app) -> None:
         super().__init__(app)
@@ -272,12 +278,16 @@ class LauncherView(View):
         # A grade tambem escolhe em que tela abre, como qualquer jogo. Antes ela
         # nascia sempre na tela marcada para ficar apagada; servia para a TV da
         # sala, e quem quisesse a grade no monitor de cima nao tinha onde dizer.
-        barra.addWidget(label("na tela", 8.5, color=theme.MUTE))
+        if os.name == "nt":
+            barra.addWidget(label("na tela", 8.5, color=theme.MUTE))
+        else:
+            self.btn_bp.setToolTip("Abrir o modo Big Picture do cliente Steam.")
         self.bp_tela = QComboBox()
         self.bp_tela.setMinimumWidth(theme.scaled(210))
         # Ligado uma vez so': o preenchimento roda com os sinais bloqueados, e
         # desligar para religar a cada redesenho so' gerava aviso do PySide.
         self.bp_tela.currentIndexChanged.connect(self._trocar_tela_bp)
+        self.bp_tela.setVisible(os.name == "nt")
         barra.addWidget(self.bp_tela)
         self.btn_scan = PillButton("Procurar jogos instalados", theme.GPU)
         self.btn_scan.clicked.connect(self._procurar)
@@ -287,12 +297,14 @@ class LauncherView(View):
         self._espera_varredura.setInterval(150)
         self._espera_varredura.timeout.connect(self._conferir_varredura)
         self.btn_scan.setToolTip("Varre o Steam e as pastas de jogos dos seus discos.")
+        if os.name != "nt":
+            self.btn_scan.setToolTip("Procurar nas bibliotecas Steam instaladas.")
         barra.addWidget(self.btn_scan)
         barra.addStretch(1)
         self.lay.addLayout(barra)
 
         card_como = Card("Como funciona", theme.CPU)
-        texto = label(_COMO_FUNCIONA, 9, color=theme.TXT)
+        texto = label(_COMO_FUNCIONA if os.name == "nt" else "Abra executáveis Linux e jogos instalados pelo Steam. O Steam gerencia o Proton para os títulos de Windows.", 9, color=theme.TXT)
         texto.setWordWrap(True)
         card_como.add(texto)
         # Mostrar o arranjo de agora e' o que torna a promessa verificavel: e'
@@ -303,7 +315,7 @@ class LauncherView(View):
         self.lay.addWidget(card_como)
 
         card_drop = Card("Adicionar", theme.FPS,
-                         "arraste o .exe ou o atalho do jogo para cá")
+                         "arraste o executável ou o atalho do jogo para cá")
         card_drop.add(DropZone(self._add_files))
         self.lay.addWidget(card_drop)
 
@@ -398,7 +410,7 @@ class LauncherView(View):
                 partes.append(d.name)
             else:
                 partes.append(f"{d.name} (desligada)")
-        return "Ao fechar o jogo, volta para:  " + "   ·   ".join(partes)
+        return ("Telas ativas:  " if os.name != "nt" else "Ao fechar o jogo, volta para:  ") + "   ·   ".join(partes)
 
     def _targets(self) -> list[tuple[str, str]]:
         """Opcoes de tela para o combo.
@@ -410,6 +422,8 @@ class LauncherView(View):
         continua existindo na aba Telas, para quem precisa mesmo dele.
         """
         opcoes = [("Não mexer nas telas", "")]
+        if os.name != "nt":
+            return opcoes
         for disp in D.list_displays(with_modes=False):
             if not disp.monitor_id:
                 continue
@@ -429,18 +443,21 @@ class LauncherView(View):
         itens = list(self.cfg.launch_items)
         for bruto in paths:
             alvo = resolve_shortcut(bruto)
-            if any(i["path"].lower() == alvo.lower() for i in itens):
+            if os.name != "nt" and (not Path(alvo).is_file() or not os.access(alvo, os.X_OK)):
+                self.notify("Escolha um arquivo executável Linux.", theme.WARN)
+                continue
+            if any(os.path.normcase(i["path"]) == os.path.normcase(alvo) for i in itens):
                 continue
             itens.append({"name": Path(alvo).stem[:40], "path": alvo, "args": "",
                           "target": "", "restore": True})
             novos += 1
         if not novos:
-            self.notify("esse jogo já está na lista", theme.WARN)
+            self.notify("Nenhum novo executável foi adicionado.", theme.WARN)
             return
         self.cfg.launch_items = itens
         self.cfg.save()
         self._refresh()
-        self.notify(f"{novos} jogo(s) adicionado(s); escolha a tela e jogue", theme.OK)
+        self.notify(f"{novos} jogo(s) adicionado(s)", theme.OK)
 
     def _save(self) -> None:
         self.cfg.save()
@@ -491,7 +508,7 @@ class LauncherView(View):
         itens = self.cfg.launch_items
         if not itens:
             self.items_box.addWidget(
-                label("nenhum jogo ainda, arraste um .exe aí em cima", 9,
+                label("Adicione um jogo para começar", 9,
                       color=theme.FAINT))
             return
 
@@ -524,7 +541,7 @@ class LauncherView(View):
             lambda i=index, w=nome: self._set(i, "name", w.text().strip()))
         topo.addWidget(nome)
 
-        existe = Path(item["path"]).exists()
+        existe = item["path"].startswith("steam://rungameid/") or Path(item["path"]).is_file()
         topo.addWidget(Badge("pronto" if existe else "arquivo sumiu",
                              theme.OK if existe else theme.BAD))
         topo.addStretch(1)
@@ -552,7 +569,8 @@ class LauncherView(View):
 
         meio = QHBoxLayout()
         meio.setSpacing(theme.scaled(8))
-        meio.addWidget(label("Ao abrir", 8.5, color=theme.MUTE))
+        if os.name == "nt":
+            meio.addWidget(label("Ao abrir", 8.5, color=theme.MUTE))
         combo = QComboBox()
         for texto, valor in alvos:
             combo.addItem(texto, valor)
@@ -560,6 +578,7 @@ class LauncherView(View):
         combo.setCurrentIndex(max(0, atual))
         combo.currentIndexChanged.connect(
             lambda _i, idx=index, w=combo: self._set(idx, "target", w.currentData()))
+        combo.setVisible(os.name == "nt")
         meio.addWidget(combo, 1)
 
         prio = QComboBox()
@@ -575,6 +594,9 @@ class LauncherView(View):
                         "travar a máquina, use com cuidado.")
         prio.currentIndexChanged.connect(
             lambda _i, idx=index, w=prio: self._set(idx, "priority", w.currentData()))
+        if os.name != "nt":
+            prio.setVisible(not item["path"].startswith("steam://"))
+            prio.setToolTip("Define o valor nice do executável lançado. Aumentar a prioridade exige permissão do sistema.")
         meio.addWidget(prio)
 
         gravar = QCheckBox("gravar métricas da partida")
@@ -583,6 +605,7 @@ class LauncherView(View):
                           "20 KB fixos; não cresce com a duração da partida.")
         gravar.setChecked(bool(item.get("bench", True)))
         gravar.toggled.connect(lambda on, i=index: self._set(i, "bench", bool(on)))
+        gravar.setVisible(os.name == "nt")
         meio.addWidget(gravar)
 
         bp = QCheckBox("voltar ao Big Picture quando o jogo fechar")
@@ -598,6 +621,7 @@ class LauncherView(View):
                           "sozinho quando ele fecha.")
         voltar.setChecked(bool(item.get("restore", True)))
         voltar.toggled.connect(lambda on, i=index: self._set(i, "restore", bool(on)))
+        voltar.setVisible(os.name == "nt")
         meio.addWidget(voltar)
         ajustes_col.addLayout(meio)
 

@@ -45,12 +45,37 @@ class GameSession:
         self._last_alive = 0.0
         self._pid = 0
         """Processo do jogo ja' encontrado; evita varrer a tabela toda."""
+        self._steam_id = ""
+        self._steam_reaper: psutil.Process | None = None
         self.adopted = False
         """Ja' descobrimos o processo real do jogo (ver App._adopt_game_process)."""
         self.direct = True
         """O alvo e' o proprio executavel do jogo, nao um atalho de loja."""
 
     def start(self) -> tuple[bool, str]:
+        if os.name != "nt":
+            import re
+            import shlex
+            self.started_at = time.monotonic()
+            if re.fullmatch(r"steam://rungameid/[0-9]+", self.path):
+                from PySide6.QtCore import QUrl
+                from PySide6.QtGui import QDesktopServices
+                self._steam_id = self.path.rsplit("/", 1)[1]
+                self.direct = False
+                self.start_grace = max(self.start_grace, SHORTCUT_GRACE_S)
+                ok = QDesktopServices.openUrl(QUrl(self.path))
+                return ok, "ok" if ok else "Steam indisponível"
+            exe = Path(self.path).expanduser().absolute()
+            if not exe.is_file() or not os.access(exe, os.X_OK):
+                return False, "Escolha um arquivo executável Linux ou use o Steam."
+            try:
+                self._proc = subprocess.Popen([str(exe), *shlex.split(self.args)], cwd=exe.parent,
+                                              start_new_session=True)
+                self._seen_alive = True
+                self._last_alive = time.monotonic()
+            except (OSError, ValueError) as exc:
+                return False, str(exc)
+            return True, "ok"
         alvo = Path(self.path)
         if not alvo.exists():
             return False, "arquivo não encontrado"
@@ -91,7 +116,41 @@ class GameSession:
     def _alive(self) -> bool:
         if self._proc is not None and self._proc.poll() is None:
             return True
+        if os.name != "nt":
+            if self._proc is not None:
+                # Um script lançador pode sair assim que o filho abre a janela.
+                try:
+                    os.killpg(self._proc.pid, 0)
+                except ProcessLookupError:
+                    return False
+                except PermissionError:
+                    return False
+                return True
+            if self._steam_id:
+                return self._steam_running()
         return self._alive_by_name()
+
+    @property
+    def native_pid(self):
+        return self._proc.pid if self._proc is not None and self._proc.poll() is None else None
+
+    def _steam_running(self):
+        if self._steam_reaper is not None and self._steam_reaper.is_running():
+            return True
+        self._steam_reaper = None
+        marker = f"AppId={self._steam_id}"
+        for proc in psutil.process_iter(["name", "uids"]):
+            # O cliente Steam delimita a sessão (inclusive Proton) com o reaper.
+            if proc.info["name"] != "reaper" or not proc.info["uids"] or proc.info["uids"].real != os.getuid():
+                continue
+            try:
+                args = proc.cmdline()
+            except (OSError, psutil.Error):
+                continue
+            if "SteamLaunch" in args and marker in args:
+                self._steam_reaper = proc
+                return True
+        return False
 
     def _alive_by_name(self) -> bool:
         """O jogo ainda esta' de pe', olhando pelo nome do executavel.

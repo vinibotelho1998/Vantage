@@ -150,6 +150,12 @@ def bloqueio_encerrar(nome: str, pid: int = -1) -> str:
     4 sao o nucleo do Windows" para qualquer processo, e nada poderia ser
     encerrado.
     """
+    if os.name != "nt":
+        if pid in (0, 1):
+            return "Processo de sistema protegido."
+        if pid == os.getpid():
+            return "Este é o Vantage. Use Fechar no menu da bandeja."
+        return ""
     if pid in (0, 4):
         return ("PID 0 e 4 são o núcleo do próprio Windows: não há como encerrar "
                 "sem derrubar a máquina.")
@@ -198,6 +204,12 @@ PRIORIDADES: tuple[Prioridade, ...] = (
     Prioridade("idle", "Baixa", getattr(psutil, "IDLE_PRIORITY_CLASS", 0x40),
                False, "só roda com CPU sobrando"),
 )
+
+
+if os.name != "nt":
+    PRIORIDADES = (Prioridade("high", "Alta", -10), Prioridade("above", "Acima do normal", -5),
+                   Prioridade("normal", "Normal", 0), Prioridade("below", "Abaixo do normal", 5),
+                   Prioridade("idle", "Baixa", 19))
 
 
 def prioridade_por_chave(chave: str) -> Prioridade | None:
@@ -273,6 +285,8 @@ def _falha(acao: str, nome: str, erro: Exception) -> str:
     if isinstance(erro, psutil.NoSuchProcess):
         return f"{nome} já não está em execução."
     if isinstance(erro, psutil.AccessDenied):
+        if os.name != "nt":
+            return f"Permissão insuficiente para {acao} {nome}."
         return (f"O Windows negou permissão para {acao} {nome}. Processos "
                 "protegidos do sistema recusam até para administradores.")
     return f"Não foi possível {acao} {nome}: {erro}"

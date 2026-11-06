@@ -166,6 +166,11 @@ def _do_steam() -> list[Achado]:
             destino = pasta / "common" / instalado.group(1)
             if not destino.is_dir():
                 continue
+            if os.name != "nt":
+                appid = acf.stem.removeprefix("appmanifest_")
+                if appid.isdecimal():
+                    achados.append(Achado(titulo[:40], f"steam://rungameid/{appid}", "Steam"))
+                continue
             exe = _melhor_exe(destino, titulo)
             if exe is not None:
                 achados.append(Achado(titulo[:40], str(exe), "Steam"))
@@ -289,7 +294,8 @@ def scan(ja_tenho: list[str] | None = None) -> list[Achado]:
     nomes_vistos: set[str] = set()
     saida: list[Achado] = []
 
-    for fonte in (_do_steam, _da_area_de_trabalho, _das_pastas):
+    fontes = (_do_steam,) if os.name != "nt" else (_do_steam, _da_area_de_trabalho, _das_pastas)
+    for fonte in fontes:
         try:
             achados = fonte()
         except OSError as e:

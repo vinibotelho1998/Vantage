@@ -18,6 +18,13 @@ def _command() -> str:
 
 
 def set_enabled(enable: bool) -> None:
+    if sys.platform.startswith("linux"):
+        from .linux_desktop import set_autostart
+        try:
+            set_autostart(enable)
+        except OSError as e:
+            _log.warning("autostart falhou: %s", e)
+        return
     import winreg
     try:
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_SET_VALUE)

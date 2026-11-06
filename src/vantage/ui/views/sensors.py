@@ -157,7 +157,9 @@ class SensorsView(View):
 
     def _open_logs(self) -> None:
         from ... import paths
-        os.startfile(str(paths.logs_dir()))  # noqa: S606
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(paths.logs_dir())))
 
     def _favoritos(self) -> list[str]:
         """Chaves marcadas, sempre como lista de texto.

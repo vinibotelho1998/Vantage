@@ -265,7 +265,7 @@ class GpuReader:
             try:
                 out = subprocess.check_output(
                     [nsmi, "--id=0", "--query-gpu=power.draw", "--format=csv,noheader,nounits"],
-                    timeout=3, creationflags=subprocess.CREATE_NO_WINDOW,
+                    timeout=3, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                     stderr=subprocess.DEVNULL)
                 v = _parse_smi_watts(out.decode(errors="ignore"))
                 with self._smi_lock:

@@ -1,6 +1,8 @@
 """Tela de benchmark: captura uma corrida, resume e exporta."""
 from __future__ import annotations
 
+import os
+
 from PySide6.QtCore import QPoint, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
@@ -172,6 +174,8 @@ class BenchmarkView(View):
         bar.addWidget(self.run_btn)
         self.dur_btn = PillButton(f"Duração: {self.cfg.bench_seconds}s", theme.MUTE)
         self.dur_btn.clicked.connect(self._pick_duration)
+        self.run_btn.setVisible(os.name == "nt")
+        self.dur_btn.setVisible(os.name == "nt")
         bar.addWidget(self.dur_btn)
         self.export_btn = PillButton("Exportar CSV", theme.MUTE)
         self.export_btn.clicked.connect(self._export)
@@ -329,7 +333,9 @@ class BenchmarkView(View):
         self.btn_del_sessao.setVisible(not vazio)
         self.btn_del_todas.setVisible(not vazio)
         self.btn_exp_todas.setVisible(not vazio)
-        if vazio:
+        if vazio and os.name != "nt":
+            self.aviso_sessao.setText("O histórico pode ser consultado aqui. A captura de quadros está disponível no Windows.")
+        elif vazio:
             self.aviso_sessao.setText("Abra um jogo pela aba Jogos com "
                                       "“gravar métricas da partida” ligado.")
         else:

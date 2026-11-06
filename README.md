@@ -1,13 +1,10 @@
 # Vantage
 
-Monitor de hardware e desempenho em jogos para Windows. Um app de verdade, feito
-para ficar aberto no segundo monitor, com telas dedicadas de CPU, GPU, memória,
-disco, rede, sensores e processos, além de uma engine de FPS/frametime nível
-CapFrameX. O overlay in-game continua ali, mas agora é um acessório, não o produto.
+Monitor de hardware e desempenho em jogos para Windows e Linux. O painel reúne CPU, GPU, memória, disco, rede, sensores e processos. No Windows, também mede FPS e frametimes por jogo.
 
 [![Build](https://github.com/vinibotelho1998/Vantage/actions/workflows/release.yml/badge.svg)](https://github.com/vinibotelho1998/Vantage/actions/workflows/release.yml)
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue)
-![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D6)
+![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-0078D6)
 ![UI](https://img.shields.io/badge/UI-PySide6-41CD52)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -19,7 +16,48 @@ CapFrameX. O overlay in-game continua ali, mas agora é um acessório, não o pr
   <img src="docs/images/gaming.png" alt="Tela de jogos com frametime, lows e gargalo">
 </p>
 
-## O que ele faz
+## Linux
+
+Nesta cópia, rode `./Vantage.sh` para abrir. O lançador usa o ambiente local
+`.venv` quando presente. Em outra máquina com Python 3.12 ou superior:
+
+```sh
+python3 -m venv .venv
+.venv/bin/pip install -e .
+./Vantage.sh
+```
+
+O painel Qt reúne CPU, GPU, memória, armazenamento, rede e processos. A aba Sensores
+lê o hwmon e permite exportar CSV. A GPU usa DRM/sysfs quando o driver expõe a
+telemetria (por exemplo, AMDGPU) ou NVML no driver NVIDIA. As telas vêm do compositor
+e as configurações de monitor são abertas no painel do sistema. A aba Controle lista
+joysticks publicados pelo kernel. Na aba Jogos, use **Procurar jogos** para encontrar
+as bibliotecas Steam ou escolha um executável Linux. Big Picture usa o cliente Steam.
+O painel flutuante de sensores pode ser ativado manualmente. O compositor define seu posicionamento.
+As configurações e relatórios ficam em `$XDG_DATA_HOME/Vantage` (por padrão
+`~/.local/share/Vantage`). Os atalhos de teclado atuam com o aplicativo em foco.
+
+Nesta versão Linux, a captura de FPS e de frametimes por jogo, os benchmarks
+de quadros e disco, a limpeza de memória, os perfis automáticos de monitor e o
+modo mouse pelo controle continuam exclusivos do backend Windows. Os recursos
+PresentMon, ETW, XInput e LibreHardwareMonitor descritos abaixo são da versão Windows.
+A detecção de tela cheia e o overlay automático por jogo também dependem do Windows.
+
+Para testar a interface com configurações temporárias e sensores reais:
+
+```sh
+QT_QPA_PLATFORM=offscreen PYTHONPATH=src .venv/bin/python scripts/smoke_linux.py
+```
+
+### CI e distribuição Linux
+
+O GitHub Actions testa o núcleo e abre as telas no Ubuntu 24.04 em pull requests e
+pushes para main. Cada build Linux gera um pacote de fontes e lançador
+`Vantage-linux.tar.gz` e seu SHA-256. Uma tag `vX.Y.Z` que corresponda à versão
+do projeto publica esses arquivos em Releases. Para usar o pacote extraído,
+instale as dependências com os comandos desta seção e execute `./Vantage.sh`.
+
+## O que ele faz no Windows
 
 **Captura de FPS que não desiste.** O motor roda em três camadas independentes:
 supervisor, leitor e agregador. O leitor só faz parsing do CSV do PresentMon; toda

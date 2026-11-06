@@ -21,10 +21,14 @@ from .core import export
 from .core import frames as fr
 from .core.series import Accumulator, History
 from .core.session import GameSession
-from .platform import autostart, win
-from .platform import displays as dsp
-from .platform.gamepad import GamepadMouse
-from .platform.hotkeys import MOD_ALT, MOD_CONTROL, HotkeyManager
+from .platform import autostart
+if os.name == "nt":
+    from .platform import win, displays as dsp
+    from .platform.gamepad import GamepadMouse
+    from .platform.hotkeys import MOD_ALT, MOD_CONTROL, HotkeyManager
+else:
+    from .platform import linux_desktop as dsp
+    from .sensors.linux import LinuxSensors
 from .sensors import net as netmod
 from .sensors import procs
 from .sensors.collector import Collector
@@ -92,7 +96,7 @@ class App:
 
         self.stats = Accumulator()
         self.history = History(self._history_depth())
-        self.lhm = LhmReader()
+        self.lhm = LhmReader() if os.name == "nt" else LinuxSensors()
         self.gpu = GpuReader()
         self.ping = PingMonitor(self.settings.ping_host, self.settings.ping_port)
         self.fps = FpsEngine(self.settings.fps_window, self.settings.fps_now_window)
@@ -100,8 +104,9 @@ class App:
         self.peers = PeerFinder()
         self.collector = Collector(self.lhm, self.gpu, self.ping,
                                    self.settings.update_interval)
-        self.gamepad = GamepadMouse(self.settings, qt)
-        self.gamepad.reset_pedido.connect(self._reset_pelo_controle)
+        self.gamepad = GamepadMouse(self.settings, qt) if os.name == "nt" else None
+        if self.gamepad:
+            self.gamepad.reset_pedido.connect(self._reset_pelo_controle)
 
         self._data: dict = {}
         self._stream = None
@@ -176,7 +181,7 @@ class App:
     def boot(self) -> None:
         # Fotografia das telas antes de qualquer coisa: e' para onde tudo volta
         # quando o app fecha, para nao deixar a maquina num arranjo de TV.
-        self._display_boot = dsp.snapshot()
+        self._display_boot = dsp.snapshot() if os.name == "nt" else []
         self.lhm.mem_rail = self.settings.mem_volt_rail
         self.lhm.start()
         self.gpu.start_smi()
@@ -187,19 +192,21 @@ class App:
         self.collector.start()
 
         self.window.restore_geometry()
-        if not self.settings.start_minimized:
+        from PySide6.QtWidgets import QSystemTrayIcon
+        if not self.settings.start_minimized or not QSystemTrayIcon.isSystemTrayAvailable():
             self.window.show()
         self._apply_overlay()
         # Antes dos timers: se a maquina abriu com a primaria na tela errada
         # (TV ligada por ultimo, por exemplo), a janela ja' nasce no lugar certo.
-        nome = self._enforce_display_defaults() if self.settings.display_apply_on_start else ""
+        nome = self._enforce_display_defaults() if os.name == "nt" and self.settings.display_apply_on_start else ""
         if nome:
             self.notify("Vantage", f"{nome} de volta como tela principal.")
         self._init_timers()
         self._init_hotkeys()
         # A escuta do controle fica sempre de pe'. Ela nao mexe em nada sozinha:
         # o modo mouse so' assume quando o usuario aperta Back + Start no controle.
-        self.gamepad.start()
+        if self.gamepad:
+            self.gamepad.start()
         autostart.set_enabled(self.settings.autostart)
 
     def _init_timers(self) -> None:
@@ -226,6 +233,17 @@ class App:
         self._t_session.start(1000)
 
     def _init_hotkeys(self) -> None:
+        if os.name != "nt":
+            from PySide6.QtCore import Qt
+            from PySide6.QtGui import QShortcut, QKeySequence
+            for sequence, action in (("Ctrl+Alt+R", self._hotkey_reset),
+                                     ("Ctrl+Alt+O", self.toggle_overlay),
+                                     ("Ctrl+Alt+B", self._hotkey_benchmark),
+                                     ("Ctrl+Alt+G", self.big_picture_toggle)):
+                shortcut = QShortcut(QKeySequence(sequence), self.window)
+                shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+                shortcut.activated.connect(action)
+            return
         self._hotkeys = HotkeyManager()
         self.qt.installNativeEventFilter(self._hotkeys)
         mods = MOD_CONTROL | MOD_ALT
@@ -265,7 +283,8 @@ class App:
         _save_bench_history(self.bench_history)
         if self._hotkeys is not None:
             self._hotkeys.unregister_all()
-        self.gamepad.stop()
+        if self.gamepad:
+            self.gamepad.stop()
         self.peers.stop()
         try:
             self._restore_displays()
@@ -316,7 +335,7 @@ class App:
         # Grava a partida inteira desde ja', quando o atalho pede. O pid do jogo
         # ainda nao existe: quem descobre e' o proprio motor de FPS, entao o
         # gravador comeca solto e passa a seguir o processo assim que ele aparece.
-        self._session_bench = bool(item.get("bench", True))
+        self._session_bench = os.name == "nt" and bool(item.get("bench", True))
         self._bp_voltar = bool(item.get("voltar_bp", False))
         if self._session_bench:
             self._session_env = Accumulator()
@@ -334,6 +353,8 @@ class App:
         mudou de fato; so' isso e' que gera promessa de devolver depois.
         """
         self._session_off = ""
+        if os.name != "nt":
+            return False, ""
         if not target:
             return False, ""
         tipo, _, valor = target.partition(":")
@@ -368,7 +389,8 @@ class App:
 
     def _tick_session(self) -> None:
         """Vigia o jogo: o que abrimos e o que o usuario abriu por fora."""
-        self._watch_displays()
+        if os.name == "nt":
+            self._watch_displays()
         self._watch_any_game()
         self._follow_game_server()
         session = self._session
@@ -380,7 +402,7 @@ class App:
 
         self._session = None
         self._close_session_bench()
-        if self._bp_voltar:
+        if self._bp_voltar and (os.name == "nt" or session.ever_started):
             # Voltou do jogo: a grade reaparece na TV, e nao a janela de mesa;
             # quem esta' no sofa nao alcanca o teclado para reabrir. So' acontece
             # nos atalhos marcados para isso; quem abre o jogo da mesa espera a
@@ -643,6 +665,12 @@ class App:
         atalho, dentro de play_item; dois donos para a mesma regra viraria
         briga com a principal padrao da casa.
         """
+        if os.name != "nt":
+            from PySide6.QtCore import QUrl
+            from PySide6.QtGui import QDesktopServices
+            if not QDesktopServices.openUrl(QUrl("steam://open/bigpicture")):
+                self.notify("Steam", "Instale ou abra o Steam para usar o Big Picture.")
+            return
         from .ui.bigpicture import BigPicture
 
         if self._bigpicture is None:
@@ -937,7 +965,7 @@ class App:
         estado deixa o usuario sem imagem onde ele esta', e sem o app para
         desfazer. Entao a volta e' automatica, e so' acontece se algo mudou.
         """
-        if not self.settings.display_restore_on_exit:
+        if os.name != "nt" or not self.settings.display_restore_on_exit:
             return
         # Com um arranjo padrao definido, ele manda tambem na saida: e' o mesmo
         # estado que o app impoe ao abrir, e as duas pontas concordarem e' o que
@@ -1024,7 +1052,12 @@ class App:
         # O coletor mede a RAM do jogo, mas quem sabe qual e' o jogo e' o motor de
         # FPS. Avisar aqui, e nao no ciclo de 1 s, faz a medida acabar junto com o
         # jogo em vez de sobreviver um segundo a mais apontando para um pid morto.
-        self.collector.set_game_pid(self._stream.pid if self._stream is not None else 0)
+        pid = self._stream.pid if self._stream is not None else 0
+        if os.name != "nt" and self._session is not None:
+            pid = self._session.native_pid or 0
+            if pid and self._session_priority:
+                self._apply_launch_priority(pid)
+        self.collector.set_game_pid(pid)
         if self._session is not None and self._stream is not None:
             pid = self._stream.pid
             if pid != self._session_bench_pid:
@@ -1036,7 +1069,8 @@ class App:
             self.window.tick_fps()
         if self._overlay is not None:
             self._overlay.refresh()
-            win.keep_topmost(int(self._overlay.winId()))
+            if os.name == "nt":
+                win.keep_topmost(int(self._overlay.winId()))
         if self._bench_active and time.monotonic() - self._bench_started >= self._bench_total:
             self.benchmark_stop()
 
@@ -1080,7 +1114,7 @@ class App:
         _log.info("ritmo de coleta: %s (%.1f s por leitura)", perfil, intervalo)
 
     def _tick_focus(self) -> None:
-        fullscreen, hwnd = win.is_foreground_fullscreen()
+        fullscreen, hwnd = win.is_foreground_fullscreen() if os.name == "nt" else (False, 0)
         own = {int(self.window.winId())}
         if self._overlay is not None:
             own.add(int(self._overlay.winId()))
@@ -1089,7 +1123,7 @@ class App:
             # jogo em foco, e o app passaria a medir a si mesmo.
             own.add(int(self._bigpicture.winId()))
         self._fg_fullscreen = fullscreen and hwnd not in own
-        self._fg_pid = win.window_pid(hwnd) if hwnd not in own else 0
+        self._fg_pid = win.window_pid(hwnd) if os.name == "nt" and hwnd not in own else 0
         self.fps.expect(self._fg_pid if self._fg_fullscreen else None)
         self.procs.set_game_pids(self.fps.snapshot().keys())
         if self.settings.overlay_enabled and self.settings.overlay_auto_game:
@@ -1100,6 +1134,8 @@ class App:
             # Um jogo subiu por fora. Uma janela em tela cheia disputando o
             # primeiro plano com ele so' atrapalha.
             self._soltar_controle()
+        if self.gamepad is None:
+            return
         if not self.gamepad.connected and self._bigpicture is not None:
             self._bigpicture.sem_controle()
         self._vigiar_atalho_do_sofa()
@@ -1298,6 +1334,9 @@ class App:
         self.window.apply_settings()
 
     def restart_capture(self) -> None:
+        if os.name != "nt":
+            self.notify("Vantage", self.fps.status)
+            return
         self.fps.restart()
         self.notify("Vantage", "Captura de FPS reiniciada.")
 
@@ -1384,7 +1423,7 @@ class App:
         if self._overlay is None:
             return
         show = True
-        if self.settings.overlay_auto_game:
+        if os.name == "nt" and self.settings.overlay_auto_game:
             show = self.game_in_focus()
         if show and not self._overlay.isVisible():
             self._overlay.show()
@@ -1407,6 +1446,9 @@ class App:
         return self._bench_result
 
     def benchmark_start(self, seconds: int) -> None:
+        if os.name != "nt":
+            self.notify("Benchmark", self.fps.status)
+            return
         if self._bench_active:
             return
         stream = self._stream

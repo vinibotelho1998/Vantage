@@ -1,6 +1,8 @@
 """Tela de memoria e armazenamento: RAM, swap, unidades, saude, I/O e benchmark."""
 from __future__ import annotations
 
+import os
+
 import threading
 
 from PySide6.QtCore import QPoint, Qt, QTimer
@@ -17,8 +19,10 @@ from PySide6.QtWidgets import (
 
 from ... import config, theme
 from ...core import units
-from ...platform import memclean
-from ...sensors import diskbench, diskhealth
+if os.name == "nt":
+    from ...platform import memclean
+    from ...sensors import diskbench
+from ...sensors import diskhealth
 from ..charts import BarMeter, Plot, Sparkline, TimeSeriesChart
 from ..components import Badge, Card, KpiStrip, MetricList, PillButton, dimm_color, label
 from ..components import linha_opcional as _linha
@@ -96,7 +100,7 @@ class MemoryView(View):
 
     def __init__(self, app) -> None:
         super().__init__(app)
-        self._bench = diskbench.DiskBench()
+        self._bench = diskbench.DiskBench() if os.name == "nt" else None
         self._probe = diskhealth.ReliabilityProbe()
         self._probe_liberado = False
         self._mounts: list[str] = []
@@ -140,7 +144,8 @@ class MemoryView(View):
         card_ram.add(self.mod_rows)
         for i in range(_MAX_DIMMS):
             self.mod_rows.row(f"m{i}").setVisible(False)
-        card_ram.add_layout(self._montar_limpeza())
+        if os.name == "nt":
+            card_ram.add_layout(self._montar_limpeza())
         row.addWidget(card_ram, 1)
 
         card_io = Card("Atividade de disco", theme.DISK)
@@ -170,7 +175,8 @@ class MemoryView(View):
         baixo = QHBoxLayout()
         baixo.setSpacing(theme.scaled(theme.GAP))
         baixo.addWidget(self._montar_saude(), 3)
-        baixo.addWidget(self._montar_bench(), 2)
+        if self._bench is not None:
+            baixo.addWidget(self._montar_bench(), 2)
         lay.addLayout(baixo, 2)
         lay.addStretch(0)
 
@@ -311,7 +317,8 @@ class MemoryView(View):
 
     def _encerrar(self) -> None:
         self._timer.stop()
-        self._bench.cancelar(esperar=3.0)
+        if self._bench is not None:
+            self._bench.cancelar(esperar=3.0)
 
     def on_settings_changed(self) -> None:
         for chart in (self.ram_chart, self.io_chart):
@@ -589,7 +596,7 @@ class MemoryView(View):
         self.io_rows.set("uptime", units.duration(d.get("uptime")))
 
         mounts = [x.get("mount", "") for x in drives if x.get("mount")]
-        if mounts != self._mounts:
+        if self._bench is not None and mounts != self._mounts:
             # A lista de unidades so' chega com o primeiro snapshot; ate' la' a
             # pilula mostra um palpite, e trocar de unidade so' e' possivel aqui.
             self._mounts = mounts
@@ -669,7 +676,7 @@ class MemoryView(View):
             do_lhm = []
         fisicos: list[dict] = []
         erro = ""
-        if self._probe_liberado:
+        if os.name == "nt" and self._probe_liberado:
             try:
                 fisicos = self._probe.read()
                 erro = self._probe.erro

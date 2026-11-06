@@ -16,7 +16,7 @@ _log = log.get("icmp")
 
 try:
     _iphlpapi = ctypes.WinDLL("iphlpapi", use_last_error=True)
-except OSError:                                     # pragma: no cover
+except (AttributeError, OSError):                                     # pragma: no cover
     _iphlpapi = None
 
 INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
@@ -76,7 +76,7 @@ def ping(host: str, timeout_ms: int = 1000) -> float | None:
         return None
     try:
         endereco = socket.inet_aton(socket.gethostbyname(host))
-    except OSError:
+    except (AttributeError, OSError):
         return None
     destino = int.from_bytes(endereco, "little")
 
@@ -100,6 +100,6 @@ def close() -> None:
     if _handle is not None and _ready:
         try:
             _iphlpapi.IcmpCloseHandle(_handle)
-        except OSError:
+        except (AttributeError, OSError):
             pass
         _handle = None

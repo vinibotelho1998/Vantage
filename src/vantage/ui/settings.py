@@ -1,6 +1,8 @@
 """Dialogo de configuracoes organizado por abas."""
 from __future__ import annotations
 
+import os
+
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -264,7 +266,8 @@ class SettingsDialog(QDialog):
         self.tabs.addTab(self._tab_general(), "Geral")
         self.tabs.addTab(self._tab_appearance(), "Aparência")
         self.tabs.addTab(self._tab_charts(), "Gráficos")
-        self.tabs.addTab(self._tab_fps(), "FPS")
+        fps_tab = self.tabs.addTab(self._tab_fps(), "FPS")
+        self.tabs.setTabVisible(fps_tab, os.name == "nt")
         self.tabs.addTab(self._tab_overlay(), "Overlay")
         # Trocar de aba tambem redesenha: a previa montada numa aba escondida
         # nao tem tamanho, e so' ganha um quando a aba vira a da frente.
@@ -314,7 +317,7 @@ class SettingsDialog(QDialog):
         self.c_tray.setChecked(self._cfg.close_to_tray)
         self.c_min = QCheckBox("Iniciar minimizado na bandeja")
         self.c_min.setChecked(self._cfg.start_minimized)
-        self.c_auto = QCheckBox("Iniciar com o Windows")
+        self.c_auto = QCheckBox("Iniciar com o sistema")
         self.c_auto.setChecked(self._cfg.autostart)
         for c in (self.c_top, self.c_tray, self.c_min, self.c_auto):
             lay.addWidget(c)
@@ -429,11 +432,12 @@ class SettingsDialog(QDialog):
 
     def _tab_overlay(self) -> QWidget:
         area, lay = _page()
-        self.c_overlay = QCheckBox("Ativar overlay dentro do jogo")
+        self.c_overlay = QCheckBox("Ativar overlay dentro do jogo" if os.name == "nt" else "Mostrar painel flutuante")
         self.c_overlay.setChecked(self._cfg.overlay_enabled)
         lay.addWidget(self.c_overlay)
         self.c_overlay_auto = QCheckBox("Mostrar apenas quando houver jogo em foco")
         self.c_overlay_auto.setChecked(self._cfg.overlay_auto_game)
+        self.c_overlay_auto.setVisible(os.name == "nt")
         lay.addWidget(self.c_overlay_auto)
 
         form = QFormLayout()

@@ -11,6 +11,7 @@ Suporta qualquer controle que o Windows exponha como XInput, o que inclui Xbox
 from __future__ import annotations
 
 import ctypes
+import os
 import time
 from ctypes import wintypes
 
@@ -20,10 +21,10 @@ from .. import log
 
 _log = log.get("gamepad")
 
-user32 = ctypes.WinDLL("user32", use_last_error=True)
+user32 = ctypes.WinDLL("user32", use_last_error=True) if os.name == "nt" else None
 
 _xinput = None
-for _dll in ("xinput1_4", "xinput1_3", "xinput9_1_0"):
+for _dll in (("xinput1_4", "xinput1_3", "xinput9_1_0") if os.name == "nt" else ()):
     try:
         _xinput = ctypes.WinDLL(_dll)
         break
@@ -142,8 +143,9 @@ class INPUT(ctypes.Structure):
     _fields_ = [("type", wintypes.DWORD), ("u", _INPUT_UNION)]
 
 
-user32.SendInput.argtypes = [wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int]
-user32.SendInput.restype = wintypes.UINT
+if user32 is not None:
+    user32.SendInput.argtypes = [wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int]
+    user32.SendInput.restype = wintypes.UINT
 
 if _xinput is not None:
     _xinput.XInputGetState.argtypes = [wintypes.DWORD, ctypes.POINTER(XINPUT_STATE)]

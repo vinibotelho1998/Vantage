@@ -101,7 +101,7 @@ class PrioridadeDialog(QDialog):
         root.addWidget(self._alerta)
         self._botoes["realtime"].toggled.connect(self._pintar_alerta)
 
-        aviso = label("Vale só até o processo fechar; o Windows não guarda essa escolha.",
+        aviso = label("Vale só até o processo fechar; o sistema não guarda essa escolha.",
                       8, color=theme.FAINT)
         aviso.setWordWrap(True)
         root.addWidget(aviso)
@@ -398,7 +398,7 @@ class ProcessesView(View):
         self.escolhido.set_title(f"{nome}   ·   PID {pid}")
         bloqueio = P.bloqueio_encerrar(nome, pid)
         if bloqueio:
-            self.escolhido.set_hint("protegido pelo Windows", theme.BAD)
+            self.escolhido.set_hint("protegido pelo sistema", theme.BAD)
             self.escolhido_txt.setText(bloqueio)
             self.escolhido_txt.setStyleSheet(f"color: {theme.BAD}; background: transparent;")
             return
@@ -454,7 +454,7 @@ class ProcessesView(View):
         menu.addAction("Mudar afinidade de CPU…", self._afinidade)
         menu.addSeparator()
         if P.bloqueio_encerrar(alvo[1], alvo[0]):
-            protegido = menu.addAction("Finalizar (protegido pelo Windows)")
+            protegido = menu.addAction("Finalizar (protegido pelo sistema)")
             protegido.setEnabled(False)
         else:
             menu.addAction("Finalizar processo", self._finalizar)

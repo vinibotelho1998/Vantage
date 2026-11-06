@@ -24,7 +24,9 @@ from PySide6.QtWidgets import QApplication, QWidget
 
 from .. import log, theme
 from ..platform import art
-from ..platform import gamepad as G
+import os
+if os.name == "nt":
+    from ..platform import gamepad as G
 
 _log = log.get("bigpicture")
 

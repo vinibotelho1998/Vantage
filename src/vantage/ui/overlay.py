@@ -14,6 +14,8 @@ esse par de leituras simplesmente nao existe.
 """
 from __future__ import annotations
 
+import os
+
 import time
 from datetime import datetime
 
@@ -32,7 +34,8 @@ from PySide6.QtWidgets import (
 from .. import theme
 from ..core import frames as fr
 from ..core import units
-from ..platform import win
+if os.name == "nt":
+    from ..platform import win
 from .charts import Sparkline
 from .components import dimm_color
 
@@ -279,7 +282,7 @@ class GameOverlay(QWidget):
 
     def _screen(self):
         """A tela onde o jogo esta', que nem sempre e' a primaria."""
-        rect = win.foreground_monitor_rect()
+        rect = win.foreground_monitor_rect() if os.name == "nt" else None
         if rect is not None:
             found = QApplication.screenAt(QPoint(*rect_center(rect)))
             if found is not None:
@@ -541,7 +544,7 @@ class GameOverlay(QWidget):
         self._aviso.setFont(pequena)
         self._aviso.setStyleSheet(f"color: {theme.WARN};")
         self._aviso.setVisible(bool(pedidas & {"volts", "temps_mem"})
-                               and not win.is_admin())
+                               and os.name == "nt" and not win.is_admin())
         lay.addWidget(self._aviso)
 
     def rebuild(self) -> None:
@@ -571,8 +574,9 @@ class GameOverlay(QWidget):
     def showEvent(self, event) -> None:
         super().showEvent(event)
         hwnd = int(self.winId())
-        win.set_clickthrough(hwnd, True)
-        win.set_tool_window(hwnd)
+        if os.name == "nt":
+            win.set_clickthrough(hwnd, True)
+            win.set_tool_window(hwnd)
         self.place()
 
     def place(self) -> None:

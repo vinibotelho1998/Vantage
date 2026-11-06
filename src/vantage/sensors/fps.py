@@ -189,6 +189,9 @@ class FpsEngine:
         self._cal_ratios: list[float] = []
 
     def start(self) -> None:
+        if os.name != "nt":
+            self._status = "captura de FPS indisponível no Linux"
+            return
         if self._threads:
             return
         self._stop.clear()
@@ -217,6 +220,8 @@ class FpsEngine:
 
     def stop(self) -> None:
         self._stop.set()
+        if os.name != "nt":
+            return
         with self._proc_lock:
             sessao = self._session_name(self._gen)
             self._gen += 1
