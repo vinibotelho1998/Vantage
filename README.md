@@ -57,6 +57,10 @@ pushes para main. Cada build Linux gera um pacote de fontes e lançador
 do projeto publica esses arquivos em Releases. Para usar o pacote extraído,
 instale as dependências com os comandos desta seção e execute `./Vantage.sh`.
 
+Se a tag apontar para um commit automático marcado com `[skip ci]`, abra
+**Actions → Linux → Run workflow** e selecione a tag para iniciar a publicação.
+Pela linha de comando, use `gh workflow run linux.yml --ref vX.Y.Z`.
+
 ## O que ele faz no Windows
 
 **Captura de FPS que não desiste.** O motor roda em três camadas independentes:
