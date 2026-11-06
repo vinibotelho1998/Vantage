@@ -10,6 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("VANTAGE_NO_FILE_LOG", "1")
 
 import pytest  # noqa: E402
+from PySide6.QtCore import QEvent, QObject  # noqa: E402
 from PySide6.QtGui import QColor  # noqa: E402
 from PySide6.QtWidgets import QApplication, QWidget  # noqa: E402
 
@@ -78,6 +79,31 @@ def test_mudanca_de_fonte_recalcula_espaco_da_versao(janela):
         versao.setFont(fonte_versao)
         marca.setFont(fonte_marca)
         _qt.processEvents()
+
+
+def test_barra_em_repouso_para_de_recalcular(janela):
+    class Contador(QObject):
+        eventos = 0
+
+        def eventFilter(self, obj, evento):
+            if evento.type() == QEvent.Type.LayoutRequest:
+                self.eventos += 1
+            return False
+
+    barra = janela.sidebar
+    contador = Contador()
+    barra.installEventFilter(contador)
+    try:
+        # Drena a propagação normal ao pai. Uma invalidação incondicional
+        # reenfileira o mesmo pedido em cada volta, mesmo sem fonte nova.
+        for _ in range(5):
+            _qt.processEvents()
+        contador.eventos = 0
+        for _ in range(12):
+            _qt.processEvents()
+        assert contador.eventos == 0
+    finally:
+        barra.removeEventFilter(contador)
 
 
 def _luminancia(cor: QColor) -> float:

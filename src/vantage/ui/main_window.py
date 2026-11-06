@@ -220,11 +220,15 @@ class Sidebar(QWidget):
     def _fit_brand(self) -> None:
         # Leitura após aplicar fontes/QSS: o DPI pode mudar ao mover a janela.
         for label in (self._brand, self.versao):
-            label.setMinimumWidth(label.fontMetrics().horizontalAdvance(label.text()))
-        self._brand_row.invalidate()
+            width = label.fontMetrics().horizontalAdvance(label.text())
+            if label.minimumWidth() != width:
+                label.setMinimumWidth(width)
+                self._brand_row.invalidate()
         margins = self.layout().contentsMargins()
         required = self._brand_row.minimumSize().width() + margins.left() + margins.right()
-        self.setMinimumWidth(max(theme.scaled(190), required))
+        width = max(theme.scaled(190), required)
+        if self.minimumWidth() != width:
+            self.setMinimumWidth(width)
 
     def event(self, event) -> bool:
         if event.type() in (QEvent.Type.Show, QEvent.Type.LayoutRequest) and hasattr(self, "_brand_row"):
