@@ -8,6 +8,8 @@ Monitor de hardware e desempenho em jogos para Windows e Linux. O painel reúne 
 ![UI](https://img.shields.io/badge/UI-PySide6-41CD52)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+[Baixar para Linux (fontes e lançador)](https://github.com/vinibotelho1998/Vantage/releases) · [Baixar o instalador Windows](https://github.com/vinibotelho1998/Vantage/releases/latest)
+
 <p align="center">
   <img src="docs/images/panel.png" alt="Painel do Vantage">
 </p>
@@ -18,14 +20,20 @@ Monitor de hardware e desempenho em jogos para Windows e Linux. O painel reúne 
 
 ## Linux
 
-Nesta cópia, rode `./Vantage.sh` para abrir. O lançador usa o ambiente local
-`.venv` quando presente. Em outra máquina com Python 3.12 ou superior:
+Nas [releases](https://github.com/vinibotelho1998/Vantage/releases), baixe
+**Vantage-linux.tar.gz** e **Vantage-linux.sha256** da mesma versão.
+O pacote contém os fontes e o lançador e requer Python 3.12 ou superior com venv e pip.
 
 ```sh
+sha256sum -c Vantage-linux.sha256
+tar -xzf Vantage-linux.tar.gz
+cd Vantage
 python3 -m venv .venv
 .venv/bin/pip install -e .
 ./Vantage.sh
 ```
+
+Nas próximas aberturas, use `./Vantage.sh`. O lançador usa o ambiente local `.venv`.
 
 O painel Qt reúne CPU, GPU, memória, armazenamento, rede e processos. A aba Sensores
 lê o hwmon e permite exportar CSV. A GPU usa DRM/sysfs quando o driver expõe a
@@ -132,7 +140,7 @@ janela sem moldura com redimensionamento e snap nativos do Windows.
 | `Ctrl+Alt+O` | liga/desliga o overlay |
 | `Ctrl+Alt+B` | inicia/para o benchmark |
 
-## Instalação
+## Instalação no Windows
 
 Baixe o **Vantage-Setup.exe** da [última release](https://github.com/vinibotelho1998/Vantage/releases/latest),
 execute e pronto. O instalador leva o app, o LibreHardwareMonitor, o PresentMon e
