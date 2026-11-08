@@ -99,7 +99,9 @@ class PrioridadeDialog(QDialog):
         self._alerta.setWordWrap(True)
         self._alerta.setVisible(False)
         root.addWidget(self._alerta)
-        self._botoes["realtime"].toggled.connect(self._pintar_alerta)
+        # Tempo real e' coisa do Windows: no Linux a escala acaba em "Alta" e nao ha botao a vigiar.
+        if "realtime" in self._botoes:
+            self._botoes["realtime"].toggled.connect(self._pintar_alerta)
 
         aviso = label("Vale só até o processo fechar; o sistema não guarda essa escolha.",
                       8, color=theme.FAINT)

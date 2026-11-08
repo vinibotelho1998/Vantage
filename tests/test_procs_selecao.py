@@ -10,7 +10,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import psutil  # noqa: E402
+import pytest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from vantage.sensors.procs import ProcInfo  # noqa: E402
@@ -93,7 +93,8 @@ def test_finalizar_usa_o_pid_e_o_nome_da_celula(monkeypatch):
 
 def test_finalizar_essencial_para_antes_de_perguntar(monkeypatch):
     """A recusa vem antes do popup: nao existe 'confirmar' matar o lsass.exe."""
-    view = _tela([ProcInfo(700, "lsass.exe", 2.0, 30.0, 6)])
+    essencial = "lsass.exe" if os.name == "nt" else "kwin_wayland"
+    view = _tela([ProcInfo(700, essencial, 2.0, 30.0, 6)])
     view.table.selectRow(0)
     passos = []
     monkeypatch.setattr(processes, "confirmar",
@@ -155,12 +156,13 @@ def test_prioridade_ilegivel_abre_em_normal():
 
 
 def test_prioridade_abre_na_faixa_atual_e_devolve_a_escolhida():
-    dlg = processes.PrioridadeDialog("jogo.exe", 20, psutil.HIGH_PRIORITY_CLASS)
+    dlg = processes.PrioridadeDialog("jogo.exe", 20, processes.P.prioridade_por_chave("high").valor)
     assert dlg.escolha() == "high"
     dlg._botoes["idle"].setChecked(True)
     assert dlg.escolha() == "idle"
 
 
+@pytest.mark.skipif(os.name != "nt", reason="tempo real so existe no Windows")
 def test_aviso_de_tempo_real_so_aparece_ao_marcar_tempo_real():
     dlg = processes.PrioridadeDialog("jogo.exe", 20, None)
     assert dlg._alerta.text() == ""

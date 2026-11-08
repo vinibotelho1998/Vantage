@@ -21,7 +21,10 @@ def test_valvula_aponta_os_dados_para_a_pasta_pedida(tmp_path, monkeypatch):
 
 def test_sem_valvula_os_dados_moram_em_appdata_vantage(tmp_path, monkeypatch):
     monkeypatch.delenv("VANTAGE_DATA_DIR", raising=False)
+    # No Windows a pasta base e' o %APPDATA%; no Linux, o XDG_DATA_HOME. Sem
+    # apontar os dois para a pasta de teste, o teste criava ~/.local/share/Vantage.
     monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     assert paths.data_dir() == tmp_path / "Vantage"
     assert paths.log_file() == tmp_path / "Vantage" / "logs" / "vantage.log"
     assert (tmp_path / "Vantage" / "logs").is_dir()

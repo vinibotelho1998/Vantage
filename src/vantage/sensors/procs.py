@@ -134,12 +134,39 @@ _CRITICOS = {
     "winlogon.exe", "services.exe", "lsass.exe", "dwm.exe",
 }
 
+# No Linux o equivalente e' a sessao grafica e o que a mantem de pe: matar o
+# compositor ou o barramento da sessao devolve a pessoa ao login, e matar o
+# systemd do usuario derruba tudo que ele supervisiona. Nomes como o kernel os
+# publica em /proc/<pid>/comm (ate 15 caracteres).
+_CRITICOS_LINUX = {
+    "systemd", "init", "systemd-logind", "systemd-journal", "systemd-udevd", "dbus-daemon",
+    "dbus-broker", "dbus-broker-lau", "kwin_wayland", "kwin_x11", "kwin_wayland_wrapper", "xorg",
+    "xwayland", "sddm", "sddm-helper", "gdm", "gdm3", "lightdm", "gnome-shell", "mutter", "sway",
+    "hyprland", "pipewire", "wireplumber", "pipewire-pulse", "polkitd", "networkmanager",
+    "plasmashell", "ksmserver", "startplasma-waylan", "plasma_session",
+}
+
 # Morrem sem drama, mas levam junto algo que o usuario nao esta' esperando.
 _AVISOS = {
     "explorer.exe": ("A barra de tarefas, o menu Iniciar e os ícones da área de "
                      "trabalho somem até o Explorer voltar; o Windows costuma "
                      "reabri-lo sozinho em alguns segundos."),
 }
+
+
+def _kernel_thread(pid: int, nome: str = "") -> bool:
+    """Thread do kernel: o proprio kthreadd (PID 2) ou filha dele.
+
+    So' vale se o PID ainda e' de quem a tabela mostrava, como em _abrir: o numero
+    pode ter sido reaproveitado por um programa de verdade desde o ultimo ciclo.
+    """
+    try:
+        proc = psutil.Process(pid)
+        if nome and proc.name().lower() != nome.strip().lower():
+            return False
+        return pid == 2 or proc.ppid() == 2
+    except (psutil.Error, OSError):
+        return False
 
 
 def bloqueio_encerrar(nome: str, pid: int = -1) -> str:
@@ -151,10 +178,16 @@ def bloqueio_encerrar(nome: str, pid: int = -1) -> str:
     encerrado.
     """
     if os.name != "nt":
-        if pid in (0, 1):
+        if pid in (0, 1, 2):
             return "Processo de sistema protegido."
         if pid == os.getpid():
             return "Este é o Vantage. Use Fechar no menu da bandeja."
+        base = (nome or "").strip().lower()
+        if base in _CRITICOS_LINUX:
+            return (f"{nome} é essencial para a sessão gráfica. Encerrar derruba a área de trabalho "
+                    "ou a sessão inteira, então o app não oferece isso.")
+        if pid > 0 and _kernel_thread(pid, nome):
+            return "Thread do kernel: não é um programa e não pode ser encerrada."
         return ""
     if pid in (0, 4):
         return ("PID 0 e 4 são o núcleo do próprio Windows: não há como encerrar "
