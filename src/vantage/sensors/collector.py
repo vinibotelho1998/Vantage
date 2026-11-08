@@ -294,6 +294,9 @@ class Collector:
         gpu["watts"] = None if smoothed is None else round(smoothed, 1)
         gpu["watts_estimated"] = estimated
         static = dict(self._gpu.static) if usar_nvml else {}
+        # Linux sem NVML: o que o kernel publica sobre a placa (driver, VBIOS, PCIe, limites).
+        for key, value in (lhm.get("gpu_static") or {}).items():
+            static.setdefault(key, value)
         gpu["power_limit"] = static.get("power_limit")
         # motivos de throttle so existem via NVML; em AMD/Intel nao ha o que reportar
         gpu["throttle_supported"] = bool(usar_nvml and self._gpu.nvml_ok)

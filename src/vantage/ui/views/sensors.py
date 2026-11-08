@@ -71,7 +71,8 @@ class SensorsView(View):
         # A dica do card e' o unico lugar que ensina o recurso: numa lista de
         # centenas de linhas, ninguem descobre a estrela por conta propria.
         card = Card("Todos os sensores", theme.accent_color(self.cfg.accent),
-                    "LibreHardwareMonitor · clique na ★ para fixar no topo")
+                    ("LibreHardwareMonitor" if os.name == "nt" else "hwmon do kernel")
+                    + " · clique na ★ para fixar no topo")
         self.table = QTableWidget(0, len(_HEADERS))
         self.table.setHorizontalHeaderLabels(_HEADERS)
         self.table.verticalHeader().setVisible(False)

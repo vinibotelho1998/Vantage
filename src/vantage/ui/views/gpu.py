@@ -161,8 +161,8 @@ class GpuView(View):
         self.kpi.show_only([k for k, _c, _u in _KPIS if k != "vram" or tem_vram])
         if tem_vram:
             self.vram_label.setText(f"{used / 1024:.1f} / {total / 1024:.1f} GB")
-            self.vram_rows.set("used", f"{used} MB")
-            self.vram_rows.set("free", f"{total - used} MB")
+            self.vram_rows.set("used", f"{used:.0f} MB")
+            self.vram_rows.set("free", f"{total - used:.0f} MB")
         self.vram_label.setStyleSheet(f"color: {theme.load_color(vram_pct)};")
         self.vram_bar.set_value(vram_pct, theme.load_color(vram_pct))
         self.vram_rows.set("ctrl", units.percent(g.get("mem_ctrl")))
