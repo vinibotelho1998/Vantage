@@ -9,6 +9,13 @@ os.environ.setdefault("VANTAGE_DATA_DIR",
 # Estes modulos carregam DLLs do Windows (ctypes.WinDLL) ao importar; no Linux nem
 # da' para coletar. A cobertura de Linux fica em test_linux_port.py e nos testes
 # de cada modulo que tem versao propria.
+# A suite nao pode mexer nas janelas de quem a roda: com a sessao Wayland de verdade
+# visivel, o painel flutuante dos testes carregaria um script no KWin que casa pelo
+# titulo e reposicionaria o painel REAL do usuario, se estiver aberto. O teste que
+# fala com o KWin de proposito le a sessao verdadeira daqui.
+os.environ.setdefault("VANTAGE_TESTE_SESSAO_REAL", os.environ.get("XDG_SESSION_TYPE", ""))
+os.environ["XDG_SESSION_TYPE"] = "tty"
+
 collect_ignore = [] if os.name == "nt" else [
     "test_ccd_consulta.py", "test_coletor_com.py", "test_display_profile_regressions.py",
     "test_displays_canvas.py", "test_dualsense.py", "test_gpumem.py", "test_instancia_unica.py",

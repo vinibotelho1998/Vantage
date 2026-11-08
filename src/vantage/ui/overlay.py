@@ -36,6 +36,8 @@ from ..core import frames as fr
 from ..core import units
 if os.name == "nt":
     from ..platform import win
+else:
+    from ..platform import kwin
 from .charts import Sparkline
 from .components import dimm_color
 
@@ -260,6 +262,9 @@ class GameOverlay(QWidget):
     def __init__(self, controller) -> None:
         super().__init__()
         self._ctl = controller
+        # No Plasma/Wayland o titulo e' como o script do KWin acha esta janela.
+        self.setWindowTitle(kwin.TITULO if os.name != "nt" else "Vantage")
+        self._kwin = None
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
             | Qt.WindowType.WindowStaysOnTopHint
@@ -597,7 +602,20 @@ class GameOverlay(QWidget):
         vert, _, horiz = self._ctl.settings.overlay_corner.partition("-")
         x = area.right() - w - m + 1 if horiz == "right" else area.left() + m
         y = area.bottom() - h - m + 1 if vert == "bottom" else area.top() + m
+        if os.name != "nt" and self._prender_no_kwin(int(x), int(y), w, h):
+            return
         self.move(int(x), int(y))
+
+    def _prender_no_kwin(self, x: int, y: int, largura: int, altura: int) -> bool:
+        """Wayland do Plasma: o compositor, e nao o Qt, posiciona e mantem acima."""
+        if self._kwin is None:
+            self._kwin = kwin.Fixador() if kwin.disponivel() else False
+        return bool(self._kwin) and self._kwin.aplicar(x, y, largura, altura)
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        if self._kwin:
+            self._kwin.remover()
 
     def refresh(self) -> None:
         cfg = self._ctl.settings
